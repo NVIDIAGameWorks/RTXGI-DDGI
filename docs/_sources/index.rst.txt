@@ -1,0 +1,19 @@
+.. RTXGI SDK documentation master file
+
+.. |reg| unicode:: U+000AE .. REGISTERED SIGN
+   :ltrim:
+
+
+NVIDIA RTXGI SDK 1.0 Documentation
+===============================================
+
+Built |today|
+
+.. toctree::
+   :maxdepth: 3
+
+   manual/Index
+
+.. TODO List
+.. ===============================================
+.. .. todolist::

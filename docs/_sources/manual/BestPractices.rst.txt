@@ -1,0 +1,26 @@
+.. _BestPractices:
+
+.. |reg| unicode:: U+000AE .. REGISTERED SIGN
+   :ltrim:
+
+================
+Best Practices
+================
+
+
+.. todo:: @Adam @Josef convert the following bullets into content
+
+Teach about the recommended settings / best practices for these:
+	
+   * Probe Spacing & Counts
+   * Number of rays per probe
+   * Volume authoring, storage and loading (artist/director work flows)
+   * Irradiance and Distance Texel resolution
+   * Probe Max Ray Distance (perf)
+   * Probe Distance Exponent
+   * Probe Irradiance Encoding Gamma
+   * Probe Hysteresis
+
+
+   
+
