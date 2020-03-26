@@ -673,6 +673,15 @@ bool Load(
     // Parse the configuration file
     ParseConfig(buffer, config, lights, camera, desc, inputInfo, inputOptions, rtOptions, postOptions, vizOptions);
 
+    // Get the directory from the config file path, and prepend it to the root and SDK paths, as
+    // paths are relative to the config file.
+    char sDrive[_MAX_DRIVE];
+    char sDirectory[_MAX_DIR];
+    ::_splitpath_s(config.filepath.c_str(),
+        sDrive, _MAX_DRIVE, sDirectory, _MAX_DIR, nullptr, 0, nullptr, 0);
+    config.root = sDrive + (sDirectory + config.root);
+    config.rtxgi = sDrive + (sDirectory + config.rtxgi);
+
     delete[] buffer;
 
     // Check the probe ray count
@@ -689,32 +698,31 @@ bool Load(
  */
 bool ParseCommandLine(LPWSTR lpCmdLine, ConfigInfo &config, ofstream &log)
 {
-    LPWSTR* argv = NULL;
-    int argc = 0;
-
-    argv = CommandLineToArgvW(lpCmdLine, &argc);
-    if (argv == NULL)
+    // If there is one argument (or less), it is just the executable path; exit because a
+    // configuration file is not specified.
+    if (__argc <= 1)
     {
-        log << "Error: failed to parse command line!\n";
+        log << "Error: a configuration file must be specified.\n";
         return false;
     }
 
-    if (argc != 1)
+    // If there are more than two arguments (executable + configuration), log that there must only
+    // be a single argument after the executable path.
+    if (__argc > 2)
     {
-        log << "Error: incorrect command line usage!\n";
+        log << "Error: only a single argument (the configuration file) must be specified.\n";
         return false;
     }
 
     size_t len;
-    size_t max = wcslen(argv[0]) + 1;
+    size_t max = wcslen(__wargv[1]) + 1;
     char* dst = new char[max];
 
-    wcstombs_s(&len, dst, max, argv[0], max);
+    wcstombs_s(&len, dst, max, __wargv[1], max);
     config.filepath = string(dst);
 
     delete[] dst;
 
-    LocalFree(argv);
     return true;
 }
 

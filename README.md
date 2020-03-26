@@ -23,11 +23,11 @@ To see RTXGI in action, follow the below steps to build the SDK and run the Test
 1. Open Cmake
 2. Copy the path to where you downloaded this source package. Add `/samples` to this path on the "source code" line
 3. Copy the path to where you downloaded this source package. Add `/samples/build` to this path on the the "binaries" line (below "source code")
-4. Select `Configure` in Cmake  
-	4a. If using VS2017, you must also select `x64` as platform for generator in the dropdown  
+4. Select `Configure` in Cmake
+	4a. If using VS2017, you must also select `x64` as platform for generator in the dropdown
 	4b. If using VS2019, the platform is `x64` by default
 5. Select `Generate` in Cmake
-6. Open `samples/RTXGISamples.sln` in the build directory (created by CMake) and build the solution
+6. Open `RTXGISamples.sln` in the `samples/build` directory (created by CMake) and build the solution
 7. Run `samples/runTestHarness.bat` to run the test harness sample application with the default settings
 
 ### Building the SDK Only
@@ -37,14 +37,14 @@ If you want to build just the RTXGI SDK, and aren't interested in samples, follo
 2. Copy the path to where you downloaded this source package, and add `/rtxgi-sdk/` to this path on the "source code" line
 3. Copy the path to where you downloaded this source package, and add `/rtxgi-sdk/build` to this path on the "source code" line
 4. Select `Configure` in Cmake
-	4a. If using VS2017, you must also select `x64` as platform for generator in the dropdown  
+	4a. If using VS2017, you must also select `x64` as platform for generator in the dropdown
 	4b. If using VS2019, the platform is `x64` by default
 5. Select `Generate` in Cmake
 6. Open `rtxgi-sdk/build/RTXGI.sln` and build the solution. By default a static library is generated
 
 ### Notes
-- Two test scenes are included with the SDK distribution, a Cornell Box and the "Two Rooms" scene. 
-- You can change which scene is loaded through the initialization file passed to the test harness on the command line. See the config/ directory. 
+- Two test scenes are included with the SDK distribution, a Cornell Box and the "Two Rooms" scene.
+- You can change which scene is loaded through the initialization file passed to the test harness on the command line. See the config/ directory.
 - DDGIVolume, lights, camera, visualization, input, and scene settings can be modified in the initialization file.
 - A progressive path tracing mode is included for reference and can be toggled at runtime
 - A user interface is implemented, based on ImGui. It displays information that is useful when debugging and setting up new scenes / probe configurations.

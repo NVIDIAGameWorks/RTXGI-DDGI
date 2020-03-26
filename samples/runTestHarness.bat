@@ -10,16 +10,16 @@
 
 @echo off
 echo.
-cd /d build\test-harness
+cd /d build\bin
 echo Launching Test Harness...
 
 :: Cornell Box
-::..\bin\Debug\TestHarness.exe ..\..\test-harness\config\cornell.ini
-..\bin\Release\TestHarness.exe ..\..\test-harness\config\cornell.ini
+::Debug\TestHarness.exe ..\..\test-harness\config\cornell.ini
+Release\TestHarness.exe ..\..\test-harness\config\cornell.ini
 
 :: Two rooms
-::..\bin\Debug\TestHarness.exe ....\test-harness\config\two-rooms.ini
-::..\bin\Release\TestHarness.exe ..\..\test-harness\config\two-rooms.ini
+::Debug\TestHarness.exe ..\..\test-harness\config\two-rooms.ini
+::Release\TestHarness.exe ..\..\test-harness\config\two-rooms.ini
 
 echo Done.
 cd /d ..\..\
