@@ -12,7 +12,7 @@
 #define RTXGI_DDGI_PROBE_COMMON_HLSL
 
 #include "../Common.hlsl"
-#include "../../../rtxgi-sdk/include/rtxgi/Defines.h"
+#include "../../include/rtxgi/Defines.h"
 #include "../../include/rtxgi/ddgi/DDGIVolumeDefines.h"
 #include "../../include/rtxgi/ddgi/DDGIVolumeDescGPU.h"
 

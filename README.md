@@ -4,7 +4,7 @@ This repository contains the RTX Global Illumination (RTXGI) SDK, the "Test Harn
 
 * The core RTXGI SDK is included in the "rtxgi-sdk" directory
 * The sample application is included the "samples" directory
-* Documentation and the SDK User Guide is included in the "docs" directory
+* The documentation and User Guide are included in the "docs" directory
 
 ### System Requirements
 * Windows 10 v1809 or higher
@@ -36,7 +36,7 @@ If you want to build just the RTXGI SDK, and aren't interested in samples, follo
 1. Open Cmake
 2. Copy the path to where you downloaded this source package, and add `/rtxgi-sdk/` to this path on the "source code" line
 3. Copy the path to where you downloaded this source package, and add `/rtxgi-sdk/build` to this path on the "source code" line
-4. Select `Configure` in Cmake
+4. Select `Configure` in Cmake  
 	4a. If using VS2017, you must also select `x64` as platform for generator in the dropdown  
 	4b. If using VS2019, the platform is `x64` by default
 5. Select `Generate` in Cmake

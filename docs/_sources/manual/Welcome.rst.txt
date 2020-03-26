@@ -31,7 +31,7 @@ Overview of the SDK Distribution
 the RTXGI SDK distribution includes the license as a text file at the root level. To learn more about the license and terms, head over to the :ref:`License` page.
 
 **Documentation:**
-the **docs** directory of the RTXGI SDK distribution contains the HTML documentation you are currently reading. The latest version of the documentation is also available at `https://gameworksdocs.nvidia.com/ <https://gameworksdocs.nvidia.com/>`_.
+the **docs** directory of the RTXGI SDK distribution contains the HTML documentation you are currently reading.
 
 **RTXGI SDK:**
 the **rtxgi-sdk** directory of the RTXGI SDK distribution contains the core of the SDK, and the source code necessary to integrate RTXGI into your rendering engine. To learn more about the contents of the SDK, head over to the :ref:`SDKOverview` page. Alternatively, you can jump ahead to the :ref:`DDGI` page to learn more about the algorithm.

@@ -1,9 +1,0 @@
-.. _FAQ:
-
-.. |reg| unicode:: U+000AE .. REGISTERED SIGN
-   :ltrim:
-
-===========================
-Frequently Asked Questions
-===========================
-
