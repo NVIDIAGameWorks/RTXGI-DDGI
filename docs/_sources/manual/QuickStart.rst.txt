@@ -23,6 +23,7 @@ This fastest way to start learning RTXGI is to build and run the Test Harness sa
 * Windows 10 v1809 or higher
 * Visual Studio 2017 or 2019
 * Windows SDK version 10.0.17763 or higher (can be installed using the Visual Studio Installer)
+* Visual C++ Active Template Library (ATL) (can be installed using the Visual Studio Installer)
 * CMake 3.15 or higher, `download here. <http://cmake.org/downloads>`_
 * The latest drivers for your GPU. NVIDIA drivers `are available here. <http://www.nvidia.com/drivers>`_
 
