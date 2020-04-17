@@ -431,7 +431,7 @@ struct InputOptions
 #endif
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
     bool    activateAllProbes = false;
-    bool    enableProbeClassification = true;
+    bool    enableProbeClassification = false;
 #endif
 };
 

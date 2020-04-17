@@ -37,7 +37,7 @@ if (NOT WIN_SDK_BIN_DIR)
 
         unset(DXC_EXE_CANDIDATE CACHE)
         set(WINSDK_PATHS "${kit10_dir}/bin/${W10SDK_VER}/x64" "C:/Program Files (x86)/Windows Kits/10/bin/${W10SDK_VER}/x64" "C:/Program Files/Windows Kits/10/bin/${W10SDK_VER}/x64")
-        find_program(DXC_EXE_CANDIDATE dxc PATHS ${WINSDK_PATHS})
+        find_program(DXC_EXE_CANDIDATE dxc PATHS ${WINSDK_PATHS} NO_DEFAULT_PATH)
         if (EXISTS ${DXC_EXE_CANDIDATE} AND NOT DXC_EXECUTABLE)            
             set(DXC_EXECUTABLE ${DXC_EXE_CANDIDATE} CACHE FILEPATH "" FORCE)
             get_filename_component(WIN_SDK_BIN_DIR ${DXC_EXE_CANDIDATE} DIRECTORY CACHE)

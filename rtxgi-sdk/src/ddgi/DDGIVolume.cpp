@@ -165,7 +165,7 @@ namespace rtxgi
         descGPU.probeGridCounts = desc.probeGridCounts;
         descGPU.probeGridSpacing = desc.probeGridSpacing;
         descGPU.numRaysPerProbe = static_cast<int>(desc.numRaysPerProbe);
-        descGPU.probeRayMaxDistance = desc.probeMaxRayDistance;
+        descGPU.probeMaxRayDistance = desc.probeMaxRayDistance;
         descGPU.probeHysteresis = desc.probeHysteresis;
         descGPU.probeChangeThreshold = desc.probeChangeThreshold;
         descGPU.probeBrightnessThreshold = desc.probeBrightnessThreshold;
@@ -369,10 +369,6 @@ namespace rtxgi
         m_resources = resources;
         m_origin = desc.origin;
         m_boundingBox = GetBoundingBox();
-        
-        // Compute the max probe ray distance (1.5 * grid cell diagonal distance)
-        float distance = std::sqrtf(std::pow(m_desc.probeGridSpacing.x, 2) + (std::pow(m_desc.probeGridSpacing.y, 2)) + std::pow(m_desc.probeGridSpacing.z, 2));
-        m_desc.probeMaxRayDistance = distance * 0.75f;
 
         // Init the random seed and compute a rotation transform
         InitRandomSeed();

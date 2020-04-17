@@ -20,7 +20,7 @@ struct DDGIVolumeDescGPU
     float3      origin;
     int         numRaysPerProbe;
     float3      probeGridSpacing;
-    float       probeRayMaxDistance;
+    float       probeMaxRayDistance;
     int3        probeGridCounts;
     float       probeDistanceExponent;
     float       probeHysteresis;

@@ -64,7 +64,7 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
         log.close();
         return EXIT_FAILURE;
     }
-            
+
     // Read the config file from disk and initialize variables
     if (!Config::Load(config, lights, camera, volumeDesc, input, inputOptions, rtOptions, postOptions, vizOptions, log))
     {
@@ -88,7 +88,7 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
         return EXIT_FAILURE;
     }
     log << "done.\n";
-            
+
     // Create a window
     log << "Creating a window...";
     HRESULT hr = Window::Create(d3d.width, d3d.height, hInstance, window, L"RTXGI SDK Test Harness");
@@ -112,7 +112,7 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
         log.close();
         return EXIT_FAILURE;
     }
-            
+
     // Create a RTXGI DDGIVolume
     if (!Harness::CreateVolume(d3d, resources, shaders, volume, volumeDesc, volumeResources, log))
     {
@@ -126,7 +126,7 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
         log.close();
         return EXIT_FAILURE;
     }
-            
+
     // Create resources used to visualize the volume's probes
     if(!Harness::CreateProbeVisResources(d3d, dxr, resources, volume, log))
     {
@@ -289,7 +289,7 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
                 UI::OnRender(d3d, resources);
             }
         }
-                
+
         D3D12::SubmitCmdList(d3d);
         D3D12::Present(d3d);
         D3D12::MoveToNextFrame(d3d);

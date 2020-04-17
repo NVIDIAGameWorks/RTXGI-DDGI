@@ -307,6 +307,7 @@ bool ParseVolume(string &configString, DDGIVolumeDesc &desc, ofstream &log)
         if (ParseIfExists("probeGridSpacing=", desc.probeGridSpacing, line, status, log)) continue;
         if (ParseIfExists("viewBias=", desc.viewBias, line, status, log)) continue;
         if (ParseIfExists("normalBias=", desc.normalBias, line, status, log)) continue;
+        if (ParseIfExists("maxRayDistance=", desc.probeMaxRayDistance, line, status, log)) continue;
         if (ParseIfExists("hysteresis=", desc.probeHysteresis, line, status, log)) continue;
         if (ParseIfExists("changeThreshold=", desc.probeChangeThreshold, line, status, log)) continue;
         if (ParseIfExists("brightnessThreshold=", desc.probeBrightnessThreshold, line, status, log)) continue;

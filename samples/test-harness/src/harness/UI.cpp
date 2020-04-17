@@ -135,8 +135,14 @@ void CreateDebugWindow(
     ImGui::Text("Probe Grid Spacing: (%.2f, %.2f, %.2f)", desc.probeGridSpacing.x, desc.probeGridSpacing.y, desc.probeGridSpacing.z);
     ImGui::NewLine();
 
-    float maxDistance = max(max(desc.probeGridSpacing.x, desc.probeGridSpacing.y), desc.probeGridSpacing.z);
-    maxDistance *= 0.5f;
+    float probeMaxRayDistance = volume->GetProbeMaxRayDistance();
+
+    ImGui::DragFloat("###probeMaxRayDistance", &probeMaxRayDistance, 0.1f, 0.f, 10000.f, "Probe Max Ray Distance: %.1f");
+    ImGui::SameLine(); ShowHelpMarker("Adjust the maximum distance a probe ray can travel.");
+    if (probeMaxRayDistance != volume->GetProbeMaxRayDistance())
+    {
+        volume->SetProbeMaxRayDistance(probeMaxRayDistance);
+    }
 
     float hysteresis = volume->GetProbeHysteresis();
 
@@ -164,6 +170,9 @@ void CreateDebugWindow(
     {
         volume->SetProbeBrightnessThreshold(brightnessThreshold);
     }
+
+    float maxDistance = max(max(desc.probeGridSpacing.x, desc.probeGridSpacing.y), desc.probeGridSpacing.z);
+    maxDistance *= 0.5f;
 
     ImGui::DragFloat("###viewBias", &viewBias, 0.01f, 0.f, maxDistance, "View Bias: %.2f");
     ImGui::SameLine(); ShowHelpMarker("Adjust the view bias used when computing indirect lighting.");

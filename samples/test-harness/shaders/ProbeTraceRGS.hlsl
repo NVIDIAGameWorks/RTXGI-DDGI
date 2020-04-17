@@ -48,7 +48,7 @@ void RayGen()
     ray.Origin = probeWorldPosition;
     ray.Direction = probeRayDirection;
     ray.TMin = 0.f;
-    ray.TMax = 1e27f;
+    ray.TMax = DDGIVolume.probeMaxRayDistance;
 
     // Probe Ray Trace
     PayloadData payload = (PayloadData)0;

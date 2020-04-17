@@ -162,18 +162,18 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
         result += float4(probeRayRadiance * weight, weight);
 #else
 
-        // Initialize the probe hit distance to the max value (1.5 * distance of grid cell diagonal)
-        float probeRayMaxDistance = DDGIVolume.probeRayMaxDistance;
+        // Initialize the probe hit distance to three quarters of the distance of the grid cell diagonal
+        float probeMaxRayDistance = length(DDGIVolume.probeGridSpacing) * 0.75f;
 
         // Increase or decrease the filtered distance value's "sharpness"
         weight = pow(weight, DDGIVolume.probeDistanceExponent);
 
         // Load the ray traced distance
 #if RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY
-        float probeRayDistance = min(RTDistance[rayIndex], probeRayMaxDistance);
+        float probeRayDistance = min(RTDistance[rayIndex], probeMaxRayDistance);
 #else
         // HitT is negative on backface hits for the probe position preprocess, so take the absolute value
-        float probeRayDistance = min(abs(DDGIProbeRTRadianceUAV[probeRayIndex].a), probeRayMaxDistance);
+        float probeRayDistance = min(abs(DDGIProbeRTRadianceUAV[probeRayIndex].a), probeMaxRayDistance);
 #endif
 
         // Filter the ray distance
