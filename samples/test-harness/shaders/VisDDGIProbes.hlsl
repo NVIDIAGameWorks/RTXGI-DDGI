@@ -100,17 +100,17 @@ void RayGen()
             result *= (0.5f * RTXGI_PI);
 
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-            const float3 INACTIVE_COLOR = float3(1, 0, 0);            // Red
-            const float3 ACTIVE_COLOR = float3(0, 1, 0);            // Green
+            const float3 INACTIVE_COLOR = float3(1.f, 0.f, 0.f);          // Red
+            const float3 ACTIVE_COLOR = float3(0.f, 1.f, 0.f);            // Green
 
             int probeXY = DDGIVolume.probeGridCounts.x * DDGIVolume.probeGridCounts.y;
             int2 probeStateTexcoord = int2(payload.instanceIndex % probeXY, payload.instanceIndex / probeXY);
-            uint state = DDGIProbeStates.Load(int3(probeStateTexcoord, 0)).r;
+            uint state = DDGIProbeStates.Load(probeStateTexcoord).r;
 
             // Border visualization for probe states
-            if (abs(dot(normalize(probePosition - cameraOrigin), sampleDirection)) < 0.45f) 
+            if (abs(dot(normalize(probePosition - cameraOrigin), sampleDirection)) < 0.45f)
             {
-                if (state == PROBE_STATE_ACTIVE) 
+                if (state == PROBE_STATE_ACTIVE)
                 {
                     result = ACTIVE_COLOR;
                 }

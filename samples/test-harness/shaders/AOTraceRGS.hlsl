@@ -18,7 +18,7 @@ float AOQuery(int2 BNPixel, float3 worldPos, float3 normal)
 {
     static const float c_numAngles = 10.f;
 
-    float3 blueNoiseValue = BlueNoiseRGB.Load(int3(BNPixel, 0) % 256).r;
+    float  blueNoiseValue = BlueNoiseRGB.Load(int3(BNPixel, 0) % 256).r;
     float3 blueNoiseUnitVector = DDGISphericalFibonacci(clamp(blueNoiseValue * c_numAngles, 0, c_numAngles - 1), c_numAngles);
     float3 rayDirection = normalize(normal + blueNoiseUnitVector);
 
@@ -53,15 +53,15 @@ void RayGen()
     int2 LaunchIndex = int2(DispatchRaysIndex().xy);
 
     // Early exit for pixels without a primary ray intersection
-    if (RTGBufferA.Load(int3(LaunchIndex, 0)).w == 0.f)
+    if (RTGBufferA.Load(LaunchIndex).w == 0.f)
     {
         RTGBufferD[LaunchIndex].a = 1.f;
         return;
     }
 
     // Get world position and normal of pixel
-    float3 worldPos = RTGBufferB.Load(int3(LaunchIndex, 0)).xyz;
-    float3 normal = RTGBufferC.Load(int3(LaunchIndex, 0)).xyz;
+    float3 worldPos = RTGBufferB.Load(LaunchIndex).xyz;
+    float3 normal = RTGBufferC.Load(LaunchIndex).xyz;
 
     // Two Sample AO
     float AOResult1 = AOQuery(LaunchIndex, worldPos, normal);

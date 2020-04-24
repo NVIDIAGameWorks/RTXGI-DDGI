@@ -48,18 +48,18 @@ float4 PS(PSInput input) : SV_TARGET
     float  ambientOcclusion = 1.f;
 
     // Load the baseColor
-    float4 baseColor = RTGBufferA.Load(int3(input.position.xy, 0));
+    float4 baseColor = RTGBufferA.Load(input.position.xy);
     result = baseColor.rgb;
 
     // Primary ray hit, need to light it
     if (baseColor.a > 0.f)
     {
-        float4 worldPosHitT = RTGBufferB.Load(int3(input.position.xy, 0));
-        float3 normal = RTGBufferC.Load(int3(input.position.xy, 0)).xyz;
-        float3 diffuse = RTGBufferD.Load(int3(input.position.xy, 0)).rgb;
+        float4 worldPosHitT = RTGBufferB.Load(input.position.xy);
+        float3 normal = RTGBufferC.Load(input.position.xy).xyz;
+        float3 diffuse = RTGBufferD.Load(input.position.xy).rgb;
         
         // Load ambient occlusion and multiply with diffuse lighting
-        ambientOcclusion = UseRTAO ? RTAOFiltered.Load(int3(input.position.xy, 0)) : 1.f;       
+        ambientOcclusion = UseRTAO ? RTAOFiltered.Load(input.position.xy) : 1.f;
         diffuse *= ambientOcclusion;
 
         // Indirect Lighting

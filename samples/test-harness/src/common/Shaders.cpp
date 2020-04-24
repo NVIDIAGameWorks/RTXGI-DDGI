@@ -43,7 +43,7 @@ bool InitCompiler(D3D12ShaderCompiler &shaderCompiler)
 /**
 * Compile a shader with DXC.
 */
-bool Compile(D3D12ShaderCompiler &compilerInfo, D3D12ShaderInfo &shader)
+bool Compile(D3D12ShaderCompiler &compilerInfo, D3D12ShaderInfo &shader, bool warningsAsErrors)
 {
     UINT32 codePage(0);
     IDxcBlobEncoding* pShaderText(nullptr);
@@ -64,22 +64,25 @@ bool Compile(D3D12ShaderCompiler &compilerInfo, D3D12ShaderInfo &shader)
 
     // Verify the result
     result->GetStatus(&hr);
-    if (FAILED(hr))
+    if (FAILED(hr) || warningsAsErrors)
     {
         IDxcBlobEncoding* error;
         hr = result->GetErrorBuffer(&error);
         if (FAILED(hr)) return false;
 
-        // Convert error blob to a string
-        std::vector<char> infoLog(error->GetBufferSize() + 1);
-        memcpy(infoLog.data(), error->GetBufferPointer(), error->GetBufferSize());
-        infoLog[error->GetBufferSize()] = 0;
+        if (error->GetBufferSize() > 0)
+        {
+            // Convert error blob to a string
+            std::vector<char> infoLog(error->GetBufferSize() + 1);
+            memcpy(infoLog.data(), error->GetBufferPointer(), error->GetBufferSize());
+            infoLog[error->GetBufferSize()] = 0;
 
-        std::string errorMsg = "Shader Compiler Error:\n";
-        errorMsg.append(infoLog.data());
+            std::string errorMsg = "Shader Compiler Error:\n";
+            errorMsg.append(infoLog.data());
 
-        MessageBoxA(nullptr, errorMsg.c_str(), "Error!", MB_OK);
-        return false;
+            MessageBoxA(nullptr, errorMsg.c_str(), "Error!", MB_OK);
+            return false;
+        }
     }
 
     hr = result->GetResult((IDxcBlob**)&shader.bytecode);
@@ -89,11 +92,11 @@ bool Compile(D3D12ShaderCompiler &compilerInfo, D3D12ShaderInfo &shader)
 }
 
 /**
-* Compile a D3D DXRT HLSL shader using dxcompiler.
+* Compile a D3D HLSL shader using dxcompiler.
 */
-bool Compile(D3D12ShaderCompiler &compilerInfo, RtProgram &program)
+bool Compile(D3D12ShaderCompiler &compilerInfo, RtProgram &program, bool warningsAsErrors)
 {
-    bool result = Compile(compilerInfo, program.info);
+    bool result = Compile(compilerInfo, program.info, warningsAsErrors);
     program.SetBytecode();
     return result;
 }

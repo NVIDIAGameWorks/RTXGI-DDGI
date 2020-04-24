@@ -544,27 +544,27 @@ bool CreateRayGenPrograms(D3D12Info &d3d, DXRInfo &dxr, D3D12ShaderCompiler &sha
     // Load and compile the probe ray trace ray generation shader
     file = path + L"shaders\\ProbeTraceRGS.hlsl";
     dxr.probeRGS = RtProgram(D3D12ShaderInfo(file.c_str(), L"", L"lib_6_3"));
-    if (!Shaders::Compile(shaderCompiler, dxr.probeRGS)) return false;
+    if (!Shaders::Compile(shaderCompiler, dxr.probeRGS, true)) return false;
 
     // Load and compile the primary ray trace ray generation shader
     file = path + L"shaders\\PrimaryTraceRGS.hlsl";
     dxr.primaryRGS = RtProgram(D3D12ShaderInfo(file.c_str(), L"", L"lib_6_3"));
-    if (!Shaders::Compile(shaderCompiler, dxr.primaryRGS)) return false;
+    if (!Shaders::Compile(shaderCompiler, dxr.primaryRGS, true)) return false;
 
     // Load and compile the ambient occlusion ray generation shader
     file = path + L"shaders\\AOTraceRGS.hlsl";
     dxr.ambientOcclusionRGS = RtProgram(D3D12ShaderInfo(file.c_str(), L"", L"lib_6_3"));
-    if (!Shaders::Compile(shaderCompiler, dxr.ambientOcclusionRGS)) return false;
+    if (!Shaders::Compile(shaderCompiler, dxr.ambientOcclusionRGS, true)) return false;
 
     // Load and compile the probe visualization ray trace ray generation shader
     file = path + L"shaders\\VisDDGIProbes.hlsl";
     dxr.probeVisRGS = RtProgram(D3D12ShaderInfo(file.c_str(), L"", L"lib_6_3"));
-    if (!Shaders::Compile(shaderCompiler, dxr.probeVisRGS)) return false;
+    if (!Shaders::Compile(shaderCompiler, dxr.probeVisRGS, true)) return false;
 
     // Load and compile the path tracing ray trace ray generation shader
     file = path + L"shaders\\PathTraceRGS.hlsl";
     dxr.pathTraceRGS = RtProgram(D3D12ShaderInfo(file.c_str(), L"", L"lib_6_3"));
-    return Shaders::Compile(shaderCompiler, dxr.pathTraceRGS);
+    return Shaders::Compile(shaderCompiler, dxr.pathTraceRGS, true);
 }
 
 /**
@@ -577,7 +577,7 @@ bool CreateMissProgram(D3D12Info &d3d, DXRInfo &dxr, D3D12ShaderCompiler &shader
 
     // Load and compile the miss shader
     dxr.miss = RtProgram(D3D12ShaderInfo(file.c_str(), L"", L"lib_6_3"));
-    return Shaders::Compile(shaderCompiler, dxr.miss);
+    return Shaders::Compile(shaderCompiler, dxr.miss, true);
 }
 
 /**
@@ -591,7 +591,7 @@ bool CreateClosestHitProgram(D3D12Info &d3d, DXRInfo &dxr, D3D12ShaderCompiler &
     // Load and compile the Closest Hit shader
     dxr.hit = HitProgram(L"Hit");
     dxr.hit.chs = RtProgram(D3D12ShaderInfo(file.c_str(), L"", L"lib_6_3"));
-    if (!Shaders::Compile(shaderCompiler, dxr.hit.chs)) return false;
+    if (!Shaders::Compile(shaderCompiler, dxr.hit.chs, true)) return false;
 
     // Index buffer SRV (t3)
     D3D12_ROOT_PARAMETER param0 = {};
@@ -645,7 +645,7 @@ bool CreateVisUpdateTLASProgram(D3D12Info &d3d, DXRInfo &dxr, D3D12ShaderCompile
     shader.filename = file.c_str();
     shader.entryPoint = L"VisUpdateTLASCS";
     shader.targetProfile = L"cs_6_0";
-    if (!Shaders::Compile(shaderCompiler, shader)) return false;
+    if (!Shaders::Compile(shaderCompiler, shader, true)) return false;
 
     dxr.visUpdateTLASCS = shader.bytecode;
 

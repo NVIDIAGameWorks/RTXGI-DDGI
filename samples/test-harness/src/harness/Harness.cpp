@@ -156,7 +156,7 @@ bool CompileShaders(vector<D3D12ShaderInfo> &shaders, D3D12ShaderCompiler &shade
     shaders.back().defines[3].Name = L"PROBE_UAV_INDEX";
     shaders.back().defines[3].Value = L"0";
 
-    if (!Shaders::Compile(shaderCompiler, shaders.back()))
+    if (!Shaders::Compile(shaderCompiler, shaders.back(), true))
     {
         log << "\nError: failed to load and compile the probe irradiance blending compute shader!\n";
         return false;
@@ -179,7 +179,7 @@ bool CompileShaders(vector<D3D12ShaderInfo> &shaders, D3D12ShaderCompiler &shade
     shaders.back().defines[3].Name = L"PROBE_UAV_INDEX";
     shaders.back().defines[3].Value = L"1";
 
-    if (!Shaders::Compile(shaderCompiler, shaders.back()))
+    if (!Shaders::Compile(shaderCompiler, shaders.back(), true))
     {
         log << "\nError: failed to load and compile the probe distance blending compute shader!\n";
         return false;
@@ -194,7 +194,7 @@ bool CompileShaders(vector<D3D12ShaderInfo> &shaders, D3D12ShaderCompiler &shade
     shaders.back().entryPoint = L"DDGIProbeBorderRowUpdateCS";
     shaders.back().targetProfile = L"cs_6_0";
 
-    if (!Shaders::Compile(shaderCompiler, shaders.back()))
+    if (!Shaders::Compile(shaderCompiler, shaders.back(), true))
     {
         log << "\nError: failed to load and compile the probe border update compute shader!\n";
         return false;
@@ -206,7 +206,7 @@ bool CompileShaders(vector<D3D12ShaderInfo> &shaders, D3D12ShaderCompiler &shade
     shaders.back().entryPoint = L"DDGIProbeBorderColumnUpdateCS";
     shaders.back().targetProfile = L"cs_6_0";
 
-    if (!Shaders::Compile(shaderCompiler, shaders.back()))
+    if (!Shaders::Compile(shaderCompiler, shaders.back(), true))
     {
         log << "\nError: failed to load and compile the probe border update compute shader!\n";
         return false;
@@ -220,7 +220,7 @@ bool CompileShaders(vector<D3D12ShaderInfo> &shaders, D3D12ShaderCompiler &shade
     shaders.back().filename = file.c_str();
     shaders.back().entryPoint = L"DDGIProbeRelocationCS";
     shaders.back().targetProfile = L"cs_6_0";
-    if (!Shaders::Compile(shaderCompiler, shaders.back()))
+    if (!Shaders::Compile(shaderCompiler, shaders.back(), true))
     {
         log << "\nError: failed to load and compile the probe relocation compute shader!\n";
         return false;
@@ -235,7 +235,7 @@ bool CompileShaders(vector<D3D12ShaderInfo> &shaders, D3D12ShaderCompiler &shade
     shaders.back().filename = file.c_str();
     shaders.back().entryPoint = L"DDGIProbeStateClassifierCS";
     shaders.back().targetProfile = L"cs_6_0";
-    if (!Shaders::Compile(shaderCompiler, shaders.back()))
+    if (!Shaders::Compile(shaderCompiler, shaders.back(), true))
     {
         log << "\nError: failed to load and compile the probe state classifier compute shader!\n";
         return false;
@@ -246,7 +246,7 @@ bool CompileShaders(vector<D3D12ShaderInfo> &shaders, D3D12ShaderCompiler &shade
     shaders.back().filename = file.c_str();
     shaders.back().entryPoint = L"DDGIProbeStateActivateAllCS";
     shaders.back().targetProfile = L"cs_6_0";
-    if (!Shaders::Compile(shaderCompiler, shaders.back()))
+    if (!Shaders::Compile(shaderCompiler, shaders.back(), true))
     {
         log << "\nError: failed to load and compile the probe state classifier activate all compute shader!\n";
         return false;

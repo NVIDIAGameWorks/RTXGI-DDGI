@@ -728,7 +728,7 @@ bool CreateAOFilterPSO(D3D12Info &d3d, D3D12Resources &resources, D3D12ShaderCom
     csInfo.numDefines = _countof(defines);
     csInfo.defines = defines;
 
-    if (!Shaders::Compile(shaderCompiler, csInfo)) return false;
+    if (!Shaders::Compile(shaderCompiler, csInfo, true)) return false;
 
     D3D12_SHADER_BYTECODE cs;
     cs.BytecodeLength = csInfo.bytecode->GetBufferSize();
@@ -756,7 +756,7 @@ bool CreateIndirectPSO(D3D12Info &d3d, D3D12Resources &resources, D3D12ShaderCom
     vsInfo.filename = file.c_str();
     vsInfo.entryPoint = L"VS";
     vsInfo.targetProfile = L"vs_6_0";
-    if (!Shaders::Compile(shaderCompiler, vsInfo)) return false;
+    if (!Shaders::Compile(shaderCompiler, vsInfo, true)) return false;
 
     D3D12_SHADER_BYTECODE vs;
     vs.BytecodeLength = vsInfo.bytecode->GetBufferSize();
@@ -766,7 +766,7 @@ bool CreateIndirectPSO(D3D12Info &d3d, D3D12Resources &resources, D3D12ShaderCom
     psInfo.filename = file.c_str();
     psInfo.entryPoint = L"PS";
     psInfo.targetProfile = L"ps_6_0";
-    if (!Shaders::Compile(shaderCompiler, psInfo)) return false;
+    if (!Shaders::Compile(shaderCompiler, psInfo, true)) return false;
 
     D3D12_SHADER_BYTECODE ps;
     ps.BytecodeLength = psInfo.bytecode->GetBufferSize();
@@ -794,7 +794,7 @@ bool CreateVisPSO(D3D12Info &d3d, D3D12Resources &resources, D3D12ShaderCompiler
     vsInfo.filename = file.c_str();
     vsInfo.entryPoint = L"VS";
     vsInfo.targetProfile = L"vs_6_0";
-    if (!Shaders::Compile(shaderCompiler, vsInfo)) return false;
+    if (!Shaders::Compile(shaderCompiler, vsInfo, true)) return false;
 
     D3D12_SHADER_BYTECODE vs;
     vs.BytecodeLength = vsInfo.bytecode->GetBufferSize();
@@ -804,7 +804,7 @@ bool CreateVisPSO(D3D12Info &d3d, D3D12Resources &resources, D3D12ShaderCompiler
     psInfo.filename = file.c_str();
     psInfo.entryPoint = L"PS";
     psInfo.targetProfile = L"ps_6_0";
-    if (!Shaders::Compile(shaderCompiler, psInfo)) return false;
+    if (!Shaders::Compile(shaderCompiler, psInfo, true)) return false;
 
     D3D12_SHADER_BYTECODE ps;
     ps.BytecodeLength = psInfo.bytecode->GetBufferSize();

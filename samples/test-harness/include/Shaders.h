@@ -15,7 +15,7 @@
 namespace Shaders
 {
     bool InitCompiler(D3D12ShaderCompiler &shaderCompiler);
-    bool Compile(D3D12ShaderCompiler &compilerInfo, D3D12ShaderInfo &info);
-    bool Compile(D3D12ShaderCompiler &compilerInfo, RtProgram &program);
+    bool Compile(D3D12ShaderCompiler &compilerInfo, D3D12ShaderInfo &info, bool warningsAsErrors = false);
+    bool Compile(D3D12ShaderCompiler &compilerInfo, RtProgram &program, bool warningsAsErrors = false);
     void Cleanup(D3D12ShaderCompiler &shaderCompiler);
 }

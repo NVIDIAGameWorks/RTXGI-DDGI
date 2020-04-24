@@ -79,8 +79,8 @@ void CS(uint3 GroupID : SV_GroupID, uint GroupIndex : SV_GroupIndex, uint3 Group
                 }
                 else
                 {
-                    float depth = RTGBufferB.Load(int3(srcPixel, 0)).w;
-                    float AO = RTAORaw.Load(int3(srcPixel, 0));
+                    float depth = RTGBufferB.Load(srcPixel).w;
+                    float AO = RTAORaw.Load(srcPixel);
                     s_depthAO[paddedPixel.x][paddedPixel.y] = float2(depth, AO);
                 }
             }
