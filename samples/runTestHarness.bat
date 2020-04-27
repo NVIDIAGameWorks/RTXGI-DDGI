@@ -18,7 +18,7 @@ echo Launching Test Harness...
 ..\bin\Release\TestHarness.exe ..\..\test-harness\config\cornell.ini
 
 :: Two rooms
-::..\bin\Debug\TestHarness.exe ....\test-harness\config\two-rooms.ini
+::..\bin\Debug\TestHarness.exe ..\..\test-harness\config\two-rooms.ini
 ::..\bin\Release\TestHarness.exe ..\..\test-harness\config\two-rooms.ini
 
 echo Done.
