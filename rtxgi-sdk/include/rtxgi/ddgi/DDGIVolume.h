@@ -415,7 +415,6 @@ namespace rtxgi
         bool CreateRootSignature(ID3D12Device* device);
         bool CreateComputePSO(ID3D12Device* device, ID3DBlob* shader, ID3D12PipelineState** pipeline);
         bool CreateTexture(UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_STATES state, ID3D12Resource** resource, ID3D12Device* device);
-        bool CreateConstantBuffer(ID3D12Device* device);
         bool CreateProbeRTRadianceTexture(DDGIVolumeDesc &desc, ID3D12Device* device);
         bool CreateProbeIrradianceTexture(DDGIVolumeDesc &desc, ID3D12Device* device);
         bool CreateProbeDistanceTexture(DDGIVolumeDesc &desc, ID3D12Device* device);
