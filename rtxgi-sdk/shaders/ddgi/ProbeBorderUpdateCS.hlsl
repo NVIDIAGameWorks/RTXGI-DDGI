@@ -61,7 +61,7 @@ void DDGIProbeBorderRowUpdateCS(uint3 DispatchThreadID : SV_DispatchThreadID)
     threadCoordinates.y += probeSideLengthMinusOne;
     copyCoordinates = uint2(probeStart + offset, threadCoordinates.y - 1);
 
-    // Bottom row   
+    // Bottom row
     DDGIProbeUAV[ProbeUAVIndex][threadCoordinates] = DDGIProbeUAV[ProbeUAVIndex][copyCoordinates];
 }
 

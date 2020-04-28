@@ -493,7 +493,7 @@ namespace rtxgi
             cmdList->Dispatch(numGroupsX, numGroupsY, 1);
 
             // Columns
-            numThreadsX = (probeCountX * 2);
+            numThreadsX = probeCountX;
             numThreadsY = (probeCountY * (m_desc.numIrradianceTexels + 2));
             numGroupsX = (UINT)ceil((float)numThreadsX / groupSize);
             numGroupsY = (UINT)ceil((float)numThreadsY / groupSize);
@@ -520,7 +520,7 @@ namespace rtxgi
             cmdList->Dispatch(numGroupsX, numGroupsY, 1);
 
             // Columns
-            numThreadsX = (probeCountX * 2);
+            numThreadsX = probeCountX;
             numThreadsY = (probeCountY * (m_desc.numDistanceTexels + 2));
             numGroupsX = (UINT)ceil((float)numThreadsX / groupSize);
             numGroupsY = (UINT)ceil((float)numThreadsY / groupSize);
