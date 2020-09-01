@@ -15,17 +15,23 @@
 [numthreads(1, 1, 1)]
 void VisUpdateTLASCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint GroupIndex : SV_GroupIndex)
 {
+    DDGIVolumeDescGPU DDGIVolume = DDGIVolumes.volumes[volumeSelect];
 #if RTXGI_DDGI_PROBE_RELOCATION
+    RWTexture2D<float4> DDGIProbeOffsets = GetDDGIProbeOffsetsUAV(volumeSelect);
+#if RTXGI_DDGI_PROBE_SCROLL
+    float3 probeWorldPosition = DDGIGetProbeWorldPositionWithOffset(DispatchThreadID.x, DDGIVolume.origin, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing, DDGIVolume.probeScrollOffsets, DDGIProbeOffsets);
+#else
     float3 probeWorldPosition = DDGIGetProbeWorldPositionWithOffset(DispatchThreadID.x, DDGIVolume.origin, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing, DDGIProbeOffsets);
+#endif
 #else
     float3 probeWorldPosition = DDGIGetProbeWorldPosition(DispatchThreadID.x, DDGIVolume.origin, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing);
 #endif
 
-    VisTLASInstances[DispatchThreadID.x].transform = float3x4(
-        VizProbeRadius, probeWorldPosition.x, 0.0f, 0.f,
-        0.0f, 0.0f, probeWorldPosition.y, VizProbeRadius,
-        0.0f, VizProbeRadius, 0.f, probeWorldPosition.z);
+    VisTLASInstances[volumeSelect][DispatchThreadID.x].transform = float3x4(
+        VizProbeRadius, probeWorldPosition.x, 0.f, 0.f,
+        0.f, 0.f, probeWorldPosition.y, VizProbeRadius,
+        0.f, VizProbeRadius, 0.f, probeWorldPosition.z);
 
-    VisTLASInstances[DispatchThreadID.x].instanceID24_Mask8 = 0xFF000000;
-    VisTLASInstances[DispatchThreadID.x].GPUAddress = BLASGPUAddress;
+    VisTLASInstances[volumeSelect][DispatchThreadID.x].instanceID24_Mask8 = 0xFF000000;
+    VisTLASInstances[volumeSelect][DispatchThreadID.x].GPUAddress = BLASGPUAddress;
 }

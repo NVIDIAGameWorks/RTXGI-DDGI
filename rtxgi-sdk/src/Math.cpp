@@ -25,8 +25,13 @@ namespace rtxgi
         return (vector / length);
     }
 
+    int AbsFloor(float f)
+     {
+        return f >= 0.f ? int(floor(f)) : int(ceil(f));
+    };
+
     //------------------------------------------------------------------------
-    // Addition 
+    // Addition
     //------------------------------------------------------------------------
 
     int2 operator+(const int2 &lhs, const int2 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y }; }
@@ -38,6 +43,10 @@ namespace rtxgi
     int3 operator+(const int3 &lhs, const float3 &rhs) { return { lhs.x + (int)rhs.x, lhs.y + (int)rhs.y, lhs.z + (int)rhs.z }; }
     int3 operator+(const int3 &lhs, const int &rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs }; }
     int3 operator+(const int3 &lhs, const float &rhs) { return { lhs.x + (int)rhs, lhs.y + (int)rhs, lhs.z + (int)rhs }; }
+
+    void operator+=(int2 &lhs, const int2 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; }
+    void operator+=(int3 &lhs, const int3 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; }
+    void operator+=(int4 &lhs, const int4 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; lhs.w += rhs.w; }
 
     float2 operator+(const float2 &lhs, const float2 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y }; }
     float2 operator+(const float2 &lhs, const int2 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y }; }
@@ -58,7 +67,7 @@ namespace rtxgi
     void operator+=(float4 &lhs, const float4 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; lhs.w += rhs.w; }
 
     //------------------------------------------------------------------------
-    // Subtraction 
+    // Subtraction
     //------------------------------------------------------------------------
 
     int2 operator-(const int2 &lhs, const int2 &rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y }; }
@@ -90,7 +99,7 @@ namespace rtxgi
     void operator-=(float4 &lhs, const float4 &rhs) { lhs.x -= rhs.x; lhs.y -= rhs.y; lhs.z -= rhs.z; lhs.w -= rhs.w; }
 
     //------------------------------------------------------------------------
-    // Multiplication 
+    // Multiplication
     //------------------------------------------------------------------------
 
     int2 operator*(const int2 &lhs, const int2 &rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y }; }
@@ -117,7 +126,7 @@ namespace rtxgi
     void operator*=(float4 &lhs, const float4 &rhs) { lhs.x *= rhs.x; lhs.y *= rhs.y; lhs.z *= rhs.z; lhs.w *= rhs.w; }
 
     //------------------------------------------------------------------------
-    // Division 
+    // Division
     //------------------------------------------------------------------------
 
     int2 operator/(const int2 &lhs, const int2 &rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y }; }
@@ -142,9 +151,19 @@ namespace rtxgi
     void operator/=(float2 &lhs, const float2 &rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; }
     void operator/=(float3 &lhs, const float3 &rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; lhs.z /= rhs.z; }
     void operator/=(float4 &lhs, const float4 &rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; lhs.z /= rhs.z; lhs.w = rhs.w; }
+    
+    //------------------------------------------------------------------------
+    // Modulus
+    //------------------------------------------------------------------------
+
+    int2 operator%(const int2 &lhs, const int2 &rhs) { return { lhs.x % rhs.x, lhs.y % rhs.y }; }
+    int2 operator%(const int2 &lhs, const int &rhs) { return { lhs.x % rhs, lhs.y % rhs }; }
+
+    int3 operator%(const int3 &lhs, const int3 &rhs) { return { lhs.x % rhs.x, lhs.y % rhs.y, lhs.z % rhs.z }; }
+    int3 operator%(const int3 &lhs, const int &rhs) { return { lhs.x % rhs, lhs.y % rhs, lhs.z % rhs }; }
 
     //------------------------------------------------------------------------
-    // Equalities 
+    // Equalities
     //------------------------------------------------------------------------
 
     bool operator==(const int2 &lhs, const int2 &rhs)

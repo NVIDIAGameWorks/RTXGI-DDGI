@@ -21,14 +21,14 @@ void RayGen()
     uint2 LaunchDimensions = DispatchRaysDimensions().xy;
 
     RayDesc ray;
-    ray.Origin = cameraOrigin;
+    ray.Origin = cameraPosition;
     ray.TMin = 0.f;
     ray.TMax = 1e27f;
 
     // Compute the primary ray direction
     float  halfHeight = cameraTanHalfFovY;
     float  halfWidth = (cameraAspect * halfHeight);
-    float3 lowerLeftCorner = cameraOrigin - (halfWidth * cameraRight) - (halfHeight * cameraUp) + cameraForward;
+    float3 lowerLeftCorner = cameraPosition - (halfWidth * cameraRight) - (halfHeight * cameraUp) + cameraForward;
     float3 horizontal = (2.f * halfWidth) * cameraRight;
     float3 vertical = (2.f * halfHeight) * cameraUp;
 
@@ -38,7 +38,7 @@ void RayGen()
     ray.Direction = (lowerLeftCorner + s * horizontal + t * vertical) - ray.Origin;
 
     // Primary Ray Trace
-    PayloadData payload = (PayloadData)0;
+    PackedPayload packedPayload = (PackedPayload)0;
     TraceRay(
         SceneBVH,
         RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
@@ -47,28 +47,24 @@ void RayGen()
         1,
         0,
         ray,
-        payload);
+        packedPayload);
 
-    RTGBufferA[LaunchIndex] = float4(payload.baseColor, payload.hitT > -1.f ? 1.f : 0.f);
-    RTGBufferB[LaunchIndex] = float4(payload.worldPosition, payload.hitT);
+    // Unpack the payload
+    Payload payload = UnpackPayload(packedPayload);
+
+    GBufferA[LaunchIndex] = float4(payload.baseColor, payload.hitT > -1.f ? 1.f : 0.f);
+    GBufferB[LaunchIndex] = float4(payload.worldPosition, payload.hitT);
 
     if (payload.hitT > -1.f)
     {
         // Compute direct diffuse lighting
-        float3 diffuse = DirectDiffuseLighting(
-            payload.baseColor,
-            payload.worldPosition,
-            payload.normal,
-            NormalBias,
-            ViewBias,
-            SceneBVH);
-        
-        RTGBufferC[LaunchIndex] = float4(payload.normal, 1.f);
-        RTGBufferD[LaunchIndex] = float4(saturate(diffuse), 1.f);
+        float3 diffuse = DirectDiffuseLighting(payload, NormalBias, ViewBias, SceneBVH);
+        GBufferC[LaunchIndex] = float4(payload.normal, 1.f);
+        GBufferD[LaunchIndex] = float4(saturate(diffuse), 1.f);
     }
     else
     {
-        RTGBufferC[LaunchIndex] = float4(0.0f, 0.0f, 0.0f, 1.f);
-        RTGBufferD[LaunchIndex] = float4(0.0f, 0.0f, 0.0f, 1.f);
+        GBufferC[LaunchIndex] = float4(0.f, 0.f, 0.f, 1.f);
+        GBufferD[LaunchIndex] = float4(0.f, 0.f, 0.f, 1.f);
     }
 }

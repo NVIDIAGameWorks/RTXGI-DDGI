@@ -26,27 +26,33 @@ struct DDGIVolumeDescGPU
     float       probeHysteresis;
     float       probeChangeThreshold;
     float       probeBrightnessThreshold;
-    float       probeVariablePad0;
     float       probeIrradianceEncodingGamma;
     float       probeInverseIrradianceEncodingGamma;
     int         probeNumIrradianceTexels;
     int         probeNumDistanceTexels;
     float       normalBias;
     float       viewBias;
-    float2      probeVariablePad1;
+    float3      probeVariablePad0;
     float4x4    probeRayRotationTransform;      // 160B
 
+#if RTXGI_DDGI_PROBE_SCROLL
+    int         volumeMovementType;             // 0: default, 1: scrolling
+    int3        probeScrollOffsets;             // 176B
+#else
+    float4      probeVariablePad1;              // 176B
+#endif
+
 #if !RTXGI_DDGI_PROBE_RELOCATION && !RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-    float4      padding[6];                     // 160B + 96B = 256B
+    float4      padding[5];                     // 176B + 80B = 256B
 #elif !RTXGI_DDGI_PROBE_RELOCATION && RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-    float       probeBackfaceThreshold;         // 164B
-    float3      padding;                        // 176B
-    float4      padding1[5];                    // 176B + 80B = 256B
+    float       probeBackfaceThreshold;         // 180B
+    float3      padding;                        // 192B
+    float4      padding1[4];                    // 192B + 64B = 256B
 #elif RTXGI_DDGI_PROBE_RELOCATION /* && (RTXGI_DDGI_PROBE_STATE_CLASSIFIER || !RTXGI_DDGI_PROBE_STATE_CLASSIFIER) */
-    float       probeBackfaceThreshold;         // 164B
-    float       probeMinFrontfaceDistance;      // 168B
-    float2      padding;                        // 176B
-    float4      padding1[5];                    // 176B + 80B = 256B
+    float       probeBackfaceThreshold;         // 180B
+    float       probeMinFrontfaceDistance;      // 184B
+    float2      padding;                        // 192B
+    float4      padding1[4];                    // 192B + 64B = 256B
 #endif
 
 };

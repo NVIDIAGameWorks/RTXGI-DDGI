@@ -45,16 +45,22 @@ PSInput VS(uint VertID : SV_VertexID)
 
 float4 PS(PSInput input) : SV_TARGET
 {
+    DDGIVolumeDescGPU DDGIVolume = DDGIVolumes.volumes[volumeSelect];
     float numIrradianceProbeTexels = (DDGIVolume.probeNumIrradianceTexels + 2);
     float numDistanceProbeTexels = (DDGIVolume.probeNumDistanceTexels + 2);
 
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     float2 numProbes = float2(DDGIVolume.probeGridCounts.x * DDGIVolume.probeGridCounts.y, DDGIVolume.probeGridCounts.z);
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
     float2 numProbes = float2(DDGIVolume.probeGridCounts.y * DDGIVolume.probeGridCounts.z, DDGIVolume.probeGridCounts.x);
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    float2 numProbes = float2(DDGIVolume.probeGridCounts.x * DDGIVolume.probeGridCounts.y, DDGIVolume.probeGridCounts.z);
 #endif
 
     float2 coords;
+    Texture2D<float4> DDGIProbeIrradianceSRV = GetDDGIProbeIrradianceSRV(volumeSelect);
+    Texture2D<float4> DDGIProbeDistanceSRV = GetDDGIProbeDistanceSRV(volumeSelect);
+    RWTexture2D<float4> DDGIProbeRTRadiance = GetDDGIProbeRTRadianceUAV(volumeSelect);
 
     // Irradiance
     float2 irradianceRect = numProbes.xy * numIrradianceProbeTexels * VizIrradianceScale;
@@ -88,7 +94,12 @@ float4 PS(PSInput input) : SV_TARGET
         input.position.y <= (irradianceRect.y + distanceRect.y + radianceRect.y))
     {
         coords = float2(input.position.x, (input.position.y - irradianceRect.y - distanceRect.y)) / VizRadianceScale;
+
+#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
         return float4(DDGIProbeRTRadiance.Load(coords).rgb, 1.f);
+#else
+        return float4(RTXGIUintToFloat3(asuint(DDGIProbeRTRadiance.Load(coords).r)), 1.f);
+#endif
     }
 
 #if RTXGI_DDGI_PROBE_RELOCATION
@@ -97,6 +108,7 @@ float4 PS(PSInput input) : SV_TARGET
     if (input.position.x <= offsetRect.x && (input.position.y > irradianceRect.y + distanceRect.y + radianceRect.y) &&
         input.position.y <= (irradianceRect.y + distanceRect.y + radianceRect.y + offsetRect.y))
     {
+        RWTexture2D<float4> DDGIProbeOffsets = GetDDGIProbeOffsetsUAV(volumeSelect);
         coords = float2(input.position.x, (input.position.y - irradianceRect.y - distanceRect.y - radianceRect.y)) / VizOffsetScale;
         return float4(DDGIProbeOffsets.Load(coords).rgb, 1.f);
     }
@@ -105,6 +117,7 @@ float4 PS(PSInput input) : SV_TARGET
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
     // States
     // Add one for one pixel separation between the two textures to more clearly differentiate them
+    RWTexture2D<uint> DDGIProbeStates = GetDDGIProbeStatesUAV(volumeSelect);
     float2 stateRect = numProbes.xy * VizStateScale;
 #if RTXGI_DDGI_PROBE_RELOCATION
     if (input.position.x <= stateRect.x && (input.position.y > irradianceRect.y + distanceRect.y + radianceRect.y + offsetRect.y + 1) &&

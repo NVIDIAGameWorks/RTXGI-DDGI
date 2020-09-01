@@ -16,4 +16,5 @@ Built |today|
    Harness
    SDKOverview
    DDGI
+   UE4Plugin
 

@@ -13,6 +13,7 @@
 
 #include "../../../../rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDescGPU.h"
 #include "../../include/Lights.h"
+#include "RSCommon.hlsl"
 
 struct TLASInstance
 {
@@ -26,23 +27,17 @@ struct TLASInstance
 
 cbuffer CameraCB : register(b1)
 {
-    float3    cameraOrigin;
+    float3    cameraPosition;
     float     cameraAspect;
     float3    cameraUp;
-    float     cameraTanHalfFovY;
-    float3    cameraRight;
     float     cameraFov;
+    float3    cameraRight;
+    float     cameraTanHalfFovY;
     float3    cameraForward;
-    float     cameraPad1;
+    int       cameraNumPaths;
 };
 
-// Used by CHS when *not* loading a binary scene file
-cbuffer MaterialCB : register(b2)
-{
-    float4 materialColors[18];
-};
-
-cbuffer LightsCB : register(b3)
+cbuffer LightsCB : register(b2)
 {
     uint  lightMask;
     uint3 lightCounts;
@@ -51,37 +46,25 @@ cbuffer LightsCB : register(b3)
     SpotLightDescGPU spotLight;
 };
 
-RWTexture2D<float4>                        RTGBufferA                : register(u0);
-RWTexture2D<float4>                        RTGBufferB                : register(u1);
-RWTexture2D<float4>                        RTGBufferC                : register(u2);
-RWTexture2D<float4>                        RTGBufferD                : register(u3);
-RWTexture2D<float>                         RTAORaw                   : register(u4);
-RWTexture2D<float>                         RTAOFiltered              : register(u5);
-RWStructuredBuffer<TLASInstance>           VisTLASInstances          : register(u6);
-RWTexture2D<float4>                        PTOutput                  : register(u7);
-RWTexture2D<float4>                        PTAccumulation            : register(u8);
+RWTexture2D<float4>                      GBufferA                  : register(u0);
+RWTexture2D<float4>                      GBufferB                  : register(u1);
+RWTexture2D<float4>                      GBufferC                  : register(u2);
+RWTexture2D<float4>                      GBufferD                  : register(u3);
+RWTexture2D<float>                       RTAORaw                   : register(u4);
+RWTexture2D<float>                       RTAOFiltered              : register(u5);
+RWTexture2D<float4>                      PTOutput                  : register(u6);
+RWTexture2D<float4>                      PTAccumulation            : register(u7);
+RWStructuredBuffer<TLASInstance>         VisTLASInstances[]        : register(u0, space3);
 
-// ---- DDGIVolume Entries -----------
-ConstantBuffer<DDGIVolumeDescGPU>        DDGIVolume                  : register(b1, space1);
-
-RWTexture2D<float4>                      DDGIProbeRTRadiance         : register(u0, space1);
-//RWTexture2D<float4>                    DDGIProbeIrradianceUAV      : register(u1, space1);    // not used by app (SDK only)
-//RWTexture2D<float4>                    DDGIProbeDistanceUAV        : register(u2, space1);    // not used by app (SDK only)
-RWTexture2D<float4>                      DDGIProbeOffsets            : register(u3, space1);
-RWTexture2D<uint>                        DDGIProbeStates             : register(u4, space1);
-// -----------------------------------
-
-Texture2D<float4>                        DDGIProbeIrradianceSRV      : register(t0);
-Texture2D<float4>                        DDGIProbeDistanceSRV        : register(t1);
+Texture2D<float4>                        BlueNoiseRGB                : register(t0);
 RaytracingAccelerationStructure          SceneBVH                    : register(t2);
 //ByteAddressBuffer                      Indices                     : register(t3);        // not used, part of local root signature
 //ByteAddressBuffer                      Vertices                    : register(t4);        // not used, part of local root signature
-Texture2D<float4>                        BlueNoiseRGB                : register(t5);
 
 // --- Sampler Descriptor Heap------------------------------------------------------
 
-SamplerState                            TrilinearSampler             : register(s0);
-SamplerState                            PointSampler                 : register(s1);
+SamplerState                             BilinearSampler              : register(s0);
+SamplerState                             PointSampler                 : register(s1);
 
 // ---- Root Constants -------------------------------------------------------------
 
@@ -89,12 +72,16 @@ cbuffer NoiseRootConstants : register(b4)
 {
     uint  ResolutionX;
     uint  FrameNumber;
-    float Exposure;
     uint  UseRTAO;
     uint  ViewAO;
     float AORadius;
     float AOPower;
     float AOBias;
+    uint  UseTonemapping;
+    uint  UseDithering;
+    uint  UseExposure;
+    float Exposure;
+    float NoisePadding;
 };
 
 cbuffer VisTLASUpdateRootConstants : register (b5)

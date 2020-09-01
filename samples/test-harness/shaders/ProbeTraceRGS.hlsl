@@ -20,6 +20,7 @@
 [shader("raygeneration")]
 void RayGen()
 {
+    DDGIVolumeDescGPU DDGIVolume = DDGIVolumes.volumes[volumeSelect];
     float4 result = 0.f;
 
     uint2 DispatchIndex = DispatchRaysIndex().xy;
@@ -27,16 +28,28 @@ void RayGen()
     int probeIndex = DispatchIndex.y;                  // index of current probe
 
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-    int2 texelPosition = DDGIGetProbeTexelPosition(probeIndex, DDGIVolume.probeGridCounts);
+    RWTexture2D<uint> DDGIProbeStates = GetDDGIProbeStatesUAV(volumeSelect);
+#if RTXGI_DDGI_PROBE_SCROLL
+    int storageProbeIndex = DDGIGetProbeIndexOffset(probeIndex, DDGIVolume.probeGridCounts, DDGIVolume.probeScrollOffsets);
+#else
+    int storageProbeIndex = probeIndex;
+#endif
+    int2 texelPosition = DDGIGetProbeTexelPosition(storageProbeIndex, DDGIVolume.probeGridCounts);
     int  probeState = DDGIProbeStates[texelPosition];
-    if (probeState == PROBE_STATE_INACTIVE)
+    if (probeState == PROBE_STATE_INACTIVE && rayIndex >= RTXGI_DDGI_NUM_FIXED_RAYS)
     {
-       return;  // if the probe is inactive, do not shoot rays
+       // if the probe is inactive, do not shoot rays, unless it is one of the fixed rays that could potentially reactivate the probe
+       return;
     }
 #endif
 
 #if RTXGI_DDGI_PROBE_RELOCATION
+    RWTexture2D<float4> DDGIProbeOffsets = GetDDGIProbeOffsetsUAV(volumeSelect);
+#if RTXGI_DDGI_PROBE_SCROLL
+    float3 probeWorldPosition = DDGIGetProbeWorldPositionWithOffset(probeIndex, DDGIVolume.origin, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing, DDGIVolume.probeScrollOffsets, DDGIProbeOffsets);
+#else
     float3 probeWorldPosition = DDGIGetProbeWorldPositionWithOffset(probeIndex, DDGIVolume.origin, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing, DDGIProbeOffsets);
+#endif
 #else
     float3 probeWorldPosition = DDGIGetProbeWorldPosition(probeIndex, DDGIVolume.origin, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing);
 #endif
@@ -51,7 +64,11 @@ void RayGen()
     ray.TMax = DDGIVolume.probeMaxRayDistance;
 
     // Probe Ray Trace
-    PayloadData payload = (PayloadData)0;
+    PackedPayload packedPayload = (PackedPayload)0;
+#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
+    // pass in the probeState flag as the first uint, will be overwritten by the correct content at the end of TraceRay
+    packedPayload.baseColorAndNormal.x = probeState;
+#endif
     TraceRay(
         SceneBVH,
         RAY_FLAG_NONE,
@@ -60,35 +77,56 @@ void RayGen()
         1,
         0,
         ray,
-        payload);
+        packedPayload);
+
+    // Unpack the payload
+    Payload payload = UnpackPayload(packedPayload);
 
     result = float4(payload.baseColor, payload.hitT);
+
+    Texture2D<float4> DDGIProbeIrradianceSRV = GetDDGIProbeIrradianceSRV(volumeSelect);
+    Texture2D<float4> DDGIProbeDistanceSRV = GetDDGIProbeDistanceSRV(volumeSelect);
+    RWTexture2D<float4> DDGIProbeRTRadiance = GetDDGIProbeRTRadianceUAV(volumeSelect);
 
     // Ray miss. Set hit distance to a large value and exit early.
     if (payload.hitT < 0.f)
     {
-        result.w = 1e27f;
-        DDGIProbeRTRadiance[DispatchIndex.xy] = result;
+#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
+        DDGIProbeRTRadiance[DispatchIndex.xy] = float4(payload.baseColor / PI, 1e27f);
+#else
+        DDGIProbeRTRadiance[DispatchIndex.xy] = float4(asfloat(RTXGIFloat3ToUint(payload.baseColor / PI)), 1e27f, 0.f, 0.f);
+#endif
         return;
     }
 
-    // Hit a surface backface. Set the radiance to black and exit early.
+    // Hit a surface backface.
     if (payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE)
     {
-        // Shorten the hit distance on a backface hit by 20%
-        // Make distance negative to encode backface for the probe position preprocess.
-        DDGIProbeRTRadiance[DispatchIndex.xy] = float4(0.f, 0.f, 0.f, -payload.hitT * 0.2f);
+        // Make hit distance negative to mark a backface hit for blending, probe relocation, and probe classification.
+        // Shorten the hit distance on a backface hit by 80% to decrease the influence of the probe during irradiance sampling.
+#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
+        DDGIProbeRTRadiance[DispatchIndex.xy].w = -payload.hitT * 0.2f;
+#else
+        DDGIProbeRTRadiance[DispatchIndex.xy].g = -payload.hitT * 0.2f;
+#endif
         return;
     }
 
+#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
+    // hit a frontface, but probe is inactive, so this ray will only be used for reclassification, don't need any lighting
+    if (probeState == PROBE_STATE_INACTIVE)
+    {
+#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
+        DDGIProbeRTRadiance[DispatchIndex.xy].w = payload.hitT;
+#else
+        DDGIProbeRTRadiance[DispatchIndex.xy].g = payload.hitT;
+#endif
+        return;
+    }
+#endif
+
     // Direct Lighting and Shadowing
-    float3 diffuse = DirectDiffuseLighting(
-        payload.baseColor,
-        payload.worldPosition,
-        payload.normal,
-        NormalBias,
-        ViewBias,
-        SceneBVH);
+    float3 diffuse = DirectDiffuseLighting(payload, NormalBias, ViewBias, SceneBVH);
 
     // Indirect Lighting (recursive)
     float3 irradiance = 0.f;
@@ -98,7 +136,7 @@ void RayGen()
     DDGIVolumeResources resources;
     resources.probeIrradianceSRV = DDGIProbeIrradianceSRV;
     resources.probeDistanceSRV = DDGIProbeDistanceSRV;
-    resources.trilinearSampler = TrilinearSampler;
+    resources.bilinearSampler = BilinearSampler;
 #if RTXGI_DDGI_PROBE_RELOCATION
     resources.probeOffsets = DDGIProbeOffsets;
 #endif
@@ -128,5 +166,12 @@ void RayGen()
     // Compute final color
     result = float4(diffuse + ((payload.baseColor / PI) * irradiance), payload.hitT);
 
+#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
+    // Use R32G32B32A32_FLOAT format. Store color components and hit distance as 32-bit float values.
     DDGIProbeRTRadiance[DispatchIndex.xy] = result;
+#else
+    // Use R32G32_FLOAT format (don't use R32G32_UINT since hit distance needs to be negative sometimes).
+    // Pack color in R32 and store hit distance in G32.
+    DDGIProbeRTRadiance[DispatchIndex.xy] = float4(asfloat(RTXGIFloat3ToUint(result.rgb)), payload.hitT, 0.f, 0.f);
+#endif
 }

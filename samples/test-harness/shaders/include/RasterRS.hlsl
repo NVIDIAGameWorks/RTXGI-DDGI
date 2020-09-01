@@ -13,12 +13,13 @@
 
 #include "../../../../rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDescGPU.h"
 #include "../../include/Lights.h"
+#include "RSCommon.hlsl"
 
 // ---- CBV/SRV/UAV Descriptor Heap ------------------------------------------------
 
 cbuffer CameraCB : register(b1)
 {
-    float3    cameraOrigin;
+    float3    cameraPosition;
     float     cameraAspect;
     float3    cameraUp;
     float     cameraTanHalfFovY;
@@ -28,7 +29,7 @@ cbuffer CameraCB : register(b1)
     float     cameraPad1;
 };
 
-cbuffer LightsCB : register(b3)
+cbuffer LightsCB : register(b2)
 {
     uint  lightMask;
     uint3 lightCounts;
@@ -37,30 +38,18 @@ cbuffer LightsCB : register(b3)
     SpotLightDescGPU spotLight;
 };
 
-RWTexture2D<float4>                    RTGBufferA                : register(u0);
-RWTexture2D<float4>                    RTGBufferB                : register(u1);
-RWTexture2D<float4>                    RTGBufferC                : register(u2);
-RWTexture2D<float4>                    RTGBufferD                : register(u3);
+RWTexture2D<float4>                    GBufferA                  : register(u0);
+RWTexture2D<float4>                    GBufferB                  : register(u1);
+RWTexture2D<float4>                    GBufferC                  : register(u2);
+RWTexture2D<float4>                    GBufferD                  : register(u3);
 RWTexture2D<float>                     RTAORaw                   : register(u4);
 RWTexture2D<float>                     RTAOFiltered              : register(u5);
 
-// ---- DDGIVolume Entries -----------
-ConstantBuffer<DDGIVolumeDescGPU>      DDGIVolume                : register(b1, space1);
-
-RWTexture2D<float4>                    DDGIProbeRTRadiance       : register(u0, space1);
-//RWTexture2D<float4>                  DDGIProbeIrradianceUAV    : register(u1, space1);    // not used by app (SDK only)
-//RWTexture2D<float4>                  DDGIProbeDistanceUAV      : register(u2, space1);    // not used by app (SDK only)
-RWTexture2D<float4>                    DDGIProbeOffsets          : register(u3, space1);
-RWTexture2D<uint>                      DDGIProbeStates           : register(u4, space1);
-// -----------------------------------
-
-Texture2D<float4>                      DDGIProbeIrradianceSRV    : register(t0);
-Texture2D<float4>                      DDGIProbeDistanceSRV      : register(t1);
-Texture2D<float4>                      BlueNoiseRGB              : register(t5);
+Texture2D<float4>                      BlueNoiseRGB              : register(t0);
 
 // --- Sampler Descriptor Heap------------------------------------------------------
 
-SamplerState                           TrilinearSampler          : register(s0);
+SamplerState                           BilinearSampler           : register(s0);
 SamplerState                           PointSampler              : register(s1);
 
 // ---- Root Constants -------------------------------------------------------------
@@ -69,12 +58,16 @@ cbuffer NoiseRootConstants : register(b4)
 {
     uint  ResolutionX;
     uint  FrameNumber;
-    float Exposure;
     uint  UseRTAO;
     uint  ViewAO;
     float AORadius;
     float AOPower;
     float AOBias;
+    uint  UseTonemapping;
+    uint  UseDithering;
+    uint  UseExposure;
+    float Exposure;
+    float NoisePadding;
 };
 
 cbuffer RasterRootConstants : register(b5)

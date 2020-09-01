@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>RTXGI SDK Overview &mdash; RTXGI SDK 1.0  documentation</title>
+  <title>RTXGI SDK Overview &mdash; RTXGI SDK 1.1  documentation</title>
   
 
   
@@ -52,7 +52,7 @@
           
 
           
-            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.0
+            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.1
           
 
           
@@ -103,6 +103,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="DDGI.html">Dynamic Diffuse Global Illumination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="UE4Plugin.html">Unreal Engine 4 Plugin</a></li>
 </ul>
 </li>
 </ul>
@@ -119,7 +120,7 @@
       <nav class="wy-nav-top" aria-label="top navigation">
         
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="../index.html">RTXGI SDK 1.0</a>
+          <a href="../index.html">RTXGI SDK 1.1</a>
         
       </nav>
 
@@ -175,7 +176,7 @@
 <div class="section" id="versioning">
 <h2>Versioning<a class="headerlink" href="#versioning" title="Permalink to this headline">¶</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/include/Common.h</span></code> contains the <code class="docutils literal notranslate"><span class="pre">RTXGI_VERSION</span></code> struct, which defines the current version of the SDK. Applications can check the SDK version using either the static <code class="docutils literal notranslate"><span class="pre">major</span></code>, <code class="docutils literal notranslate"><span class="pre">minor</span></code>, and <code class="docutils literal notranslate"><span class="pre">revision</span></code> values or by comparing against the result of <code class="docutils literal notranslate"><span class="pre">getVersionString()</span></code>.</p>
-<p>This documentation is for version 1.00.00 of the SDK.</p>
+<p>This documentation is for version 1.10.00 of the SDK.</p>
 </div>
 <div class="section" id="types">
 <h2>Types<a class="headerlink" href="#types" title="Permalink to this headline">¶</a></h2>
@@ -407,22 +408,25 @@
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_NAME_D3D_OBJECTS</span></code></p></td>
-<td><p>When set to 1, Direct3D objects are assigned debug names using <code class="docutils literal notranslate"><span class="pre">SetName()</span></code></p></td>
+<td><p>When set to 1, Direct3D objects are assigned debug names using <code class="docutils literal notranslate"><span class="pre">SetName()</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_PERF_MARKERS</span></code></p></td>
-<td><p>When set to 1, PIX performance markers are inserted in GPU command lists for debugging and profiling</p></td>
+<td><p>When set to 1, PIX performance markers are inserted in GPU command lists for debugging and profiling.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_LEFT</span></code></p></td>
-<td><p>Represents a left handed, Y-up coordinate system</p></td>
+<td><p>Represents a left handed, Y-up coordinate system.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_RIGHT</span></code></p></td>
-<td><p>Represents a right handed, Y-up coordinate system</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP</span></code></p></td>
+<td><p>Represents a left handed, Z-up coordinate system. The coordinate system used by Unreal Engine.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_UNREAL</span></code></p></td>
-<td><p>Represents a left handed, Z-up coordinate system. The coordinate system used in Unreal Engine.</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_RIGHT</span></code></p></td>
+<td><p>Represents a right handed, Y-up coordinate system.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM</span></code></p></td>
-<td><p>Specifies the coordinate system to use. The chosen coordinate system must be either <code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_LEFT</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_RIGHT</span></code>, or <code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_UNREAL</span></code>. The chosen coordinate system must match the coordinate system used for geometric assets.</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP</span></code></p></td>
+<td><p>Represents a left handed, Z-up coordinate system. The coordinate system used by Blender.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM</span></code></p></td>
+<td><p>Specifies the coordinate system to use. The chosen coordinate system must be either <code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_LEFT</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_RIGHT</span></code>, or <code class="docutils literal notranslate"><span class="pre">RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP</span></code>. The chosen coordinate system must match the coordinate system used for geometric assets.</p></td>
 </tr>
 </tbody>
 </table>

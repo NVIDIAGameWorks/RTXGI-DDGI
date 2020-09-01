@@ -13,8 +13,5 @@
 
 namespace Geometry
 {
-    bool CreateCornellBox(D3D12Info &d3d, D3D12Resources &resources);
-    bool CreateSphere(D3D12Info &d3d, D3D12Resources &resources);
-
-    bool LoadSceneBinary(std::string filepath, D3D12Info &d3d, D3D12Resources &resources);
+    bool CreateSphere(D3D12Global &d3d, D3D12Resources &resources);
 }

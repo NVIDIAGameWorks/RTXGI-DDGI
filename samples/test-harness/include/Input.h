@@ -10,11 +10,11 @@
 
 #pragma once
 
+#include "Common.h"
+
 #include <Keyboard.h>
 #include <Mouse.h>
 #include <rtxgi/Types.h>
-
-#include "Common.h"
 
 struct InputInfo
 {
@@ -29,6 +29,7 @@ struct InputInfo
     float   yaw = 0.f;
     int     width = 0;
     int     height = 0;
+    bool    saveImage = false;
     bool    initialized = false;
 };
 
@@ -39,10 +40,10 @@ namespace Input
         ConfigInfo &config,
         InputOptions &inputOptions,
         VizOptions &vizOptions,
-        CameraInfo &camera,
+        Camera &camera,
         float3 &translation,
         bool &useDDGI,
         bool &hotReload);
     
-    bool MouseHandler(InputInfo &input, CameraInfo &camera, InputOptions &inputOptions);
+    bool MouseHandler(InputInfo &input, Camera &camera, InputOptions &inputOptions);
 }

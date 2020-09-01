@@ -13,13 +13,12 @@
 // ---[ Miss Shader ]---
 
 [shader("miss")]
-void Miss(inout PayloadData payload)
+void Miss(inout PackedPayload packedPayload)
 {
-    // Basic Sky
-    //float3 RayDirection = WorldRayDirection();
-    //float t = 0.5f * (normalize(RayDirection).y + 1.f);
-    //payload.baseColor = (1.f - t) * float3(0.1f, 0.3f, 1.f) + t * float3(0.5f, 0.7f, 1.f);
-
+    Payload payload = (Payload)0;
+    //payload.baseColor = float3(1.f, 1.f, 1.f);
     payload.baseColor = float3(0.f, 0.f, 0.f);
     payload.hitT = -1.f;
+
+    packedPayload = PackPayload(payload);
 }

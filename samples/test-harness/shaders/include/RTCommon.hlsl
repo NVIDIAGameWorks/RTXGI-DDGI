@@ -11,14 +11,90 @@
 #ifndef RT_COMMON_HLSL
 #define RT_COMMON_HLSL
 
-struct PayloadData
-{
-    float3    baseColor;
-    float3    worldPosition;
-    float3    normal;
-    float     hitT;
-    uint      hitKind;
-    uint      instanceIndex;
+struct Payload
+{                                         // Byte Offset
+    float3  baseColor;                    // 12
+    float   opacity;                      // 16
+    float3  worldPosition;                // 28
+    float   metallic;                     // 32
+    float3  normal;                       // 44
+    float3  shadingNormal;                // 56
+    float   roughness;                    // 60
+    float   hitT;                         // 64
+    uint    hitKind;                      // 78
+    uint    instanceIndex;                // 72
 };
+
+struct PackedPayload
+{                                         // Byte Offset     Format
+    uint3 baseColorAndNormal;             //                 X: 16: BaseColor.r  16: BaseColor.g
+                                          //                 Y: 16: BaseColor.b  16: Normal.x
+                                          //                 Z: 16: Normal.y     16: Normal.z
+                                          // 12
+    uint  metallicAndRoughness;           // 16                 16: Metallic        16: Roughness
+    uint3 worldPosAndShadingNormal;       //                 X: 16: WorldPos.x      16: WorldPos.y
+                                          //                 Y: 16: WorldPos.z      16: ShadingNormal.x
+                                          // 28              Z: 16: ShadingNormal.y 16: ShadingNormal.z
+    uint  opacityAndHitKind;              // 32              X: 16: Opacity         16: Hit Kind
+    uint  instanceIndex;                  // 36                 32: InstanceIndex
+    float hitT;                           // 40                 32: HitT
+};
+
+/**
+* Pack the payload into a compressed format.
+* Complement of UnpackPayload().
+*/
+PackedPayload PackPayload(Payload input)
+{
+    PackedPayload output = (PackedPayload)0;
+    output.baseColorAndNormal.x  =  f32tof16(input.baseColor.r);
+    output.baseColorAndNormal.x |= f32tof16(input.baseColor.g) << 16;
+    output.baseColorAndNormal.y  = f32tof16(input.baseColor.b);
+    output.baseColorAndNormal.y |= f32tof16(input.normal.x) << 16;
+    output.baseColorAndNormal.z  = f32tof16(input.normal.y);
+    output.baseColorAndNormal.z |= f32tof16(input.normal.z) << 16;
+    output.metallicAndRoughness  = f32tof16(input.metallic);
+    output.metallicAndRoughness |= f32tof16(input.roughness) << 16;
+    output.worldPosAndShadingNormal.x  = f32tof16(input.worldPosition.x);
+    output.worldPosAndShadingNormal.x |= f32tof16(input.worldPosition.y) << 16;
+    output.worldPosAndShadingNormal.y  = f32tof16(input.worldPosition.z);
+    output.worldPosAndShadingNormal.y |= f32tof16(input.shadingNormal.x) << 16;
+    output.worldPosAndShadingNormal.z  = f32tof16(input.shadingNormal.y);
+    output.worldPosAndShadingNormal.z |= f32tof16(input.shadingNormal.z) << 16;
+    output.opacityAndHitKind  = f32tof16(input.opacity);
+    output.opacityAndHitKind |= input.hitKind << 16;
+    output.instanceIndex = input.instanceIndex;
+    output.hitT = input.hitT;
+    return output;
+}
+
+
+/**
+* Unpack the compressed payload into the full sized payload format.
+* Complement of PackPayload().
+*/
+Payload UnpackPayload(PackedPayload input)
+{
+    Payload output = (Payload)0;
+    output.baseColor.x = f16tof32(input.baseColorAndNormal.x);
+    output.baseColor.y = f16tof32(input.baseColorAndNormal.x >> 16);
+    output.baseColor.z = f16tof32(input.baseColorAndNormal.y);
+    output.normal.x = f16tof32(input.baseColorAndNormal.y >> 16);
+    output.normal.y = f16tof32(input.baseColorAndNormal.z);
+    output.normal.z = f16tof32(input.baseColorAndNormal.z >> 16);
+    output.metallic = f16tof32(input.metallicAndRoughness);
+    output.roughness = f16tof32(input.metallicAndRoughness >> 16);    
+    output.worldPosition.x = f16tof32(input.worldPosAndShadingNormal.x);
+    output.worldPosition.y = f16tof32(input.worldPosAndShadingNormal.x >> 16);
+    output.worldPosition.z = f16tof32(input.worldPosAndShadingNormal.y);
+    output.shadingNormal.x = f16tof32(input.worldPosAndShadingNormal.y >> 16);
+    output.shadingNormal.y = f16tof32(input.worldPosAndShadingNormal.z);
+    output.shadingNormal.z = f16tof32(input.worldPosAndShadingNormal.z >> 16);
+    output.opacity = f16tof32(input.opacityAndHitKind);
+    output.hitKind = input.opacityAndHitKind >> 16;
+    output.instanceIndex = input.instanceIndex;
+    output.hitT = input.hitT;
+    return output;
+}
 
 #endif /* RT_COMMON_HLSL */

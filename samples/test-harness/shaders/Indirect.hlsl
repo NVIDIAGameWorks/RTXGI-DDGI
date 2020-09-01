@@ -48,44 +48,54 @@ float4 PS(PSInput input) : SV_TARGET
     float  ambientOcclusion = 1.f;
 
     // Load the baseColor
-    float4 baseColor = RTGBufferA.Load(input.position.xy);
+    float4 baseColor = GBufferA.Load(input.position.xy);
     result = baseColor.rgb;
 
     // Primary ray hit, need to light it
     if (baseColor.a > 0.f)
     {
-        float4 worldPosHitT = RTGBufferB.Load(input.position.xy);
-        float3 normal = RTGBufferC.Load(input.position.xy).xyz;
-        float3 diffuse = RTGBufferD.Load(input.position.xy).rgb;
-        
+        float4 worldPosHitT = GBufferB.Load(input.position.xy);
+        float3 normal = GBufferC.Load(input.position.xy).xyz;
+        float3 diffuse = GBufferD.Load(input.position.xy).rgb;
+
         // Load ambient occlusion and multiply with diffuse lighting
         ambientOcclusion = UseRTAO ? RTAOFiltered.Load(input.position.xy) : 1.f;
         diffuse *= ambientOcclusion;
 
         // Indirect Lighting
         float3 irradiance = 0.f;
+        float  blendTotal = 1e-9f;   // Start blendTotal with a very small value to avoid divide by zero
 #if RTXGI_DDGI_COMPUTE_IRRADIANCE
-        float3 cameraDirection = normalize(worldPosHitT.xyz - cameraOrigin);
-        float3 surfaceBias = DDGIGetSurfaceBias(normal, cameraDirection, DDGIVolume);
+        // Iterate over the DDGIVolumes
+        for (uint i = 0; (i < volumeSelect) && (blendTotal < 1.f); i++)
+        {
+            DDGIVolumeDescGPU DDGIVolume = DDGIVolumes.volumes[i];
+            float3 cameraDirection = normalize(worldPosHitT.xyz - cameraPosition);
+            float3 surfaceBias = DDGIGetSurfaceBias(normal, cameraDirection, DDGIVolume);
 
-        DDGIVolumeResources resources;
-        resources.probeIrradianceSRV = DDGIProbeIrradianceSRV;
-        resources.probeDistanceSRV = DDGIProbeDistanceSRV;
-        resources.trilinearSampler = TrilinearSampler;
+            DDGIVolumeResources resources;
+            resources.probeIrradianceSRV = GetDDGIProbeIrradianceSRV(i);
+            resources.probeDistanceSRV = GetDDGIProbeDistanceSRV(i);
+            resources.bilinearSampler = BilinearSampler;
 #if RTXGI_DDGI_PROBE_RELOCATION
-        resources.probeOffsets = DDGIProbeOffsets;
+            resources.probeOffsets = GetDDGIProbeOffsetsUAV(i);
 #endif
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        resources.probeStates = DDGIProbeStates;
+            resources.probeStates = GetDDGIProbeStatesUAV(i);
 #endif
+            float weight = DDGIGetVolumeBlendWeight(worldPosHitT.xyz, DDGIVolume);
+            // Get irradiance from the DDGIVolume
+            irradiance += weight * DDGIGetVolumeIrradiance(
+                worldPosHitT.xyz,
+                surfaceBias,
+                normal,
+                DDGIVolume,
+                resources);
+            blendTotal += weight;
+        }
 
-        // Get irradiance from the DDGIVolume
-        irradiance = DDGIGetVolumeIrradiance(
-            worldPosHitT.xyz,
-            surfaceBias,
-            normal,
-            DDGIVolume,
-            resources);
+        // Normalize by blendTotal
+        irradiance /= blendTotal;
 
         // Attenuate irradiance by ambient occlusion
         irradiance *= ambientOcclusion;
@@ -109,14 +119,22 @@ float4 PS(PSInput input) : SV_TARGET
     }
 
     // Apply exposure
-    result *= Exposure;
+    if (UseExposure)
+    {
+        result *= Exposure;
+    }
 
     // Apply tonemapping
-    result = ACESFilm(result);
+    if (UseTonemapping)
+    {
+        result = ACESFilm(result);
+    }
 
     // Add noise to handle SDR color banding
-    float3 noise = GetLowDiscrepancyBlueNoise(int2(input.position.xy), FrameNumber, 1.f / 256.f, BlueNoiseRGB);
-    result += noise;
+    if (UseDithering)
+    {
+        result += GetLowDiscrepancyBlueNoise(int2(input.position.xy), FrameNumber, 1.f / 256.f, BlueNoiseRGB);
+    }
 
     // Gamma correct
     result = LinearToSRGB(result);

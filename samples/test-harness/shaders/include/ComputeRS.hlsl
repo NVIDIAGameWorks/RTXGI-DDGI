@@ -13,10 +13,10 @@
 
 // ---- CBV/SRV/UAV Descriptor Heap ------------------------------------------------
 
-RWTexture2D<float4>                    RTGBufferA                : register(u0);
-RWTexture2D<float4>                    RTGBufferB                : register(u1);
-RWTexture2D<float4>                    RTGBufferC                : register(u2);
-RWTexture2D<float4>                    RTGBufferD                : register(u3);
+RWTexture2D<float4>                    GBufferA                  : register(u0);
+RWTexture2D<float4>                    GBufferB                  : register(u1);
+RWTexture2D<float4>                    GBufferC                  : register(u2);
+RWTexture2D<float4>                    GBufferD                  : register(u3);
 RWTexture2D<float>                     RTAORaw                   : register(u4);
 RWTexture2D<float>                     RTAOFiltered              : register(u5);
 

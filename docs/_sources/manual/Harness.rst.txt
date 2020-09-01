@@ -22,14 +22,13 @@ The Test Harness sample application is designed to demonstrate the basic functio
 Main Features
 --------------------
 
-.. * DXR and DX12 Resource creation and management (textures, constant buffers, D3D12 stuff)
-.. * DXR implementation details (acceleration structures, shader table, RTPSOs)
+.. _GLTF 2.0: https://github.com/KhronosGroup/glTF/tree/master/specification/2.0
 
 The RTXGI SDK Test Harness includes the following features, most of which are described in greater detail in the rest of this document:
 
 * Startup configuration using initialization (``.ini``) text files
-* Scene loading from a custom binary (``.bin``) format
-* HLSL shader loading and compilation with DXC
+* Scene loading of geometry and material assets in the `GLTF 2.0`_ text and binary formats (``.gltf``, ``.glb``) 
+* HLSL shader loading and compilation with Microsoft's DirectX Compiler (DXC)
 * DXR and D3D12 resource creation and management
 * DXR implementation
 * Deferred rendering
@@ -42,7 +41,7 @@ The RTXGI SDK Test Harness includes the following features, most of which are de
 * Ray Traced Ambient Occlusion (RTAO) & Denoising
 * Reference Path Tracer
 
-The Test Harness main loop (found in ``rtxgi-sdk/samples/test-harness/src/harness/main.cpp``) represents one way to use the :ref:`DDGI` implementation provided in the RTXGI SDK. The remainder of this document describes the ways in which the Test Harness configures test scenes, sets up the test volume, visualizes run-time behavior, and uses additional features to demonstrate interoperability with other rendering effects.
+The Test Harness main loop (found in ``rtxgi-sdk/samples/test-harness/src/harness/main.cpp``) represents one way to use the :ref:`DDGI` implementation provided in the RTXGI SDK. The remainder of this document describes the ways in which the Test Harness configures test scenes, sets up ``DDGIVolumes``, visualizes run-time behavior, and uses additional features to demonstrate interoperability with other rendering effects.
 
 .. _Harness-Config:
 
@@ -90,9 +89,15 @@ Application level configuration options are specified immediately after the ``#[
   * - ``rtxgi-sdk``
     - ``string``
     - The path to the rtxgi-sdk directory (absolute, or relative to the executable).
-  * - ``scene``
+  * - ``scene-path``
     - ``string``
-    - The path to the scene ``.bin`` file to use. This path is concatenated with the root path. See `Scene and Asset Loading`_.
+    - The path to the GLTF scene file. This path is concatenated with the root path. See `Scene and Asset Loading`_.
+  * - ``scene-file``
+    - ``string``
+    - The file name of the text or binary GLTF 2.0 scene to load. See `Scene and Asset Loading`_.
+  * - ``screenshot-file``
+    - ``string``
+    - The path and file name of the ``.jpg`` file written when a screenshot is captured. The image is stored relative to the application's ``root`` working directory.
 
 .. _Harness-LightConfig:
 
@@ -238,6 +243,9 @@ Volume Configuration
   * - Option
     - Type
     - Description
+  * - ``name``
+    - ``string``
+    - A plain text name for the volume.
   * - ``origin``
     - ``float3``
     - The world-space origin of the ``DDGIVolume``.
@@ -314,10 +322,13 @@ Post process configuration options are specified immediately after the ``#[postp
     - Description
   * - ``AORadius``
     - ``float``
-    - The maximum distance of an ambient occlusion ray can travel. See `Ray Traced Ambient Occlusion & Denoising`_.
+    - The maximum distance of an ambient occlusion ray can travel. See `Ray Traced Ambient Occlusion and Denoising`_.
+  * - ``AOBias``
+    - ``float``
+    - A surface offset avoid self-intersection during ray tracing. See `Ray Traced Ambient Occlusion and Denoising`_.
   * - ``AOFilterDepthSigma``
     - ``float``
-    - The ambient occlusion denoiser's depth sigma. See `Ray Traced Ambient Occlusion & Denoising`_.
+    - The ambient occlusion denoiser's depth sigma. See `Ray Traced Ambient Occlusion and Denoising`_.
 
 .. _Harness-VizConfig:
 
@@ -368,9 +379,12 @@ Visualization configuration options are specified immediately after the ``#[visu
 Scene and Asset Loading
 -------------------------
 
-Two test scenes are distributed with the SDK, and can be loaded in the Test Harness by setting the ``scene`` parameter in the ``.ini`` file to the path of the desired scene binary file. Scene files are located in ``samples/test-harness/data/scenes`` and config files are located in ``samples/test-harness/config``. 
+.. _A library of GLTF 2.0 sample scenes: https://github.com/KhronosGroup/glTF-Sample-Models
+.. _Crytek Sponza scene: https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Sponza
 
-The following tables show images of each test scene from the default camera position with different global illumination solutions enabled:
+The Test Harness reads scene files encoded in the GLTF 2.0 file format. `A library of GLTF 2.0 sample scenes`_ is available from Khronos, and can be loaded by the Test Harness when paired with an intialization file with the proper settings. For example, the ``sponza.ini`` config file provided with the Test Harness is compatible with the `Crytek Sponza scene`_ provided by Khronos. Copy or link the Sponza GLTF scene from the repository to the ``samples/test-harness-data/gltf`` directory.
+
+Two test scenes are distributed with the SDK, and can be loaded in the Test Harness by passing their configuration files to the executable. Scene files are located in ``samples/test-harness/data/gltf`` and config files are located in ``samples/test-harness/config``. The following tables show images of the included test scenes from the default camera position with different global illumination solutions enabled:
 
 .. |two_rooms_image| image:: ../images/two-rooms.jpg
 
@@ -378,7 +392,7 @@ The following tables show images of each test scene from the default camera posi
 
 .. |two_rooms_pt| image:: ../images/two-rooms_pt.jpg
 
-.. list-table:: Two Rooms (``two-rooms-plane.bin``, ``two-rooms.ini``)
+.. list-table:: Two Rooms (``two-rooms.glb``, ``two-rooms.ini``)
    :widths: 33 33 33
    :header-rows: 1
 
@@ -395,7 +409,7 @@ The following tables show images of each test scene from the default camera posi
 
 .. |cornell_pt| image:: ../images/cornell_pt.jpg
 
-.. list-table:: Cornell Box (``cornell.bin``, ``cornell.ini``)
+.. list-table:: Cornell Box (``cornell.glb``, ``cornell.ini``)
    :widths: 33 33 33
    :header-rows: 1
 
@@ -405,52 +419,6 @@ The following tables show images of each test scene from the default camera posi
    * - |cornell_off|
      - |cornell_image|
      - |cornell_pt|
-
-**Scene Binary File Format**
-
-Since loading additional scenes into the Test Harness will likely prove useful during experimentation and debugging, the custom binary file format is described below. The deserialization of this format is implemented in ``samples/test-harness/src/harness/Deserializer.cpp``.
-
-.. code-block:: hlsl
-
-    // Format
-    [ size ] - description
-
-    // HEADER
-    [ 4 bytes ] - number of materials
-    [ 4 bytes ] - number of meshes
-
-    // MATERIALS
-
-    //---[material 0]---
-    [ 4 bytes  ] - number of characters in material name (uint)
-    [ variable ] - material name
-    [ 12 bytes ] - diffuse color (float3)
-    //-----------------
-            .
-            .
-            .
-    //---[material n]---
-
-    // GEOMETRY
-
-    //---[mesh 0]-----
-    [ 4 bytes  ] - number of vertices
-    [ 4 bytes  ] - number of indices
-    [ 4 bytes  ] - material index
-    [ 4 bytes  ] - number of characters in the mesh name
-    [ variable ] - mesh name
-
-    // Vertex Stream (Position + Normal)
-    [ 4 bytes  ] - vertex stride
-    [ 4 bytes  ] - index stride
-    [ variable ] - vertex data
-    [ variable ] - index data
-    //----------------
-            .
-            .
-            .
-    //---[mesh n]-----
-
 
 .. _Harness-Shaders:
 
@@ -463,9 +431,7 @@ The Test Harness includes several HLSL shaders, which are divided into two group
    - Include shader files that contain declarations and/or functionality used by multiple top level shaders
    - Top level shaders that define the entry points of GPU workloads that are dispatched from the host
    
-Most host side functionality related to shaders exists in the ``Shaders`` namespace, is declared in ``samples/test-harness/include/Shaders.h``, and defined in ``samples/test-harness/src/Shaders.cpp``. Shaders are compiled using the `DirectX Shader Compiler (DXC) <https://github.com/microsoft/DirectXShaderCompiler>`_ targeting Shader Model 6. The ``Harness::CompileShaders(...)`` function in ``samples/test-harness/src/Harness.cpp`` loads and compiles the DDGI compute shaders. 
-
-The following table provides a brief description of each shared shader file found in ``samples/test-harness/shaders/include``:
+Most host side functionality related to shaders exists in the ``Shaders`` namespace, is declared in ``samples/test-harness/include/Shaders.h``, and defined in ``samples/test-harness/src/Shaders.cpp``. Shaders are compiled using the `DirectX Shader Compiler (DXC) <https://github.com/microsoft/DirectXShaderCompiler>`_ targeting Shader Model 6. The ``Harness::CompileVolumeShaders(...)`` and ``Harness::CompileVolumeShadersMulti`` functions in ``samples/test-harness/src/Harness.cpp`` load and compile shaders for ``DDGIVolumes``. The following table provides a brief description of each shared shader file found in ``samples/test-harness/shaders/include``:
 
 .. list-table:: Include Shaders
    :widths: 25 75
@@ -483,6 +449,8 @@ The following table provides a brief description of each shared shader file foun
      - Common utilities for random number generation, hashing, and noise generation.
    * - ``RasterRS.hlsl``
      - The root signature for raster passes.
+   * - ``RSCommon.hlsl``
+     - Common elements shared between raster and compute root signatures.
    * - ``RTCommon.hlsl``
      - Common ray tracing methods and values (e.g. the payload).
    * - ``RTGlobalRS.hlsl``
@@ -498,11 +466,13 @@ The next table gives a brief description of each top level shader found in ``sam
 
    * - File Name
      - Description
+   * - ``AHS.hlsl``
+     - Any Hit Shader that handles alpha testing.
    * - ``AOFilterCS.hlsl``
      - A Compute Shader that filters raw ambient occlusion results.
    * - ``AOTraceRGS.hlsl``
      - A Ray Generation Shader that traces rays to compute ambient occlusion.
-   * - ``ClosestHit.hlsl``
+   * - ``CHS.hlsl``
      - Closest Hit Shaders that return material properties in the payload.
    * - ``Indirect.hlsl``
      - Fullscreen Vertex and Pixel Shaders that compute indirect lighting and perform compositing (Direct+GI+AO).
@@ -583,7 +553,7 @@ Texture Visualization
 
 The Test Harness includes a feature to visualize ``DDGIVolume`` probe data textures. ``Visualization::RenderBuffers(...)`` provides this functionality. The visualization can be enabled or disabled through the GUI or by pressing ``b`` on the keyboard.
 
-The size that the textures appear on screen can be configured through the corresponding values in the ``.ini`` file (see `Visualization Configuration`_ for details). The top-most texture visualized is the irradiance texture, which shows the accumulated irradiance values for each probe. Next is the distance texture, which shows hit distance in green and distance |squared| in red. The third texture shows the radiance computed for the probe rays.
+The size that the textures appear on screen can be configured through the corresponding values in the ``.ini`` file (see `Visualization Configuration`_ for details), or through the UI sliders that appear when visualization is enabled. The top-most texture visualized is the irradiance texture, which shows the accumulated irradiance values for each probe. Next is the distance texture, which shows hit distance in green and distance |squared| in red. The third texture shows the radiance computed for the probe rays.
 
 .. figure:: ../images/buffer_visualization.jpg
    :figwidth: 100%
@@ -592,7 +562,7 @@ The size that the textures appear on screen can be configured through the corres
 
    Probe texture visualization enabled in the Test Harness, with zoomed inlays to highlight the visualization.
 
-.. note:: When probe relocation (see :ref:`probe_offsets`) or probe state classification (see :ref:`probe_states`) are enabled, additional textures are visualized. These appear after the probe radiance texture, and display world-space probe offsets (top) and probe states (bottom). Although these textures may not be obviously helpful at a glance, they reveal useful information when inspected in debugging tools such as Nsight Graphics or PIX.
+.. note:: When probe relocation (see :ref:`probe_offsets`) or probe state classification (see :ref:`probe_states`) are enabled, additional textures are visualized. These appear after the probe radiance texture, and display world-space probe offsets (top) and probe states (bottom). Although these textures may not be obviously helpful at a glance, they reveal useful information when inspected in debugging tools such as Nsight Graphics, PIX, or RenderDoc.
 
   .. figure:: ../images/buffer_visualization-ea.png
      :figwidth: 60%
@@ -606,8 +576,6 @@ Camera and Volume Movement
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As described in `Mouse and Keyboard`_, the camera and ``DDGIVolume`` can be translated with keyboard commands. Both camera and volume translation are provided to aid in visualizing and debugging the scene and volume. The mouse can be used to rotate the camera by holding the left mouse button, and pan the camera by holding the right mouse button.
-
-.. warning:: While keyboard controls allow the volume to move, remember that a ``DDGIVolume`` is intended to store irradiance in a volume of space where the primary scene geometry is stationary relative to the ``DDGIVolume``. Volume movement is intended as a debugging feature in this release. Artifacts are expected when the volume moves and its values are used on subsequent frames prior to convergence.
 
 .. _Harness-Input:
 
@@ -668,15 +636,15 @@ The Test Harness includes the following mouse and keyboard controls:
    * - ``m``
      - Toggle between DDGI and Path Tracing rendering modes.
    * - ``g``
-     - Restart the probe optimizer (see early access feature :ref:`probe_offsets`).
+     - Toggles probe relocation (see :ref:`probe_offsets`).
    * - ``k``
-     - Reset all probes to active state (see early access feature :ref:`probe_states`).
+     - Reset all probes to active state (see :ref:`probe_states`).
    * - ``l``
-     - Toggle between allowing probes to become inactive or not (see early access feature :ref:`probe_states`).
+     - Toggles probe classification on and off (see :ref:`probe_states`).
 
 .. note:: The ``CONTROL``, ``SHIFT`` and ``ALT`` commands *multiply*. For example, allowing a 20% motion speed by using both ``SHIFT`` and ``CONTROL`` at the same time.
 
-.. warning:: The ``g``, ``k`` and ``l`` keyboard controls are only available when the associated early access feature is enabled.
+.. warning:: The ``g``, ``k`` and ``l`` keyboard controls are only available when the associated feature is enabled.
 
 .. _Harness-GUI:
 
@@ -719,7 +687,7 @@ Lighting calculations are computed as high dynamic range (HDR) values in linear 
 .. _Harness-RTAO:
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Ray Traced Ambient Occlusion & Denoising
+Ray Traced Ambient Occlusion and Denoising
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 A ray traced ambient occlusion (RTAO) implementation is included with the Test Harness to demonstrate one way to combine ambient occlusion with the dynamic indirect lighting provided by the ``DDGIVolume``. Implementation details are in the ``Harness::RayTraceAO(...)`` and ``Harness::FilterAO(...)`` functions in ``rtxgi-sdk/samples/test-harness/src/harness/Harness.cpp``. 

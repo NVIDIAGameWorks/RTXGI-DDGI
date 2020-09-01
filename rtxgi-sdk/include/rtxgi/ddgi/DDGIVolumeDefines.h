@@ -57,14 +57,22 @@
 #define RTXGI_DDGI_COMPUTE_IRRADIANCE_RECURSIVE 1
 #endif
 
-// --- Early Access Features -------------------------
+// --- Probe Relocation -------------------------
 
 #ifndef RTXGI_DDGI_PROBE_RELOCATION
 #define RTXGI_DDGI_PROBE_RELOCATION 1
 #endif
 
+// --- Probe Classification -------------------------
+
 #ifndef RTXGI_DDGI_PROBE_STATE_CLASSIFIER
 #define RTXGI_DDGI_PROBE_STATE_CLASSIFIER 1
+#endif
+
+// --- Probe Movement (Early Access) --------------------------------
+
+#ifndef RTXGI_DDGI_PROBE_SCROLL
+#define RTXGI_DDGI_PROBE_SCROLL 1
 #endif
 
 // ---------------------------------------------------

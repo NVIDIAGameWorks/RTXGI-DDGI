@@ -32,48 +32,50 @@ float LightFalloff(float distanceToLight)
 /**
 * Computes the visibility factor for a given vector to a light.
 */
-float LightVisibility(float3 worldPosition, float3 lightVector, float tmax, float3 normal, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+float LightVisibility(Payload payload, float3 lightVector, float tmax, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
 {
     RayDesc ray;
-    ray.Origin = worldPosition + (normal * normalBias);
+    ray.Origin = payload.worldPosition + (payload.normal * normalBias);
     ray.Direction = normalize(lightVector);
     ray.TMin = 0.f;
     ray.TMax = tmax;
 
-    PayloadData payload = (PayloadData)0;
+    // Trace a visibility ray
+    // Skip the CHS to avoid evaluating materials
+    PackedPayload packedPayload = (PackedPayload)0;
     TraceRay(
         bvh,
-        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
-        0x01,
+        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
+        0xFF,
         0,
         1,
         0,
         ray,
-        payload);
+        packedPayload);
 
-    return (payload.hitT < 0.f);
+    return (packedPayload.hitT < 0.f);
 }
 
 /**
 * Evaluate direct lighting and showing for the current surface and the spot light.
 */
-float3 EvaluateSpotLight(float3 worldPosition, float3 normal, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+float3 EvaluateSpotLight(Payload payload, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
 {
-    float3 lightVector = (spotLight.position - worldPosition);
+    float3 lightVector = (spotLight.position - payload.worldPosition);
     float  lightDistance = length(lightVector);
     
     // Early out, light energy doesn't reach the surface
     if (lightDistance > spotLight.maxDistance) return float3(0.f, 0.f, 0.f);
 
     float tmax = (lightDistance - viewBias);
-    float visibility = LightVisibility(worldPosition, lightVector, tmax, normal, normalBias, viewBias, bvh);
+    float visibility = LightVisibility(payload, lightVector, tmax, normalBias, viewBias, bvh);
 
     // Early out, the light isn't visible from the surface
     if (visibility <= 0.f) return float3(0.f, 0.f, 0.f);
 
     // Compute lighting
     float3 lightDirection = normalize(lightVector);
-    float  nol = max(dot(normal, lightDirection), 0.f);
+    float  nol = max(dot(payload.normal, lightDirection), 0.f);
     float3 spotDirection = normalize(spotLight.direction);
     float  attenuation = SpotAttenuation(spotDirection, -lightDirection, spotLight.umbraAngle, spotLight.penumbraAngle);
     float  falloff = LightFalloff(lightDistance);
@@ -85,23 +87,23 @@ float3 EvaluateSpotLight(float3 worldPosition, float3 normal, float normalBias, 
 /**
 * Evaluate direct lighting and showing for the current surface and the point light.
 */
-float3 EvaluatePointLight(float3 worldPosition, float3 normal, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+float3 EvaluatePointLight(Payload payload, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
 {
-    float3 lightVector = (pointLight.position - worldPosition);
+    float3 lightVector = (pointLight.position - payload.worldPosition);
     float  lightDistance = length(lightVector);
 
     // Early out, light energy doesn't reach the surface
     if (lightDistance > pointLight.maxDistance) return float3(0.f, 0.f, 0.f);
 
     float tmax = (lightDistance - viewBias);
-    float visibility = LightVisibility(worldPosition, lightVector, tmax, normal, normalBias, viewBias, bvh);
+    float visibility = LightVisibility(payload, lightVector, tmax, normalBias, viewBias, bvh);
 
     // Early out, the light isn't visible from the surface
     if (visibility <= 0.f) return float3(0.f, 0.f, 0.f);
 
     // Compute lighting
     float3 lightDirection = normalize(lightVector);
-    float  nol = max(dot(normal, lightDirection), 0.f);
+    float  nol = max(dot(payload.normal, lightDirection), 0.f);
     float  falloff = LightFalloff(lightDistance);
     float  window = LightWindowing(lightDistance, pointLight.maxDistance);
 
@@ -111,16 +113,16 @@ float3 EvaluatePointLight(float3 worldPosition, float3 normal, float normalBias,
 /**
 * Evaluate direct lighting and shadowing for the current surface and the directional light.
 */
-float3 EvaluateDirectionalLight(float3 worldPosition, float3 normal, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+float3 EvaluateDirectionalLight(Payload payload, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
 {
-    float visibility = LightVisibility(worldPosition, -directionalLight.direction, 1e27f, normal, normalBias, viewBias, bvh);
+    float visibility = LightVisibility(payload, -directionalLight.direction, 1e27f, normalBias, viewBias, bvh);
 
     // Early out, the light isn't visible from the surface
     if (visibility <= 0.f) return float3(0.f, 0.f, 0.f);
 
     // Compute lighting
-    float3 lightDirection = normalize(-directionalLight.direction);
-    float  nol = max(dot(normal, lightDirection), 0.f);
+    float3 lightDirection = -normalize(directionalLight.direction);
+    float  nol = max(dot(payload.shadingNormal, lightDirection), 0.f);
 
     return directionalLight.power * directionalLight.color * nol * visibility;
 }
@@ -128,24 +130,24 @@ float3 EvaluateDirectionalLight(float3 worldPosition, float3 normal, float norma
 /**
 * Computes the diffuse contribution of a surface to the final color (direct lighting).
 */
-float3 DirectDiffuseLighting(float3 baseColor, float3 worldPosition, float3 normal, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+float3 DirectDiffuseLighting(Payload payload, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
 {
-    float3 albedo = (baseColor / PI);
+    float3 albedo = (payload.baseColor / PI);
     float3 lighting = 0.f;
     
     if (lightMask & 0x00000001)
     {
-        lighting += EvaluateDirectionalLight(worldPosition, normal, normalBias, viewBias, bvh);
+        lighting += EvaluateDirectionalLight(payload, normalBias, viewBias, bvh);
     }
 
     if (lightMask & 0x00000010)
     {
-        lighting += EvaluatePointLight(worldPosition, normal, normalBias, viewBias, bvh);
+        lighting += EvaluatePointLight(payload, normalBias, viewBias, bvh);
     }
 
     if (lightMask & 0x00000100)
     {
-        lighting += EvaluateSpotLight(worldPosition, normal, normalBias, viewBias, bvh);
+        lighting += EvaluateSpotLight(payload, normalBias, viewBias, bvh);
     }
 
     return (albedo * lighting);

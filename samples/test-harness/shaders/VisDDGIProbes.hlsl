@@ -23,14 +23,14 @@ void RayGen()
     uint2 LaunchDimensions = DispatchRaysDimensions().xy;
 
     RayDesc ray;
-    ray.Origin = cameraOrigin;
+    ray.Origin = cameraPosition;
     ray.TMin = 0.f;
     ray.TMax = 1e27f;
 
     // Compute the primary ray direction
     float  halfHeight = cameraTanHalfFovY;
     float  halfWidth = (cameraAspect * halfHeight);
-    float3 lowerLeftCorner = cameraOrigin - (halfWidth * cameraRight) - (halfHeight * cameraUp) + cameraForward;
+    float3 lowerLeftCorner = cameraPosition - (halfWidth * cameraRight) - (halfHeight * cameraUp) + cameraForward;
     float3 horizontal = (2.f * halfWidth) * cameraRight;
     float3 vertical = (2.f * halfHeight) * cameraUp;
 
@@ -40,7 +40,7 @@ void RayGen()
     ray.Direction = (lowerLeftCorner + s * horizontal + t * vertical) - ray.Origin;
 
     // Primary Ray Trace
-    PayloadData payload = (PayloadData)0;
+    PackedPayload packedPayload = (PackedPayload)0;
     TraceRay(
         SceneBVH,
         RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
@@ -49,24 +49,34 @@ void RayGen()
         1,
         0,
         ray,
-        payload);
+        packedPayload);
 
-    if (payload.hitT > 0.f)
+    if (packedPayload.hitT > 0.f)
     {
         // If the scene's primary ray hit missed geometry or 
         // the probe vis primary ray hit a probe, and the probe is the
-        // closest surface, overwrite RTGBufferA with probe vis data.
-        float depth = RTGBufferB[LaunchIndex].w;
-        if(depth < 0.f || payload.hitT < depth)
+        // closest surface, overwrite GBufferA with probe vis data.
+        float depth = GBufferB[LaunchIndex].w;
+        if(depth < 0.f || packedPayload.hitT < depth)
         {
+            DDGIVolumeDescGPU DDGIVolume = DDGIVolumes.volumes[volumeSelect];
+            Texture2D<float4> DDGIProbeIrradianceSRV = GetDDGIProbeIrradianceSRV(volumeSelect);
             float3 result = 0.f;
+
+            // Unpack the payload
+            Payload payload = UnpackPayload(packedPayload);
+
 #if RTXGI_DDGI_PROBE_RELOCATION
+            RWTexture2D<float4> DDGIProbeOffsets = GetDDGIProbeOffsetsUAV(volumeSelect);
             float3 probePosition =
                 DDGIGetProbeWorldPositionWithOffset(
                     payload.instanceIndex,
                     DDGIVolume.origin,
                     DDGIVolume.probeGridCounts,
                     DDGIVolume.probeGridSpacing,
+#if RTXGI_DDGI_PROBE_SCROLL
+                    DDGIVolume.probeScrollOffsets,
+#endif
                     DDGIProbeOffsets);
 #else
             float3 probePosition =
@@ -81,12 +91,16 @@ void RayGen()
             float2 coords = DDGIGetOctahedralCoordinates(sampleDirection);
             
             // Irradiance
+#if RTXGI_DDGI_PROBE_SCROLL
+            float2 uv = DDGIGetProbeUV(payload.instanceIndex, coords, DDGIVolume.probeGridCounts, DDGIVolume.probeNumIrradianceTexels, DDGIVolume.probeScrollOffsets);
+#else
             float2 uv = DDGIGetProbeUV(payload.instanceIndex, coords, DDGIVolume.probeGridCounts, DDGIVolume.probeNumIrradianceTexels);
-            result = DDGIProbeIrradianceSRV.SampleLevel(TrilinearSampler, uv, 0).rgb;
+#endif
+            result = DDGIProbeIrradianceSRV.SampleLevel(BilinearSampler, uv, 0).rgb;
 
             // Filtered Distance
             /*float2 uv = DDGIGetProbeUV(payload.instanceIndex, coords, DDGIVolume.probeGridCounts, DDGIVolume.probeNumDistanceTexels);
-            float  distance = DDGIProbeDistanceSRV.SampleLevel(TrilinearSampler, uv, 0).r;
+            float  distance = DDGIProbeDistanceSRV.SampleLevel(BilinearSampler, uv, 0).r;
             result = float3(distance, distance, distance) / 2.f;*/
 
             // Decode the tone curve
@@ -100,15 +114,20 @@ void RayGen()
             result *= (0.5f * RTXGI_PI);
 
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-            const float3 INACTIVE_COLOR = float3(1.f, 0.f, 0.f);          // Red
-            const float3 ACTIVE_COLOR = float3(0.f, 1.f, 0.f);            // Green
+            const float3 INACTIVE_COLOR = float3(1.f, 0.f, 0.f);      // Red
+            const float3 ACTIVE_COLOR = float3(0.f, 1.f, 0.f);        // Green
+            RWTexture2D<uint> DDGIProbeStates = GetDDGIProbeStatesUAV(volumeSelect);
+#if RTXGI_DDGI_PROBE_SCROLL
+            int probeIndex = DDGIGetProbeIndexOffset(payload.instanceIndex, DDGIVolume.probeGridCounts, DDGIVolume.probeScrollOffsets);
+#else
+            int probeIndex = payload.instanceIndex;
+#endif
 
-            int probeXY = DDGIVolume.probeGridCounts.x * DDGIVolume.probeGridCounts.y;
-            int2 probeStateTexcoord = int2(payload.instanceIndex % probeXY, payload.instanceIndex / probeXY);
+            uint2 probeStateTexcoord = DDGIGetProbeTexelPosition(probeIndex, DDGIVolume.probeGridCounts);
             uint state = DDGIProbeStates.Load(probeStateTexcoord).r;
 
             // Border visualization for probe states
-            if (abs(dot(normalize(probePosition - cameraOrigin), sampleDirection)) < 0.45f)
+            if (abs(dot(ray.Direction, sampleDirection)) < 0.45f)
             {
                 if (state == PROBE_STATE_ACTIVE)
                 {
@@ -127,7 +146,8 @@ void RayGen()
             // Gamma correct
             result = LinearToSRGB(result);
 
-            RTGBufferA[LaunchIndex] = float4(result, 0.f);
+            GBufferA[LaunchIndex] = float4(result, 0.f);
+            GBufferB[LaunchIndex] = packedPayload.hitT;
         }
     }
 }

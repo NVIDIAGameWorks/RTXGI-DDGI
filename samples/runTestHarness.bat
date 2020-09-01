@@ -10,6 +10,7 @@
 
 @echo off
 echo.
+if not exist build\test-harness md build\test-harness
 cd /d build\test-harness
 echo Launching Test Harness...
 
@@ -17,9 +18,13 @@ echo Launching Test Harness...
 ::..\bin\Debug\TestHarness.exe ..\..\test-harness\config\cornell.ini
 ..\bin\Release\TestHarness.exe ..\..\test-harness\config\cornell.ini
 
-:: Two rooms
+:: Two Rooms
 ::..\bin\Debug\TestHarness.exe ..\..\test-harness\config\two-rooms.ini
 ::..\bin\Release\TestHarness.exe ..\..\test-harness\config\two-rooms.ini
+
+:: Sponza
+::..\bin\Debug\TestHarness.exe ..\..\test-harness\config\sponza.ini
+::..\bin\Release\TestHarness.exe ..\..\test-harness\config\sponza.ini
 
 echo Done.
 cd /d ..\..\

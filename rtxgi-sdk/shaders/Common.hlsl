@@ -42,4 +42,35 @@ float2 RTXGISignNotZero(float2 v)
     return float2(RTXGISignNotZero(v.x), RTXGISignNotZero(v.y));
 }
 
+/**
+* Return the given float value as an unsigned integer within the given numerical scale.
+*/
+uint RTXGIFloatToUint(float v, float scale)
+{
+    return (uint)floor(v * scale + 0.5f);
+}
+
+/**
+* Pack a float3 into a 32-bit unsigned integer.
+* Red and green channels use 11 bits, the blue channel uses 10 bits.
+* Compliment of RTXGIUintToFloat3().
+*/
+uint RTXGIFloat3ToUint(float3 input)
+{
+    return (RTXGIFloatToUint(input.r, 2047.f)) | (RTXGIFloatToUint(input.g, 2047) << 11) | (RTXGIFloatToUint(input.b, 1023) << 22);
+}
+
+/**
+* Unpack a packed 32-bit unsigned integer to a float3.
+* Compliment of RTXGIFloat3ToUint().
+*/
+float3 RTXGIUintToFloat3(uint packed)
+{
+    float3 unpacked;
+    unpacked.x = (float)(packed & 0x000007FF) / 2047.f;
+    unpacked.y = (float)((packed >> 11) & 0x000007FF) / 2047.f;
+    unpacked.z = (float)((packed >> 22) & 0x000003FF) / 1023.f;
+    return unpacked;
+}
+
 #endif /* RTXGI_COMMON_HLSL */
