@@ -1,10 +1,10 @@
-# RTXGI SDK v1.0.0
+# RTXGI SDK v1.0
 
 This repository contains the RTX Global Illumination (RTXGI) SDK, the "Test Harness" sample application, and associated documentation.
 
-* The core RTXGI SDK is included in the "rtxgi-sdk" directory
-* The sample application is included the "samples" directory
-* The documentation and User Guide are included in the "docs" directory
+* The core RTXGI SDK is included in the `rtxgi-sdk` directory
+* The sample application is included the `samples` directory
+* The documentation and User Guide are included in the `docs` directory
 
 ### System Requirements
 * Windows 10 v1809 or higher
@@ -45,7 +45,7 @@ If you want to build just the RTXGI SDK, and aren't interested in samples, follo
 
 ### Notes
 - Two test scenes are included with the SDK distribution, a Cornell Box and the "Two Rooms" scene.
-- You can change which scene is loaded through the initialization file passed to the test harness on the command line. See the config/ directory.
+- You can change which scene is loaded through the initialization file passed to the test harness on the command line. See the `config/` directory.
 - DDGIVolume, lights, camera, visualization, input, and scene settings can be modified in the initialization file.
 - A progressive path tracing mode is included for reference and can be toggled at runtime
 - A user interface is implemented, based on ImGui. It displays information that is useful when debugging and setting up new scenes / probe configurations.
