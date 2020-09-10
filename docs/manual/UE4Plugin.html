@@ -197,7 +197,7 @@
 </div>
 <div class="section" id="plugin-contents">
 <h2>Plugin Contents<a class="headerlink" href="#plugin-contents" title="Permalink to this headline">¶</a></h2>
-<p><strong>RTXGI-UE4.25.3.patch</strong> and <strong>RTXGI-NvRTX4.25.3.patch</strong>  are patch files to be applied to the appropriate engine branch.</p>
+<p><strong>RTXGI-UE4.25.3.patch</strong> and <strong>RTXGI-NvRTX4.25.3.patch</strong> are patch files to be applied to the appropriate engine branch.</p>
 </div>
 <div class="section" id="getting-started">
 <h2>Getting Started<a class="headerlink" href="#getting-started" title="Permalink to this headline">¶</a></h2>
@@ -209,14 +209,15 @@
 <p><strong>Plugin Installation:</strong> <br/></p>
 <blockquote>
 <div><ol class="arabic">
-<li><p>Clone Unreal Engine 4.25.3 from Epic Games <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Unreal Engine GitHub</a> or the Unreal Launcher (if using Epic’s mainline UE4).</p>
+<li><p>Clone Unreal Engine 4.25.3 from Epic Games <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Unreal Engine GitHub</a>.</p>
 <ol class="arabic simple">
 <li><p>Select <strong>NvRTX 4.25.3</strong> if using the NVIDIA NvRTX UE4.25 branch.</p></li>
 </ol>
 </li>
 <li><p>Download <strong>RTXGI-UE4.25.3.patch</strong> or <strong>RTXGI-NvRTX4.25.3.patch</strong> from the <strong>ue4-plugin</strong> directory of the RTXGI GitHub repository. Select the patch that matches the engine branch you’ve chosen.</p></li>
 <li><p>Apply the necessary engine changes and RTXGI plugin:</p>
-<p>Apply the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file to install the plugin and necessary engine changes.</p>
+<blockquote>
+<div><p>apply the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file to install the plugin and necessary engine changes.</p>
 <blockquote>
 <div><ul>
 <li><p>Copy the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file in the root directory of the cloned Unreal Engine source code.</p></li>
@@ -229,11 +230,11 @@
 </div></blockquote>
 </li>
 <li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns any errors, follow the prompt and resolve conflicts manually.</p></li>
-<li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns nothing, everything is correct. Continue to the next step.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns nothing, or only warnings, everything is correct. Continue to the next step.</p></li>
 <li><p>In the same command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">rtxgi-ue4.25.3.patch</span></code> in the root directory and hit enter.</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>If using NvRTX, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">rtxgi-ue4.25.3.patch</span></code> instead.</p></li>
+<li><p>If using NvRTX, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">rtxgi-nvrtx4.25.3.patch</span></code> instead.</p></li>
 </ul>
 </div></blockquote>
 </li>
