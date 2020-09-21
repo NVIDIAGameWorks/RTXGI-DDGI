@@ -80,6 +80,11 @@ Minor engine changes are required for the RTXGI plugin to work in UE4.25. This d
 
                - If using NvRTX, type ``git apply rtxgi-nvrtx4.25.3.patch`` instead.
 
+            - After applying the patch, the engine must be built to include engine code changes needed by the plugin.
+
+               - Run GenerateProjectFiles.bat to regenerate the project files.
+               - Build the engine.
+
             - All necessary patches have been applied! Proceed to the next step.
 
    #. Run the UE4 editor in DirectX 12 mode by adding ``-dx12`` to the command line (DirectX12 is required for ray tracing).
