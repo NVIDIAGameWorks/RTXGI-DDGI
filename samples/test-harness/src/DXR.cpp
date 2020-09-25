@@ -1223,6 +1223,9 @@ bool UpdateVisTLAS(D3D12Global &d3d, DXRGlobal &dxr, D3D12Resources &resources, 
 */
 void Cleanup(DXRGlobal &dxr)
 {
+    // Release shader table
+    RTXGI_SAFE_RELEASE(dxr.shaderTable);
+
     // Release shaders
     dxr.probeRGS.Release();
     dxr.primaryRGS.Release();
@@ -1231,6 +1234,13 @@ void Cleanup(DXRGlobal &dxr)
     dxr.pathTraceRGS.Release();
     dxr.miss.Release();
     dxr.hit.Release();
+    dxr.visUpdateTLASCS->Release();
+
+    // Release root signatures and PSOs
+    RTXGI_SAFE_RELEASE(dxr.globalRootSig);
+    RTXGI_SAFE_RELEASE(dxr.visUpdateTLASPSO);
+    RTXGI_SAFE_RELEASE(dxr.rtpso);
+    RTXGI_SAFE_RELEASE(dxr.rtpsoInfo);
 
     // Release acceleration structures
     for (size_t i = 0; i < dxr.BLASes.size(); i++)

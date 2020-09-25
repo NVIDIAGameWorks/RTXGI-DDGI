@@ -342,11 +342,11 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
     RTXGI_SAFE_RELEASE(resources.volumeGroupCB);
 
     UI::Cleanup();
-    DXR::Cleanup(dxr);
-    D3DResources::Cleanup(resources);
-    D3D12::Cleanup(d3d);
-    Shaders::Cleanup(shaderCompiler);
     GLTF::Cleanup(scene);
+    Shaders::Cleanup(shaderCompiler);
+    D3DResources::Cleanup(resources);
+    DXR::Cleanup(dxr);
+    D3D12::Cleanup(d3d);
 
     DestroyWindow(window);
     log << "Done\n";
