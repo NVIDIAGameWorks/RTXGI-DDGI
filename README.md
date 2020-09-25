@@ -25,8 +25,8 @@ To see RTXGI in action, follow the below steps to build the SDK and run the Test
 1. Open Cmake
 2. Copy the path to where you downloaded this source package. Add `/samples` to this path on the "source code" line
 3. Copy the path to where you downloaded this source package. Add `/samples/build` to this path on the the "binaries" line (below "source code")
-4. Select `Configure` in Cmake
-	4a. If using VS2017, you must also select `x64` as platform for generator in the dropdown
+4. Select `Configure` in Cmake<br>
+	4a. If using VS2017, you must also select `x64` as platform for generator in the dropdown<br>
 	4b. If using VS2019, the platform is `x64` by default
 5. Select `Generate` in Cmake
 6. Open `samples/build/RTXGISamples.sln` in the build directory (created by CMake) and build the solution
@@ -38,9 +38,9 @@ If you want to build just the RTXGI SDK, and aren't interested in samples, follo
 1. Open Cmake
 2. Copy the path to where you downloaded this source package, and add `/rtxgi-sdk/` to this path on the "source code" line
 3. Copy the path to where you downloaded this source package, and add `/rtxgi-sdk/build` to this path on the "source code" line
-4. Select `Configure` in Cmake
-	4a. If using VS2017, you must also select `x64` as platform for generator in the dropdown
-	4b. If using VS2019, the platform is `x64` by default
+4. Select `Configure` in Cmake<br>
+	4a. If using VS2017, you must also select `x64` as platform for generator in the dropdown<br>
+	4b. If using VS2019, the platform is `x64` by default	
 5. Select `Generate` in Cmake
 6. Open `rtxgi-sdk/build/RTXGI.sln` and build the solution. By default a static library is generated
 
