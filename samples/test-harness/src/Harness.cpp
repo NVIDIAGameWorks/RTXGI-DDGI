@@ -936,8 +936,17 @@ void RayTraceAO(D3D12Global &d3d, DXRGlobal &dxr, D3D12Resources &resources, Pos
     UINT  useRTAO = postOptions.useRTAO ? 1 : 0;
     float exposure = pow(2.f, postOptions.exposureFStops);
 
-    UINT noiseConstants[8] = { (UINT)d3d.width, d3d.frameNumber, *(UINT*)&exposure, useRTAO, viewAO, *(UINT*)&postOptions.AORadius, *(UINT*)&AOPower, *(UINT*)&postOptions.AOBias };
-    d3d.cmdList->SetComputeRoot32BitConstants(4, 8, &noiseConstants, 0);
+    UINT noiseConstants[7] =
+    {
+        (UINT)d3d.width,
+        d3d.frameNumber,
+        useRTAO,
+        viewAO,
+        *(UINT*)&postOptions.AORadius,
+        *(UINT*)&AOPower,
+        *(UINT*)&postOptions.AOBias
+    };
+    d3d.cmdList->SetComputeRoot32BitConstants(4, 7, &noiseConstants, 0);
 
     // Dispatch rays
     D3D12_DISPATCH_RAYS_DESC desc = {};
