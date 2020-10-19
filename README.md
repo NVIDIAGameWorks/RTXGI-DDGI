@@ -11,7 +11,7 @@ This repository contains the RTX Global Illumination (RTXGI) SDK v1.1, the "Test
 * Windows 10 v1809 or higher
 * Visual Studio 2017 or 2019
 * Windows 10 SDK version 10.0.17763 or higher (can be installed using the Visual Studio Installer)
-* CMake 3.15 or higher, [download here](https://cmake.org/download).
+* CMake 3.14.5 or higher, [download here](https://cmake.org/download).
 * Latest drivers for your GPU. NVIDIA drivers are [available here](http://www.nvidia.com/drivers).
 * Any DXR enabled GPU. NVIDIA DXR enabled GPUs:
 	* RTX 3090, 3080, 3070
