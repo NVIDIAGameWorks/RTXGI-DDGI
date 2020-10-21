@@ -14,7 +14,7 @@
 
 namespace Visualization
 {
-    void RenderBuffers(D3D12Info &d3d, D3D12Resources &resources, const VizOptions &options);
-    void RenderProbes(D3D12Info &d3d, DXRInfo &dxr, D3D12Resources &resources);
+    void RenderBuffers(D3D12Global &d3d, D3D12Resources &resources, const VizOptions &options, size_t index = 0);
+    void RenderProbes(D3D12Global &d3d, DXRGlobal &dxr, D3D12Resources &resources, size_t index = 0);
 }
 

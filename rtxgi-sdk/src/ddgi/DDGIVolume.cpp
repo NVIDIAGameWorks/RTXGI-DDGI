@@ -9,6 +9,7 @@
 */
 
 #include "rtxgi/Random.h"
+#include "rtxgi/Math.h"
 #include "rtxgi/ddgi/DDGIVolume.h"
 
 #include <cmath>
@@ -36,7 +37,7 @@ namespace rtxgi
 #if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
             return DXGI_FORMAT_R32G32B32A32_FLOAT;
 #else
-            return DXGI_FORMAT_R32G32B32A32_FLOAT;
+            return DXGI_FORMAT_R32G32_FLOAT;
 #endif
         }
         else if (type == EDDGITextureType::Irradiance)
@@ -57,13 +58,13 @@ namespace rtxgi
 #if RTXGI_DDGI_DEBUG_FORMAT_OFFSETS
             return DXGI_FORMAT_R32G32B32A32_FLOAT;
 #else
-            return DXGI_FORMAT_R16G16B16A16_FLOAT;  
+            return DXGI_FORMAT_R16G16B16A16_FLOAT;
 #endif
         }
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
         else if (type == EDDGITextureType::States)
         {
-            return DXGI_FORMAT_R8_UINT;         
+            return DXGI_FORMAT_R8_UINT;
         }
 #endif
         return DXGI_FORMAT_UNKNOWN;
@@ -74,9 +75,12 @@ namespace rtxgi
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
         probeCountX = (desc.probeGridCounts.x * desc.probeGridCounts.y);
         probeCountY = desc.probeGridCounts.z;
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
         probeCountX = (desc.probeGridCounts.y * desc.probeGridCounts.z);
         probeCountY = desc.probeGridCounts.x;
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+        probeCountX = (desc.probeGridCounts.x * desc.probeGridCounts.z);
+        probeCountY = desc.probeGridCounts.y;
 #endif
     }
 
@@ -173,9 +177,13 @@ namespace rtxgi
         descGPU.probeIrradianceEncodingGamma = desc.probeIrradianceEncodingGamma;
         descGPU.probeInverseIrradianceEncodingGamma = (1.f / desc.probeIrradianceEncodingGamma);
         descGPU.probeNumIrradianceTexels = desc.numIrradianceTexels;
-        descGPU.probeNumDistanceTexels = desc.numDistanceTexels;        
+        descGPU.probeNumDistanceTexels = desc.numDistanceTexels;
         descGPU.normalBias = desc.normalBias;
         descGPU.viewBias = desc.viewBias;
+#if RTXGI_DDGI_PROBE_SCROLL
+        descGPU.volumeMovementType = static_cast<int>(desc.movementType);
+        descGPU.probeScrollOffsets = desc.probeScrollOffsets;
+#endif
 #if RTXGI_DDGI_PROBE_RELOCATION
         descGPU.probeMinFrontfaceDistance = desc.probeMinFrontfaceDistance;
 #endif
@@ -369,6 +377,7 @@ namespace rtxgi
         m_resources = resources;
         m_origin = desc.origin;
         m_boundingBox = GetBoundingBox();
+        m_name = desc.name;
 
         // Init the random seed and compute a rotation transform
         InitRandomSeed();
@@ -383,6 +392,49 @@ namespace rtxgi
 
         return ERTXGIStatus::OK;
     }
+
+#if RTXGI_DDGI_PROBE_SCROLL
+    ERTXGIStatus DDGIVolume::Scroll(int3 translation)
+    {
+        // Update the volume's origin
+        Move(m_desc.probeGridSpacing * translation);
+        
+        // Make the probe grid offsets positive for simpler shader code
+        m_probeScrollOffsets += translation;
+        m_desc.probeScrollOffsets = ((m_probeScrollOffsets % m_desc.probeGridCounts) + m_desc.probeGridCounts) % m_desc.probeGridCounts;
+
+        return ERTXGIStatus::OK;
+    }
+
+    ERTXGIStatus DDGIVolume::Scroll(float3 translation, float3 deadzoneRadii)
+    {
+        // Accumulate the translation
+        m_probeScrollTranslation += translation;
+
+        // Check if the accumulated translation has moved out of the specified deadzone
+        bool leftDeadzone = (abs(m_probeScrollTranslation.x) >= deadzoneRadii.x) || (abs(m_probeScrollTranslation.y) >= deadzoneRadii.y) || (abs(m_probeScrollTranslation.z) >= deadzoneRadii.z);
+        if (leftDeadzone)
+        {
+            // Compute the number of probe grid cells the accumulated translation has crossed
+            int3 scroll = { AbsFloor(m_probeScrollTranslation.x / m_desc.probeGridSpacing.x), AbsFloor(m_probeScrollTranslation.y / m_desc.probeGridSpacing.y), AbsFloor(m_probeScrollTranslation.z / m_desc.probeGridSpacing.z) };
+            if (abs(scroll.x) > 0 || abs(scroll.y) > 0 || abs(scroll.z) > 0)
+            {
+                // Scroll the grid cells and reset the accumulated translation based on the number of scrolled grid cells
+                Scroll(scroll);
+                float3 scaledScroll = { float(scroll.x), float(scroll.y), float(scroll.z) };
+                m_probeScrollTranslation = m_probeScrollTranslation - (scaledScroll * deadzoneRadii);
+            }
+        }
+
+        return ERTXGIStatus::OK;
+    }
+
+    ERTXGIStatus DDGIVolume::Scroll(float3 translation, AABB deadzoneBBox)
+    {
+        // TODO
+        return ERTXGIStatus::OK;
+    }
+#endif /* RTXGI_DDGI_PROBE_SCROLL */
 
     ERTXGIStatus DDGIVolume::Update(ID3D12Resource* constantBuffer, UINT64 offsetInBytes)
     {
@@ -470,7 +522,7 @@ namespace rtxgi
         barriers[1].UAV.pResource = m_probeDistance;
 
         cmdList->ResourceBarrier(2, barriers);
-        
+
         float groupSize = 8.f;
         UINT numThreadsX, numThreadsY;
         UINT numGroupsX, numGroupsY;
@@ -528,7 +580,7 @@ namespace rtxgi
             cmdList->SetPipelineState(m_probeBorderColumnPSO);
             cmdList->Dispatch(numGroupsX, numGroupsY, 1);
         }
-        
+
         // Wait for the irradiance and distance border update passes
         // to complete before using the textures
         cmdList->ResourceBarrier(2, barriers);
@@ -541,7 +593,7 @@ namespace rtxgi
 
         // Wait for the transition to complete
         cmdList->ResourceBarrier(2, transitionBarriers);
-        
+
         return ERTXGIStatus::OK;
     }
 
@@ -614,6 +666,12 @@ namespace rtxgi
             cmdList->Dispatch(numGroupsX, numGroupsY, 1);
         }
 
+        D3D12_RESOURCE_BARRIER uavBarrier = {};
+        uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        uavBarrier.UAV.pResource = m_probeStates;
+        uavBarrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        cmdList->ResourceBarrier(1, &uavBarrier);
+
         return ERTXGIStatus::OK;
     }
 
@@ -663,6 +721,9 @@ namespace rtxgi
         m_origin = {};
         m_rootSignatureDesc = {};
         m_rotationTransform = {};
+#if RTXGI_DDGI_PROBE_SCROLL
+        m_probeScrollOffsets = {};
+#endif
 
 #if RTXGI_DDGI_SDK_MANAGED_RESOURCES
         RTXGI_SAFE_RELEASE(m_rootSignature);
@@ -997,9 +1058,13 @@ namespace rtxgi
         int x = probeIndex % m_desc.probeGridCounts.x;
         int y = probeIndex / (m_desc.probeGridCounts.x * m_desc.probeGridCounts.z);
         int z = (probeIndex / m_desc.probeGridCounts.x) % m_desc.probeGridCounts.z;
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
         int x = (probeIndex / m_desc.probeGridCounts.y) % m_desc.probeGridCounts.x;
         int y = probeIndex % m_desc.probeGridCounts.y;
+        int z = probeIndex / (m_desc.probeGridCounts.x * m_desc.probeGridCounts.y);
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+        int x = probeIndex % m_desc.probeGridCounts.x;
+        int y = (probeIndex / m_desc.probeGridCounts.x) % m_desc.probeGridCounts.y;
         int z = probeIndex / (m_desc.probeGridCounts.x * m_desc.probeGridCounts.y);
 #endif
         return { x, y, z };

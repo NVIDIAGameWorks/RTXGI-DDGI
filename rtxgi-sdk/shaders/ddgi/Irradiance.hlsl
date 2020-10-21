@@ -17,7 +17,7 @@ struct DDGIVolumeResources
 {
     Texture2D<float4> probeIrradianceSRV;
     Texture2D<float4> probeDistanceSRV;
-    SamplerState trilinearSampler;
+    SamplerState bilinearSampler;
 #if RTXGI_DDGI_PROBE_RELOCATION
     RWTexture2D<float4> probeOffsets;
 #endif
@@ -100,7 +100,11 @@ float3 DDGIGetVolumeIrradiance(
 
         // Get the adjacent probe's world position
 #if RTXGI_DDGI_PROBE_RELOCATION
+#if RTXGI_DDGI_PROBE_SCROLL
+        float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPositionWithOffset(adjacentProbeCoords, volume.origin, volume.probeGridCounts, volume.probeGridSpacing, volume.probeScrollOffsets, resources.probeOffsets);
+#else
         float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPositionWithOffset(adjacentProbeCoords, volume.origin, volume.probeGridCounts, volume.probeGridSpacing, resources.probeOffsets);
+#endif
 #else
         float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPosition(adjacentProbeCoords, volume.origin, volume.probeGridCounts, volume.probeGridSpacing);
 #endif
@@ -131,8 +135,12 @@ float3 DDGIGetVolumeIrradiance(
 
         // Compute the texture coordinates of this adjacent probe and sample the probe's filtered distance
         float2 octantCoords = DDGIGetOctahedralCoordinates(-biasedPosToAdjProbe);
+#if RTXGI_DDGI_PROBE_SCROLL
+        float2 probeTextureCoords = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeGridCounts, volume.probeNumDistanceTexels, volume.probeScrollOffsets);
+#else
         float2 probeTextureCoords = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeGridCounts, volume.probeNumDistanceTexels);
-        float2 filteredDistance = resources.probeDistanceSRV.SampleLevel(resources.trilinearSampler, probeTextureCoords, 0).rg;
+#endif
+        float2 filteredDistance = resources.probeDistanceSRV.SampleLevel(resources.bilinearSampler, probeTextureCoords, 0).rg;
 
         float meanDistanceToSurface = filteredDistance.x;
         float variance = abs((filteredDistance.x * filteredDistance.x) - filteredDistance.y);
@@ -168,10 +176,14 @@ float3 DDGIGetVolumeIrradiance(
 
         // Sample the probe irradiance
         octantCoords = DDGIGetOctahedralCoordinates(direction);
+#if RTXGI_DDGI_PROBE_SCROLL
+        probeTextureCoords = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeGridCounts, volume.probeNumIrradianceTexels, volume.probeScrollOffsets);
+#else
         probeTextureCoords = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeGridCounts, volume.probeNumIrradianceTexels);
-        float3 probeIrradiance = resources.probeIrradianceSRV.SampleLevel(resources.trilinearSampler, probeTextureCoords, 0).rgb;
+#endif
+        float3 probeIrradiance = resources.probeIrradianceSRV.SampleLevel(resources.bilinearSampler, probeTextureCoords, 0).rgb;
 
-        // Decode the tone curve, but leave a gamma = 2 curve to approximate sRGB blending for the trilinear
+        // Decode the tone curve, but leave a gamma = 2 curve to approximate sRGB blending
         float3 exponent = volume.probeIrradianceEncodingGamma * 0.5f;
         probeIrradiance = pow(probeIrradiance, exponent);
 

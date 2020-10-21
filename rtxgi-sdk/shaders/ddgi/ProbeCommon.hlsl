@@ -16,6 +16,12 @@
 #include "../../include/rtxgi/ddgi/DDGIVolumeDefines.h"
 #include "../../include/rtxgi/ddgi/DDGIVolumeDescGPU.h"
 
+#if RTXGI_DDGI_PROBE_RELOCATION || RTXGI_DDGI_PROBE_STATE_CLASSIFIER
+// The number of fixed rays that are used for probe relocation and classification.
+// These rays do not vary to produce temporally stable results during relocation and classification.
+#define RTXGI_DDGI_NUM_FIXED_RAYS 32
+#endif
+
 //------------------------------------------------------------------------
 // Probe Indexing Helpers
 //------------------------------------------------------------------------
@@ -27,7 +33,7 @@ int DDGIGetProbesPerPlane(int3 probeGridCounts)
 {
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     return (probeGridCounts.x * probeGridCounts.z);
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
     return (probeGridCounts.x * probeGridCounts.y);
 #endif
 }
@@ -37,9 +43,9 @@ int DDGIGetProbesPerPlane(int3 probeGridCounts)
 */
 int DDGIGetPlaneIndex(uint2 threadCoords, int3 probeGridCounts, int probeNumTexels)
 {
-#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
+#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
     return int(threadCoords.x / (probeGridCounts.x * probeNumTexels));
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
     return int(threadCoords.x / (probeGridCounts.y * probeNumTexels));
 #endif
 }
@@ -49,9 +55,9 @@ int DDGIGetPlaneIndex(uint2 threadCoords, int3 probeGridCounts, int probeNumTexe
 */
 int DDGIGetProbeIndexInPlane(uint2 threadCoords, int planeIndex, int3 probeGridCounts, int probeNumTexels)
 {
-#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
+#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
     return int(threadCoords.x / probeNumTexels) - (planeIndex * probeGridCounts.x) + (probeGridCounts.x * int(threadCoords.y / probeNumTexels));
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
     return int(threadCoords.x / probeNumTexels) - (planeIndex * probeGridCounts.y) + (probeGridCounts.y * int(threadCoords.y / probeNumTexels));
 #endif
 }
@@ -68,17 +74,23 @@ int2 DDGIGetProbeTexelPosition(int probeIndex, int3 probeGridCounts)
     // Compute the probe index for this thread
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     return int2(probeIndex % (probeGridCounts.x * probeGridCounts.y), probeIndex / (probeGridCounts.x * probeGridCounts.y));
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
     return int2(probeIndex % (probeGridCounts.y * probeGridCounts.z), probeIndex / (probeGridCounts.y * probeGridCounts.z));
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    return int2(probeIndex % (probeGridCounts.x * probeGridCounts.z), probeIndex / (probeGridCounts.x * probeGridCounts.z));
 #endif
 }
 
 /**
-* Computes the normalized texture coordinates of the given probe, 
-* using the probe index, octant coordinates, probe grid counts, 
+* Computes the normalized texture coordinates of the given probe,
+* using the probe index, octant coordinates, probe grid counts,
 * and the number of texels used by a probe.
 */
+#if RTXGI_DDGI_PROBE_SCROLL
+float2 DDGIGetProbeUV(uint probeIndex, float2 octantCoordinates, int3 probeGridCounts, int numTexels, int3 probeScrollOffsets)
+#else
 float2 DDGIGetProbeUV(uint probeIndex, float2 octantCoordinates, int3 probeGridCounts, int numTexels)
+#endif
 {
     int probesPerPlane = DDGIGetProbesPerPlane(probeGridCounts);
     int planeIndex = int(probeIndex / probesPerPlane);
@@ -87,19 +99,46 @@ float2 DDGIGetProbeUV(uint probeIndex, float2 octantCoordinates, int3 probeGridC
     float probeTexels = (probeInteriorTexels + 2.f);
 
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
-    float x = float(probeIndex % probeGridCounts.x) + (planeIndex * probeGridCounts.x);
-    float y = float((probeIndex / probeGridCounts.x) % probeGridCounts.z);
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
-    float x = float(probeIndex % probeGridCounts.y) + (planeIndex * probeGridCounts.y);
-    float y = float((probeIndex / probeGridCounts.y) % probeGridCounts.x);
+    int gridSpaceX = (probeIndex % probeGridCounts.x);
+    int gridSpaceY = (probeIndex / probeGridCounts.x);
+#if RTXGI_DDGI_PROBE_SCROLL
+    gridSpaceX = (gridSpaceX + probeScrollOffsets.x) % probeGridCounts.x;
+    gridSpaceY = (gridSpaceY + probeScrollOffsets.z) % probeGridCounts.z;
+    planeIndex = (planeIndex + probeScrollOffsets.y) % probeGridCounts.y;
+#endif
+    int x = gridSpaceX + (planeIndex * probeGridCounts.x);
+    int y = gridSpaceY % probeGridCounts.z;
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
+    int gridSpaceX = (probeIndex % probeGridCounts.y);
+    int gridSpaceY = (probeIndex / probeGridCounts.y);
+#if RTXGI_DDGI_PROBE_SCROLL
+    gridSpaceX = (gridSpaceX + probeScrollOffsets.y) % probeGridCounts.y;
+    gridSpaceY = (gridSpaceY + probeScrollOffsets.x) % probeGridCounts.x;
+    planeIndex = (planeIndex + probeScrollOffsets.z) % probeGridCounts.z;
+#endif
+    int x = gridSpaceX + (planeIndex * probeGridCounts.y);
+    int y = gridSpaceY % probeGridCounts.x;
+#elif  RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    int gridSpaceX = (probeIndex % probeGridCounts.x);
+    int gridSpaceY = (probeIndex / probeGridCounts.x);
+#if RTXGI_DDGI_PROBE_SCROLL
+    gridSpaceX = (gridSpaceX + probeScrollOffsets.x) % probeGridCounts.x;
+    gridSpaceY = (gridSpaceY + probeScrollOffsets.y) % probeGridCounts.y;
+    planeIndex = (planeIndex + probeScrollOffsets.z) % probeGridCounts.z;
+#endif
+    int x = gridSpaceX + (planeIndex * probeGridCounts.x);
+    int y = gridSpaceY % probeGridCounts.y;
 #endif
 
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     float textureWidth = probeTexels * (probeGridCounts.x * probeGridCounts.y);
     float textureHeight = probeTexels * probeGridCounts.z;
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
     float textureWidth = probeTexels * (probeGridCounts.y * probeGridCounts.z);
     float textureHeight = probeTexels * probeGridCounts.x;
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    float textureWidth = probeTexels * (probeGridCounts.x * probeGridCounts.z);
+    float textureHeight = probeTexels * probeGridCounts.y;
 #endif
 
     float2 uv = float2(x * probeTexels, y * probeTexels) + (probeTexels * 0.5f);
@@ -185,7 +224,20 @@ float3 DDGISphericalFibonacci(float index, float numSamples)
 */
 float3 DDGIGetProbeRayDirection(int rayIndex, int numRaysPerProbe, matrix<float, 4, 4> rotationTransform)
 {
+#if RTXGI_DDGI_PROBE_RELOCATION || RTXGI_DDGI_PROBE_STATE_CLASSIFIER
+    bool useFixedRays = rayIndex < RTXGI_DDGI_NUM_FIXED_RAYS;
+    int  adjustedRayIndex = useFixedRays ? rayIndex : rayIndex - RTXGI_DDGI_NUM_FIXED_RAYS;
+    int  adjustedNumRays = useFixedRays ? min(RTXGI_DDGI_NUM_FIXED_RAYS, numRaysPerProbe) : numRaysPerProbe - RTXGI_DDGI_NUM_FIXED_RAYS;
+
+    float3 direction = DDGISphericalFibonacci(adjustedRayIndex, adjustedNumRays);
+    if (useFixedRays)
+    {
+        // Don't rotate the fixed rays so that relocation/classification is temporally stable
+        return normalize(direction);
+    }
+#else
     float3 direction = DDGISphericalFibonacci(rayIndex, numRaysPerProbe);
+#endif
     return normalize(mul(float4(direction, 0.f), rotationTransform).xyz);
 }
 
@@ -201,8 +253,10 @@ int DDGIGetProbeIndex(int2 texcoord, int3 probeGridCounts)
     // Compute the probe index for this thread
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     return texcoord.x + (texcoord.y * (probeGridCounts.x * probeGridCounts.y));
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
     return texcoord.x + (texcoord.y * (probeGridCounts.y * probeGridCounts.z));
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    return texcoord.x + (texcoord.y * (probeGridCounts.x * probeGridCounts.z));
 #endif
 }
 
@@ -214,8 +268,10 @@ int DDGIGetProbeIndex(int3 probeCoords, int3 probeGridCounts)
 {
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     return probeCoords.x + (probeGridCounts.x * probeCoords.z) + (probeGridCounts.x * probeGridCounts.z) * probeCoords.y;
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
     return probeCoords.y + (probeGridCounts.y * probeCoords.x) + (probeGridCounts.y * probeGridCounts.x) * probeCoords.z;
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    return probeCoords.x + (probeGridCounts.x * probeCoords.y) + (probeGridCounts.x * probeGridCounts.y) * probeCoords.z;
 #endif
 }
 
@@ -233,6 +289,28 @@ int DDGIGetProbeIndex(uint2 threadCoords, int3 probeGridCounts, int probeNumTexe
 }
 
 /**
+* Reverses the above DDGIGetProbeIndex(threadCoords, probeGridCounts, probeNumTexels)
+*/
+uint2 DDGIGetThreadBaseCoords(int probeIndex, int3 probeGridCounts, int probeNumTexels)
+{
+    int probesPerPlane = DDGIGetProbesPerPlane(probeGridCounts);
+    int planeIndex = probeIndex / probesPerPlane;
+    int probeIndexInPlane = probeIndex % probesPerPlane;
+
+    // Get the top left texel for a given probe
+#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    int planeWidthInProbes = probeGridCounts.x;
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
+    int planeWidthInProbes = probeGridCounts.y;
+#endif
+
+    int2 probeCoordInPlane = int2(probeIndexInPlane % planeWidthInProbes, probeIndexInPlane / planeWidthInProbes);
+    int  baseCoordX = (planeWidthInProbes * planeIndex + probeCoordInPlane.x) * probeNumTexels;
+    int  baseCoordY = probeCoordInPlane.y * probeNumTexels;
+    return uint2(baseCoordX, baseCoordY);
+}
+
+/**
 * Computes the 3D grid coordinates for the probe at the given probe index.
 * The opposite of DDGIGetProbeIndex().
 */
@@ -244,10 +322,14 @@ int3 DDGIGetProbeCoords(int probeIndex, int3 probeGridCounts)
     probeCoords.x = probeIndex % probeGridCounts.x;
     probeCoords.y = probeIndex / (probeGridCounts.x * probeGridCounts.z);
     probeCoords.z = (probeIndex / probeGridCounts.x) % probeGridCounts.z;
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
     probeCoords.x = (probeIndex / probeGridCounts.y) % probeGridCounts.x;
     probeCoords.y = probeIndex % probeGridCounts.y;
     probeCoords.z = probeIndex / (probeGridCounts.x * probeGridCounts.y);
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    probeCoords.x = probeIndex % probeGridCounts.x;
+    probeCoords.y = (probeIndex / probeGridCounts.x) % probeGridCounts.y;
+    probeCoords.z = probeIndex / (probeGridCounts.y * probeGridCounts.x);
 #endif
 
     return probeCoords;
@@ -326,8 +408,10 @@ float3 DDGIGetProbeWorldPositionWithOffset(int probeIndex, float3 origin, int3 p
 {
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     int textureWidth = (probeGridCounts.x * probeGridCounts.y);
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
     int textureWidth = (probeGridCounts.y * probeGridCounts.z);
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    int textureWidth = (probeGridCounts.x * probeGridCounts.z);
 #endif
 
     // Find the texture coords of the probe in the offsets texture
@@ -356,5 +440,58 @@ float3 DDGIGetProbeWorldPositionWithOffset(int3 probeCoords, float3 origin, int3
 #define PROBE_STATE_INACTIVE    1   // probe doesn't need to shoot rays, it isn't near a front facing surface or another active probe
 
 #endif /* RTXGI_DDGI_PROBE_STATE_CLASSIFIER */
+
+//------------------------------------------------------------------------
+// Volume Scrolling Movement
+//------------------------------------------------------------------------
+
+#if RTXGI_DDGI_PROBE_SCROLL
+
+/**
+* Gets the index of a probe that is offset from a base probe
+*/
+int DDGIGetProbeIndexOffset(int baseProbeIndex, int3 probeGridCounts, int3 probeScrollOffsets)
+{
+    int3 probeGridCoord = DDGIGetProbeCoords(baseProbeIndex, probeGridCounts);
+    int3 offsetProbeGridCoord = (probeGridCoord + probeScrollOffsets) % probeGridCounts;
+    int  offsetProbeIndex = DDGIGetProbeIndex(offsetProbeGridCoord, probeGridCounts);
+    return offsetProbeIndex;
+}
+
+#if RTXGI_DDGI_PROBE_RELOCATION
+// Modified versions of the GetProbeWorldPositionWithOffset functions that account for probeScrollOffsets
+
+/*
+* Computes the world space position of a probe at the given probe index, including the probe's offset value.
+*/
+float3 DDGIGetProbeWorldPositionWithOffset(int probeIndex, float3 origin, int3 probeGridCounts, float3 probeGridSpacing, int3 probeScrollOffsets, RWTexture2D<float4> probeOffsets)
+{
+#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
+    int textureWidth = (probeGridCounts.x * probeGridCounts.y);
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
+    int textureWidth = (probeGridCounts.y * probeGridCounts.z);
+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+    int textureWidth = (probeGridCounts.x * probeGridCounts.z);
+#endif
+
+    // Find the texture coords of the probe in the offsets texture
+    int storageProbeIndex = DDGIGetProbeIndexOffset(probeIndex, probeGridCounts, probeScrollOffsets);
+    int2 offsetTexcoords = int2(storageProbeIndex % textureWidth, storageProbeIndex / textureWidth);
+    // the key observation here is that the probe offset lookup needs to compensate for the scroll offset, but GetProbeWorldPosition should use the original probeIndex
+    // this requirement prevents us from just passing in a compensated probeIndex to the normalGetProbeWorldPositionWithOffset function
+    return DDGIDecodeProbeOffset(offsetTexcoords, probeGridSpacing, probeOffsets) + DDGIGetProbeWorldPosition(probeIndex, origin, probeGridCounts, probeGridSpacing);
+}
+
+/**
+* Compute the world space position from the 3D grid coordinates, including the probe's offset value.
+*/
+float3 DDGIGetProbeWorldPositionWithOffset(int3 probeCoords, float3 origin, int3 probeGridCounts, float3 probeGridSpacing, int3 probeScrollOffsets, RWTexture2D<float4> probeOffsets)
+{
+    int probeIndex = DDGIGetProbeIndex(probeCoords, probeGridCounts);
+    return DDGIGetProbeWorldPositionWithOffset(probeIndex, origin, probeGridCounts, probeGridSpacing, probeScrollOffsets, probeOffsets);
+}
+#endif
+
+#endif /* RTXGI_DDGI_PROBE_SCROLL */
 
 #endif /* RTXGI_DDGI_PROBE_COMMON_HLSL */

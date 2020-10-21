@@ -18,13 +18,12 @@
 
 float3 TracePath(RayDesc ray, uint seed)
 {
-    // Trace path (20 bounces)
     float3 throughput = float3(1.f, 1.f, 1.f);
     float3 color = float3(0.f, 0.f, 0.f);
     for (int i = 0; i < NumBounces; i++)
     {
         // Trace the ray
-        PayloadData payload = (PayloadData)0;
+        PackedPayload packedPayload = (PackedPayload)0;
         TraceRay(
             SceneBVH,
             RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
@@ -33,8 +32,11 @@ float3 TracePath(RayDesc ray, uint seed)
             1,
             0,
             ray,
-            payload);
-        
+            packedPayload);
+
+        // Unpack the payload
+        Payload payload = UnpackPayload(packedPayload);
+
         // Miss, exit loop
         if (payload.hitT < 0.f)
         {
@@ -44,24 +46,24 @@ float3 TracePath(RayDesc ray, uint seed)
         }
 
         // Light the surface
-        float3 diffuse = DirectDiffuseLighting(
-            payload.baseColor,
-            payload.worldPosition,
-            payload.normal,
-            NormalBias,
-            ViewBias,
-            SceneBVH);
+        float3 diffuse = DirectDiffuseLighting(payload, NormalBias, ViewBias, SceneBVH);
 
         // Attenuate the color
         color += diffuse * throughput;
         throughput *= (payload.baseColor / PI);
 
+        // Increment the seed
         seed += i;
 
         // Set the ray origin for the next bounce
         ray.Origin = payload.worldPosition;
 
-        float3 direction = GetRandomDirectionOnHemisphere(payload.normal, seed);
+        // Determine reflection direction based on roughness
+        // Rougher the material, the larger the set of reflected ray directions
+        float3 mirrorDirection = reflect(ray.Direction, payload.normal);
+        float3 randomDirection = GetRandomDirectionOnHemisphere(payload.normal, seed);
+        float3 direction = normalize(lerp(randomDirection, mirrorDirection, payload.roughness));
+
         ray.Origin += (payload.normal * NormalBias);
         float3 target = ray.Origin + payload.normal + direction;
 
@@ -84,38 +86,52 @@ void RayGen()
     uint seed = (LaunchIndex.y * LaunchDimensions.x) + LaunchIndex.x;
     seed *= FrameNumber;
 
-    // Setup the ray
-    RayDesc ray = (RayDesc)0;
-    ray.Origin = cameraOrigin;
-    ray.TMin = 0.f;
-    ray.TMax = 1e27f;
-
-    // Compute the primary ray direction
-    float  halfHeight = cameraTanHalfFovY;
-    float  halfWidth = (cameraAspect * halfHeight);
-    float3 lowerLeftCorner = cameraOrigin - (halfWidth * cameraRight) - (halfHeight * cameraUp) + cameraForward;
-    float3 horizontal = (2.f * halfWidth) * cameraRight;
-    float3 vertical = (2.f * halfHeight) * cameraUp;
-
-    float s = ((float)LaunchIndex.x + 0.5f) / (float)LaunchDimensions.x;
-    float t = 1.f - (((float)LaunchIndex.y + 0.5f) / (float)LaunchDimensions.y);
-
-    ray.Direction = (lowerLeftCorner + s * horizontal + t * vertical) - ray.Origin;
-
     // Trace the path (multiple ray segments)
-    float3 color = TracePath(ray, seed);
+    float3 color = float3(0.f, 0.f, 0.f);
+    float2 offsets = float2(0.5f, 0.5f);
+    for (int sampleIndex = 0; sampleIndex < cameraNumPaths; sampleIndex++)
+    {
+        // Setup the ray
+        RayDesc ray = (RayDesc)0;
+        ray.Origin = cameraPosition;
+        ray.TMin = 0.f;
+        ray.TMax = 1e27f;
+
+        // Random numbers are only generated when AA is enabled (more than 1 path per pixel)
+        if (cameraNumPaths > 1)
+        {
+            // Generate offsets in [0, 1]
+            offsets.x = GetRandomNumber(seed);
+            offsets.y = GetRandomNumber(seed);
+        }
+
+        // Compute the primary ray direction
+        float  halfHeight = cameraTanHalfFovY;
+        float  halfWidth = (cameraAspect * halfHeight);
+        float3 lowerLeftCorner = cameraPosition - (halfWidth * cameraRight) - (halfHeight * cameraUp) + cameraForward;
+        float3 horizontal = (2.f * halfWidth) * cameraRight;
+        float3 vertical = (2.f * halfHeight) * cameraUp;
+
+        float s = ((float)LaunchIndex.x + offsets.x) / (float)LaunchDimensions.x;
+        float t = 1.f - (((float)LaunchIndex.y + offsets.y) / (float)LaunchDimensions.y);
+
+        ray.Direction = (lowerLeftCorner + s * horizontal + t * vertical) - ray.Origin;
+
+        // Trace!
+        color += TracePath(ray, seed);
+    }
 
     // Progressive Accumulation
-    float numPaths = 1;
+    float numPaths = (float)cameraNumPaths;
     if (FrameNumber > 1)
     {
         // Read the previous color and number of paths
         float3 previousColor = PTAccumulation[LaunchIndex.xy].xyz;
-        numPaths = PTAccumulation[LaunchIndex.xy].w;
+        float  numPreviousPaths = PTAccumulation[LaunchIndex.xy].w;
 
         // Add in the new color and number of paths
         color = (previousColor + color);
-        numPaths++;
+        numPaths = (numPreviousPaths + numPaths);
 
         // Store to the accumulation buffer
         PTAccumulation[LaunchIndex.xy] = float4(color, numPaths);
@@ -123,23 +139,33 @@ void RayGen()
     else
     {
         // Clear the accumulation buffer when moving
-        PTAccumulation[LaunchIndex.xy] = float4(0, 0, 0, 0);
+        PTAccumulation[LaunchIndex.xy] = float4(0.f, 0.f, 0.f, 0.f);
     }
-
-    color /= (float)numPaths;   // Normalize
+    
+    // Normalize
+    color /= numPaths;
 
     // Apply exposure
-    color *= Exposure;
+    if (UseExposure)
+    {
+        color *= Exposure;
+    }
 
     // Apply tonemapping
-    color = ACESFilm(color);
+    if (UseTonemapping)
+    {
+        color = ACESFilm(color);
+    }
 
     // Add noise to handle SDR color banding
-    float3 noise = GetLowDiscrepancyBlueNoise(int2(LaunchIndex), FrameNumber, 1.0f / 256.0f, BlueNoiseRGB);
-    color += noise;
+    if (UseDithering)
+    {
+        color += GetLowDiscrepancyBlueNoise(int2(LaunchIndex), FrameNumber, 1.f / 256.f, BlueNoiseRGB);
+    }
 
     // Gamma correct
     color = LinearToSRGB(color);
 
+    // Store result
     PTOutput[LaunchIndex] = float4(color, 1.f);
 }

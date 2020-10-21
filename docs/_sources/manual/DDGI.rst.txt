@@ -45,10 +45,10 @@ The basic use pattern of a ``DDGIVolume`` for **dynamic global illumination** is
 
 .. note:: The Test Harness sample application implements the process described above in ``samples/test-harness/src/harness/main.cpp``. The frame loop of Step 2 is implemented in the following places:
    
-   Line 210: ``volume->Update(...)`` |br| 
-   Line 213: ``Harness::RayTraceProbes(...)``  |br| 
-   Line 220: ``volume->UpdateProbes(...)``  |br| 
-   Line 281: ``Harness::RenderIndirect(...)``  |br| 
+   Line 226: ``volume->Update(...)`` |br| 
+   Line 234: ``Harness::RayTraceProbes(...)``  |br| 
+   Line 244: ``volume->UpdateProbes(...)``  |br| 
+   Line 295: ``Harness::RenderIndirect(...)``  |br| 
 
 There are several alternate ways a ``DDGIVolume`` may be used, depending on the constraints and performance requirements of the application and target platform. For example, one could create a volume and run a number of ray tracing iterations and probe updates at level load time to bake the current lighting conditions into the volume. This approach is not as dynamic as the pattern described above, but it eliminates the common practice of pre-computing several sets of probe irradiance textures for scenarios such as time of day changes at level transitions. This can result in substantial storage savings, and lighting that more accurately matches the time of day. This pattern is implemented as follows:
 
@@ -85,7 +85,7 @@ The configuration of the DDGI implementation is primarily controlled through a s
      - Set to 0 for the application to manage resources, and 1 for the SDK to manage resources.
      - `Resource Management`_
    * - ``RTXGI_DDGI_DEBUG_FORMAT_RADIANCE``
-     - Radiance textures currently use the ``DXGI_FORMAT_R32G32B32A32_FLOAT`` format regardless of settings.
+     - Set to 0 for radiance textures to use the ``DXGI_FORMAT_R32G32_FLOAT`` format. |br| Set to 1 for radiance texture to use the ``DXGI_FORMAT_R32G32B32A32_FLOAT`` format. |br| |br| When radiance textures use the ``DXGI_FORMAT_R32G32_FLOAT`` format, radiance is stored in ``R11G11B10_UINT`` format inside the 32-bit R channel, and distance is stored as a 32-bit float in the G channel. Using the larger ``DXGI_FORMAT_R32G32B32A32_FLOAT`` format stores radiance in the first three channels, and distance in the fourth channel. This larger format can be useful to rule out the radiance bit depth as a source of visual errors or corruption.
      - `Resource Management`_
    * - ``RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE``
      -  Set to 0 for irradiance textures to use the ``DXGI_FORMAT_R10G10B10A2_UNORM`` format. |br| Set to 1 to use the larger ``DXGI_FORMAT_R32G32B32A32_FLOAT`` format (useful when debugging).
@@ -112,11 +112,14 @@ The configuration of the DDGI implementation is primarily controlled through a s
      - A define used by the host application. Set to 1 to enable using DDGI to compute irradiance recursively for probe rays. See ``samples/test-harness/shaders/ProbeTraceRGS.hlsl`` in the Test Harness for an example.
      - `Computing Indirect Lighting from a Volume`_
    * - ``RTXGI_DDGI_PROBE_RELOCATION``
-     - Set to 1 to enable the early access feature for Probe Relocation.
+     - Set to 1 to enable Probe Relocation.
      - :ref:`probe_offsets`
    * - ``RTXGI_DDGI_PROBE_STATE_CLASSIFIER``
-     - Set to 1 to enable the early access feature for Probe Classification.
+     - Set to 1 to enable Probe Classification.
      - :ref:`probe_states`
+   * - ``RTXGI_DDGI_PROBE_SCROLL``
+     - Set to 1 to enable Infinite Scrolling Volume Movement.
+     - `Infinite Scrolling Volume Movement`_
 
 .. note:: Some of these configuration options are only used in the :ref:`Harness`, but are provided in the SDK for convenience.
 
@@ -142,14 +145,6 @@ In addition to host side source code, the necessary DDGI shader code is provided
      - Compute shader code that blends radiance or distance values into the appropriate octahedral texture map. All probes of a volume are processed in parallel. This shader is dispatched by the ``DDGIVolume::UpdateProbes()`` function. See `Probe Irradiance and Distance Update`_.
    * - ``ProbeBorderUpdateCS.hlsl``
      - Compute shader code that updates the 1-texel border of irradiance or distance octahedral texture maps. All probes of a volume are processed in parallel. This shader is dispatched by the ``DDGIVolume::UpdateProbes()`` function. See `Probe Irradiance and Distance Update`_.
-
-
-.. list-table:: DDGI HLSL Shaders (early access features)
-   :widths: 25 75
-   :header-rows: 1
-
-   * - File Name
-     - Description
    * - ``ProbeRelocationCS.hlsl``
      - Compute shader code that attempts to reposition probes if they are inside of geometry (e.g. walls). This shader is dispatched by the ``DDGIVolume::RelocateProbes()`` function. See `Probe Relocation and Position Optimization`_.
    * - ``ProbeStateClassifierCS.hlsl``
@@ -168,7 +163,7 @@ A ``DDGIVolume`` is a volume of space within which irradiance queries at arbitra
 
 Before creation, a ``DDGIVolume`` is described using a pair of descriptor structs that configure the various properites and resources of the volume. These structs are ``DDGIVolumeDesc`` and ``DDGIVolumeResources``.
 
-.. note:: A regularly spaced probe grid is not strictly required. The probe grid can be adjusted using the per-probe offsets that are part of the :ref:`probe_offsets` early access feature.
+.. note:: A regularly spaced probe grid is not strictly required. The probe grid can be adjusted using the per-probe offsets that are part of the :ref:`probe_offsets` feature.
 
 .. _DDGI-DescribeVolume:
 
@@ -187,6 +182,9 @@ This structure is defined in ``rtxgi-sdk/include/rtxgi/ddgi/DDGIVolume.h`` and e
    * - Member
      - Type
      - Description
+   * - ``name``
+     - ``std::string``
+     - The name of the volume.
    * - ``origin``
      - ``float3``
      - The world-space origin of the volume.
@@ -229,21 +227,18 @@ This structure is defined in ``rtxgi-sdk/include/rtxgi/ddgi/DDGIVolume.h`` and e
    * - ``normalBias``
      - ``float``
      - A small offset along the surface normal applied to the shaded surface point to avoid numerical instabilities when determining visibility.
-   
-
-.. list-table:: ``DDGIVolumeDesc`` Members (early access features)
-   :widths: 15 10 75
-   :header-rows: 1
-
-   * - Member
-     - Type
-     - Description
    * - ``probeMinFrontfaceDistance``
      - ``float``
      - The minimum distance allowed to a front facing triangle before Probe Relocation moves the probe (see `Probe Relocation and Position Optimization`_).
    * - ``probeBackfaceThreshold``
      - ``float``
      - The ratio of rays cast for a probe that may hit back facing triangles before Probe Relocation and State Classification assume the probes is inside of geometry (used by `Probe Relocation and Position Optimization`_ and `Probe State Classification`_).
+   * - ``movementType``
+     - ``EDDGIVolumeMovementType``
+     - The mode of movement used for the volume. Can be either ``Default`` or ``Scrolling``.
+   * - ``probeScrollOffsets``
+     - ``int3``
+     - The probe grid-space offsets used for scrolling movement.
 
 **Octahedral Texture Maps**
 
@@ -313,7 +308,7 @@ In addition to descriptor heap space, the application must allocate a GPU resour
 
 .. note:: To support double (or triple) buffering, the constant buffer should be allocated with a size that is a multiple of the value returned by ``GetDDGIVolumeConstantBufferSize()``. 
 
-.. note:: The Test Harness application provides an example that sets the descriptor heap information with the ``DDGIVolumeResources`` struct and allocates a constant buffer (for double buffering) in the ``Harness::CreateVolume(...)`` function of ``samples/test-harness/src/harness/Harness.cpp``.
+.. note:: The Test Harness application provides an example that sets the descriptor heap information with the ``DDGIVolumeResources`` struct and allocates a constant buffer (for double buffering) in the ``Harness::CreateVolumeMulti(...)`` function of ``samples/test-harness/src/harness/Harness.cpp``.
 
 .. _DDGI-SDKResources:
 
@@ -454,11 +449,11 @@ Creating a Volume
 
 A minimum of one ``DDGIVolume`` is required to use the DDGI algorithm. Volumes are specified as part of the scene, which is left to the host application. A common pattern is for artists and level designers to specify volumes in editor tools that expose RTXGI SDK functionality through their user interface. ``DDGIVolume`` parameters are then stored in data files, and used at level load time to instantiate the volumes. Alternatively, a volume may be programmatically generated based on scene parameters (bounding boxes, resolution, etc.).
 
-Assuming the set of desired parameters are available, the volume creation process begins by mapping each parameter into the ``DDGIVolumeDesc`` struct (see `Describing a Volume`_ for details). Once the volume descriptor has the appropriate parameters, the required volume resources are set in a ``DDGIVolumeResources`` struct (see `Resource Management`_ for details). After the parameter descriptor and resource descriptor are set up, the ``DDGIVolume`` is created using the contructor after which the ``DDGIVolume::Create(...)`` is called to finish creating the volume. See the ``Harness::CreateVolume(...)`` function in ``samples/test-harness/src/harness/Harness.cpp`` for an example.
+Assuming the set of desired parameters are available, the volume creation process begins by mapping each parameter into the ``DDGIVolumeDesc`` struct (see `Describing a Volume`_ for details). Once the volume descriptor has the appropriate parameters, the required volume resources are set in a ``DDGIVolumeResources`` struct (see `Resource Management`_ for details). After the parameter descriptor and resource descriptor are set up, the ``DDGIVolume`` is created using the constructor after which the ``DDGIVolume::Create(...)`` is called to finish creating the volume. See the ``Harness::CreateVolume(...)`` function in ``samples/test-harness/src/harness/Harness.cpp`` for an example.
 
-.. note:: The :ref:`Harness` provides an example implementation of how to use a single ``DDGIVolume`` to add global illumination to a scene.
+.. note:: The :ref:`Harness` provides an example implementation of how to use one or more ``DDGIVolume`` to add global illumination to a scene.
 
-.. note:: While this section focused on creation of a single volume, multiple volumes may be created by repeating the creation process in this section. See `Multiple Volume Blending`_ for more information on how to use multiple volumes to compute global illumination.
+.. note:: While this section focused on creation of a single volume, multiple volumes may be created by repeating the creation process in this section. See `Volume Blending`_ for more information on how to use multiple volumes to compute global illumination.
 
 
 .. _DDGI-DestroyVolume:
@@ -526,6 +521,8 @@ The results of the probe ray tracing step are used to update the irradiance and 
 1. Blend the ray traced **radiance** values for each probe's irradiance octahedral texture map.
 2. Blend the ray traced **distance** values for each probe's distance octahedral texture map.
 
+.. note:: The ``RTXGI_DDGI_NUM_FIXED_RAYS`` define represents the number of rays used for `Probe Relocation and Position Optimization`_ and/or `Probe State Classification`_ (when enabled). The radiance and distance results for these rays are not included in the blending phase since their directions are **not** randomly updated each frame. Inclusion of their results would create biased results. See `Fixed Rays for Relocation and Classification`_ for more information.
+
 **Phase 2: Border Texel Update**
 
 3. Update all **rows** of border texels for **irradiance** octahedral texture maps.
@@ -533,7 +530,7 @@ The results of the probe ray tracing step are used to update the irradiance and 
 5. Update all **rows** of border texels for **distance** octahedral texture maps.
 6. Update all **columns** of border texels for **distance** octahedral texture maps.
 
-.. note:: Set ``RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY`` to 1 to enable shared memory in the probe blending shaders. Enabling shared memory is strongly recommended, since optimizations using shared memory provide a substantial performance benefit by cooperatively loading and computing values that are common within thread groups.
+.. note:: Set ``RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY`` to 1 to enable shared memory in the probe blending shaders. **Enabling shared memory is strongly recommended**, since optimizations using shared memory provide a substantial performance benefit by cooperatively loading and computing values that are common within thread groups.
 
 During the probe update process, performance markers are inserted into the GPU command list of when ``RTXGI_PERF_MARKERS`` is set to 1. An example of these annotatations in Nsight Graphics is shown below:
 
@@ -551,11 +548,13 @@ During the probe update process, performance markers are inserted into the GPU c
 Volume Movement
 ------------------
 
-For general use, the ``DDGIVolume`` is designed to be stationary, and placed in a fixed scene location. However, for the best results in scenarios where the space that requires global illumination is itself not stationary, the ``DDGIVolume`` may also need to move. Examples of this scenario include elevators, trains, cars, and spaceships. To achieve consistent global lighting results for moving spaces, a ``DDGIVolume`` can be attached to the moving space's frame of reference and translated with the ``DDGIVolume->Move(...)`` function.
+For general use, the ``DDGIVolume`` is designed to be stationary, and placed in a fixed scene location. However, for the best results in scenarios where the space that requires global illumination is itself not stationary, the ``DDGIVolume`` may also need to move. Examples of this include elevators, trains, cars, and spaceships. To achieve consistent global lighting results for moving spaces, a ``DDGIVolume`` can be attached to the moving space's frame of reference and translated with the ``DDGIVolume->Move(...)`` function. 
 
 .. note:: Since ``volume->Move(...)`` *translates* a volume, the transformation is only correct for frames of reference undergoing translation only (i.e. not rotation also). As a result, the axis-aligned bounding box of a ``DDGIVolume`` needs to be large enough to cover the desired space when the space is under rotation.
 
 .. note:: The ``DDGIVolume->Move(...)`` functionality is also useful for debugging purposes, so that one may visualize how a set of probes function in different locations of a scene without creating multiple volumes.
+
+To achieve dynamic global illumination results in an open or large world setting, it is desirable to anchor a ``DDGIVolume`` to a player character or the camera view, and then update the volume as the player or camera moves. This effectively provides an **"infinite" volume of global illumination** for the player without needing an infinite amount of probes (and memory) to store radiance and distance information. In practice, simply moving a ``DDGIVolume`` at the same rate as the player causes visual artifacts. In this release of the SDK, we are providing a new *infinite scrolling volume* feature in early access. Head over to the `Infinite Scrolling Volume Movement`_ section to learn more.
 
  .. _DDGI-IndirectLighting:
 
@@ -596,12 +595,14 @@ One example of how to composite irradiance sampled from a ``DDGIVolume`` with di
 .. _DDGI-VolumeBlending:
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Volume Blending for Regions Outside of a Volume
+Volume Blending
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Although no example is provided in the Test Harness, a separate HLSL shader function - ``DDGIGetVolumeBlendWeight(...)`` - is provided by the SDK to enable blending between regions covered by a ``DDGIVolume`` and regions **not** covered by a ``DDGIVolume``. This use case may arise if there is a region of the scene that needs dynamic diffuse irradiance and another part that strictly does not (for example, due to artistic or performance reasons).
+The SDK provides a separate HLSL shader function, ``DDGIGetVolumeBlendWeight(...)``, to enable blending between multiple ``DDGIVolume`` and regions **not** covered by a ``DDGIVolume``. This use case may arise if there is a region of the scene that needs dynamic diffuse irradiance and another part that strictly does not (for example, due to artistic or performance reasons), or if a scene has multiple overlapping volumes.
 
-In this case, the example provided in the ``samples/test-haress/shaders/Indirect.hlsl`` shader can be modified as shown below:
+.. _DDGI-MultipleBlending:
+
+To see how to use this function to blend between multiple volumes, see ``samples/test-haress/shaders/Indirect.hlsl``. The test harness implementation takes an array of volumes (in order of descending priority) and blends together their contributions until it either finishes iterating through all volumes, or the total contribution reaches an acceptable threshold (1 by default). In the case of blending between a volume and a non-volume region, the example provided in the ``samples/test-haress/shaders/Indirect.hlsl`` shader can be modified as shown below:
 
 .. code-block:: hlsl
     :linenos:
@@ -627,57 +628,64 @@ In this case, the example provided in the ``samples/test-haress/shaders/Indirect
     // Blend between irradiance and the constant ambient term
     irradiance = volumeBlendWeight * irradiance + (1.f - volumeBlendWeight) * ambient;
 
-.. _DDGI-MultipleBlending:
+.. _probe_offsets:
 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Multiple Volume Blending
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+----------------------------------------------
+Probe Relocation and Position Optimization
+----------------------------------------------
 
-The use of multiple volumes is also possible; however, for best results the indirect lighting computed by each volume should be blended with overlapping and/or nearby volumes. There is no example implementation in the Test Harness for multiple volumes, but this scenario can be understood by replacing a single ``DDGIVolume`` with an array of volumes in the ``samples/test-harness/shaders/Indirect.hlsl`` fullscreen Pixel Shader. Here we assume the volumes in the array are ordered such that the last volume is the "fallback volume". 
+Any regular grid has a hard time adapting to correctly handle all kinds of scenes, and the regular grids of DDGI are no exception. To mitigate this shortcoming, we provide a feature that allows world-space offsets to be added to each probe, and enable users to experiment with probe offset optimization using the ``DDGIVolume::RelocateProbes(...)`` function in the Test Harness. You can enable this functionality by changing the corresponding SDK define (see note below).
 
-The irradiance computation would work as follows:
+The ``DDGIVolume::RelocateProbes(...)`` function attempts to move probes out of the interior of geometry by assuming that some proportion of probe rays intersecting back faces indicates the probe is inside geometry. The ``probeBackfaceThreshold`` variable, described in the `Describing a Volume`_ section, controls the threshold beyond which a probe is considered "inside geometry". When a probe is determined to be inside of geometry, the maximum allowable displacement is computed as 45% of the grid cell distance. This is implemented in ``rtxgi-sdk/shaders/ddgi/ProbeRelocationCS.hlsl``. For those probes that are not found to be inside geometry, the position optimizer attempts to move probes closer to nearby frontfacing geometry.
 
-.. code-block:: hlsl
-    :linenos:
+Probe relocation can run at arbitrary frequencies, and is designed to produce stable results when run continuously. As an example of this, the Test Harness runs probe relocation once every frame.
 
-    // Start with a full irradiance contribution remaining (for the final volume)
-    float remainingVolumeBlendWeight = 1.f;
-    float3 volumeIrradiance = 0.f;
+.. note:: Enable probe relocation by setting ``RTXGI_DDGI_PROBE_RELOCATION`` to 1 in ``rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h``.
 
-    // Loop over all but the final volume
-    for (int volumeIndex = 0; volumeIndex < volumeCount - 1; volumeIndex++)
-    {
-        // Get the volume blend weight (0-1)
-        float volumeBlendWeight = DDGIGetVolumeBlendWeight( worldPosHitT.xyz, DDGIVolume);
+.. |probe_relocation-1| image:: ../images/probe_relocation-1.jpg
 
-        // Only get irradiance if it will be used
-        if (volumeBlendWeight > 0)
-        {
-            // Get irradiance from the DDGIVolume
-            volumeIrradiance = DDGIGetVolumeIrradiance(
-                worldPosHitT.xyz,
-                surfaceBias,
-                normal,
-                DDGIVolume[volumeIndex],
-                resources);
-        }
+.. |probe_relocation-2| image:: ../images/probe_relocation-2.jpg
 
-        // Blend this volume's irradiance and reduce the remaining irradiance for the final volume
-        irradiance += volumeIrradiance * volumeBlendWeight;
-        remainingVolumeBlendWeight = clamp(remainingVolumeBlendWeight - volumeBlendWeight);
-    }
+.. list-table::
+   :widths: 49 49
+   :header-rows: 1
 
-    // Get irradiance from the final DDGIVolume
-    volumeIrradiance = DDGIGetVolumeIrradiance(
-        worldPosHitT.xyz,
-        surfaceBias,
-        normal,
-        DDGIVolume[volumeCount - 1],
-        resources);
+   * - Probe falling inside of geometry without probe relocation
+     - Probes adjusted to more useful positions with probe relocation enabled
+   * - |probe_relocation-1|
+     - |probe_relocation-2|
 
-    // Blend between irradiance and the constant ambient term
-    irradiance += remainingVolumeBlendWeight * volumeIrradiance;
+.. _probe_states:
 
+----------------------------------------------
+Probe State Classification
+----------------------------------------------
+
+Not all scenes require all probes in a ``DDGIVolume`` to contribute to the global illumination result. Some probes may be stuck inside geometry (e.g. walls), exist in space without nearby geometry, or be far enough outside the scene to not be useful. In these cases, it is best for these probes to not trace rays or spend time updating textures that ultimately won't be used. The SDK provides a probe state classification feature that identifies probes that may be safely disabled, and maintains a per-probe state that is updated dynamically at runtime on the GPU. 
+
+.. note:: Enable probe state classification by setting ``RTXGI_DDGI_PROBE_STATE_CLASSIFIER`` to 1 in ``rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h``.
+
+.. |probe_classification_geometry| image:: ../images/probe_classification_geometry.jpg
+
+.. |probe_classification_space| image:: ../images/probe_classification_space.jpg
+
+.. list-table::
+   :widths: 49 49
+   :header-rows: 1
+
+   * - Disabled probes (in red) that are stuck inside geometry
+     - Disabled probes (in red) don't have nearby geometry due to the dense grid
+   * - |probe_classification_geometry|
+     - |probe_classification_space|
+
+
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Fixed Rays for Relocation and Classification
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Since probe relocation and classification can be run at arbitrary frequencies, temporal stability is essential to ensure the best conditions for fast irradiance and distance convergence. Using random rays to drive the relocation and/or classification processes (as was done in the RTXGI SDK 1.0 early access version of this feature) leads to unstable jittering and/or oscillation of probe locations and states. To guarantee stable results, the ``DDGIGetProbeRayDirection(...)`` function **does not apply the random rotation transform** to the first ``RTXGI_DDGI_NUM_FIXED_RAYS`` rays. These "fixed rays" always have the same directions every update cycle. As a result, the relocation and classification shaders only inspect the "fixed rays" for each probe; the quantity of which is specified by the ``RTXGI_DDGI_NUM_FIXED_RAYS`` define. While these "fixed rays" are essential for stable relocation and classification, they are excluded from probe blending since their regularity causes artifacts due to bias. The Test Harness provides an example of probe classification running once every frame. See the ``DDGIVolume::ClassifyProbes(...)`` function.
+
+.. note:: You can change the value of ``RTXGI_DDGI_NUM_FIXED_RAYS`` in ``rtxgi-sdk/shaders/Common.hlsl``. All probes trace at least ``RTXGI_NUM_FIXED_RAYS`` "fixed rays" every frame. If a probe is marked as disabled, only the fixed rays are traced and blending is disabled for the probe.
 
 .. _DDGI-EarlyAccess:
 
@@ -687,33 +695,16 @@ Early Access Features
 
 The following early access features are available for experimental use, but may change substantially in future versions of the RTXGI SDK.
 
-.. _probe_offsets:
+.. _DDGI-ScrollingMovement:
 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Probe Relocation and Position Optimization
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------------------------
+Infinite Scrolling Volume Movement
+--------------------------------------------
 
-Any regular grid has a hard time adapting to correctly handle all kinds of scenes, and the regular grids of DDGI are no exception. To mitigate this shortcoming, we provide a feature that allows world-space offsets to be added to each probe, and enable users to experiment with probe offset optimization using the ``DDGIVolume::RelocateProbes(...)`` function in the Test Harness. You can enable this functionality by changing the corresponding SDK define (see note below).
+To achieve dynamic global illumination results in an open or large world setting, it is desirable to anchor a ``DDGIVolume`` to a player character or the camera view, and then update the anchored volume as the player or camera moves. This effectively provides an **"infinite" volume of global illumination** for the player without needing an infinite amount of probes (and memory) to store radiance and distance information. In practice, naively adjusting the position of a ``DDGIVolume`` relative to the environment causes visual artifacts. All probe locations change during volume movement, and all irradiance and distance data gathered for the volume's probes become invalid. Probes must reconverge before their data is useful again.
 
-The ``DDGIVolume::RelocateProbes(...)`` function attempts to move probes out of the interior of geometry by assuming that some proportion of probe rays intersecting back faces indicates the probe is inside geometry. The ``probeBackfaceThreshold`` variable, described in the `Describing a Volume`_ section, controls the threshold beyond which the optimizer considers a probe "inside backfacing geometry". When a probe is determined to be inside of geometry, the maximum allowable displacement is computed as 45% of the grid cell distance. This is implemented in ``rtxgi-sdk/shaders/ddgi/ProbeRelocationCS.hlsl``. 
+To mitigate this issue, the *infinite scrolling volume movement* feature is now available in early access. With this feature enabled for a ``DDGIVolume``, movement of the volume does **not** move all of the probes within the volume; but instead, relocates a subset of the probes (a "plane" or "slice" of probes) from one end of the volume to the other. All interior probes remain stationary in their original positions. We refer to this process as probe **scrolling**. The stationary probes retain valid irradiance and distance values, and only the probes on the edges of the volume have to reconverge. This style of movement is analagous to how tank tread rolls forward while its individual segments stay fixed while in contact with the ground.
 
-The Test Harness provides an example of a simple linear descent optimizer using ``RTXGI_DDGI_MAX_PROBE_RELOCATION_ITERATIONS`` iterations to improve the probe offsets. At each iteration, the ``probeDistanceScale`` is reduced, allowing smaller magnitude probe displacement until probes reach a favorable location. In our example, these optimization iterations happen on the first ``RTXGI_DDGI_MAX_PROBE_RELOCATION_ITERATIONS`` frames, though these optimizations could be done as an offline pre-process or at level load time.
+The ``DDGIVolume`` provides two ``Scroll(...)`` functions that translate the volume in this manner. The ``Scroll(int3 translation)`` function takes an ``int3`` argument, where the integers represent the number of probe "planes". For example, ``Scroll(int3(2, 0, 0))`` means "scroll two planes of probes along the X axis to the other end of the volume".  The ``Scroll(float3 translation, float3 deadzoneRadii)`` function takes a ``float3`` argument in world-space for the translation, and a second ``float3`` to define a "dead zone". The dead zone defines the space (i.e. a padding) where the probes do not need to react to volume movement. A larger dead zone causes the volume to scroll in larger probe plane increments. On the other extreme, a dead zone of zero causes volume scrolling by a single probe plane as soon as the accumulated translation is larger than the inter-probe distance.
 
-.. note:: Enable probe relocation and the position optimizer by setting ``RTXGI_DDGI_PROBE_RELOCATION`` to 1 in ``rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h``.
-
-.. _probe_states:
-
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Probe State Classification
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Not all scenes will require all probes in a ``DDGIVolume`` to contribute to diffuse global illumination. Some probes may be stuck inside geometry (e.g. walls), exist in space without nearby geometry, or be far enough outside the scene to not be useful. In these cases, it is best for these probes to not trace rays or spend time updating textures that won't be used. An early preview of this kind of optimization technique is provided by ``DDGIVolume::ClassifyProbes(...)`` function.
-
-The ``DDGIVolume::ClassifyProbes(...)`` function uses the latest results from the probe ray trace update to determine whether each probe should be ``active`` or ``inactive``. Inactive probes do not trace rays. When a sudden change in scene geometry occurs, currently ``inactive`` probes should be made ``active`` to account for the potential affects to lighting. The ``DDGIVolume::ActivateAllProbes(...)`` function can be called to mark all probes as ``active``. After the next ray tracing opportunity, run the ``DDGIVolume::ClassifyProbes(...)`` function again to reclassify probes (and subsequently set some as ``inactive``).
-
-.. note:: Enable probe state classification by setting ``RTXGI_DDGI_PROBE_STATE_CLASSIFIER`` to 1 in ``rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h``.
-
-.. warning:: ``DDGIVolume::ClassifyProbes(...)`` is a one way operation and only moves probes from ``active`` to ``inactive``.
-
-.. note:: When combining probe state classification with `Probe Relocation and Position Optimization`_, it is a good practice to avoid classifying probes as inactive until their positions have become relatively stable. The optimization process occasionally moves probes on different sides of geometry due to the randomization of probe rays. This may change their classification.
-
+.. note:: Enable infinite scrolling volume movement by setting ``RTXGI_DDGI_PROBE_SCROLL`` to 1 in ``rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h``.

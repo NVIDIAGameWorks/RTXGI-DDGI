@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Dynamic Diffuse Global Illumination &mdash; RTXGI SDK 1.0  documentation</title>
+  <title>Dynamic Diffuse Global Illumination &mdash; RTXGI SDK 1.1  documentation</title>
   
 
   
@@ -37,6 +37,7 @@
   <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Unreal Engine 4 Plugin" href="UE4Plugin.html" />
     <link rel="prev" title="RTXGI SDK Overview" href="SDKOverview.html" /> 
 </head>
 
@@ -51,7 +52,7 @@
           
 
           
-            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.0
+            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.1
           
 
           
@@ -112,17 +113,19 @@
 <li class="toctree-l3"><a class="reference internal" href="#computing-indirect-lighting-from-a-volume">Computing Indirect Lighting from a Volume</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#probe-irradiance-gamma">Probe Irradiance Gamma</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#compositing-indirect-lighting">Compositing Indirect Lighting</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#volume-blending-for-regions-outside-of-a-volume">Volume Blending for Regions Outside of a Volume</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#multiple-volume-blending">Multiple Volume Blending</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#volume-blending">Volume Blending</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#early-access-features">Early Access Features</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#probe-state-classification">Probe State Classification</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#probe-state-classification">Probe State Classification</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#fixed-rays-for-relocation-and-classification">Fixed Rays for Relocation and Classification</a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="#early-access-features">Early Access Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#infinite-scrolling-volume-movement">Infinite Scrolling Volume Movement</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="UE4Plugin.html">Unreal Engine 4 Plugin</a></li>
 </ul>
 </li>
 </ul>
@@ -139,7 +142,7 @@
       <nav class="wy-nav-top" aria-label="top navigation">
         
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="../index.html">RTXGI SDK 1.0</a>
+          <a href="../index.html">RTXGI SDK 1.1</a>
         
       </nav>
 
@@ -217,10 +220,10 @@
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The Test Harness sample application implements the process described above in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/harness/main.cpp</span></code>. The frame loop of Step 2 is implemented in the following places:</p>
-<p>Line 210: <code class="docutils literal notranslate"><span class="pre">volume-&gt;Update(...)</span></code> <br/>
-Line 213: <code class="docutils literal notranslate"><span class="pre">Harness::RayTraceProbes(...)</span></code>  <br/>
-Line 220: <code class="docutils literal notranslate"><span class="pre">volume-&gt;UpdateProbes(...)</span></code>  <br/>
-Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::RenderIndirect(...)</span></code>  <br/></p>
+<p>Line 226: <code class="docutils literal notranslate"><span class="pre">volume-&gt;Update(...)</span></code> <br/>
+Line 234: <code class="docutils literal notranslate"><span class="pre">Harness::RayTraceProbes(...)</span></code>  <br/>
+Line 244: <code class="docutils literal notranslate"><span class="pre">volume-&gt;UpdateProbes(...)</span></code>  <br/>
+Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::RenderIndirect(...)</span></code>  <br/></p>
 </div>
 <p>There are several alternate ways a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> may be used, depending on the constraints and performance requirements of the application and target platform. For example, one could create a volume and run a number of ray tracing iterations and probe updates at level load time to bake the current lighting conditions into the volume. This approach is not as dynamic as the pattern described above, but it eliminates the common practice of pre-computing several sets of probe irradiance textures for scenarios such as time of day changes at level transitions. This can result in substantial storage savings, and lighting that more accurately matches the time of day. This pattern is implemented as follows:</p>
 <blockquote>
@@ -265,7 +268,7 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <td><p><a class="reference internal" href="#resource-management">Resource Management</a></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_DEBUG_FORMAT_RADIANCE</span></code></p></td>
-<td><p>Radiance textures currently use the <code class="docutils literal notranslate"><span class="pre">DXGI_FORMAT_R32G32B32A32_FLOAT</span></code> format regardless of settings.</p></td>
+<td><p>Set to 0 for radiance textures to use the <code class="docutils literal notranslate"><span class="pre">DXGI_FORMAT_R32G32_FLOAT</span></code> format. <br/> Set to 1 for radiance texture to use the <code class="docutils literal notranslate"><span class="pre">DXGI_FORMAT_R32G32B32A32_FLOAT</span></code> format. <br/> <br/> When radiance textures use the <code class="docutils literal notranslate"><span class="pre">DXGI_FORMAT_R32G32_FLOAT</span></code> format, radiance is stored in <code class="docutils literal notranslate"><span class="pre">R11G11B10_UINT</span></code> format inside the 32-bit R channel, and distance is stored as a 32-bit float in the G channel. Using the larger <code class="docutils literal notranslate"><span class="pre">DXGI_FORMAT_R32G32B32A32_FLOAT</span></code> format stores radiance in the first three channels, and distance in the fourth channel. This larger format can be useful to rule out the radiance bit depth as a source of visual errors or corruption.</p></td>
 <td><p><a class="reference internal" href="#resource-management">Resource Management</a></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE</span></code></p></td>
@@ -301,12 +304,16 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <td><p><a class="reference internal" href="#computing-indirect-lighting-from-a-volume">Computing Indirect Lighting from a Volume</a></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_PROBE_RELOCATION</span></code></p></td>
-<td><p>Set to 1 to enable the early access feature for Probe Relocation.</p></td>
+<td><p>Set to 1 to enable Probe Relocation.</p></td>
 <td><p><a class="reference internal" href="#probe-offsets"><span class="std std-ref">Probe Relocation and Position Optimization</span></a></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_PROBE_STATE_CLASSIFIER</span></code></p></td>
-<td><p>Set to 1 to enable the early access feature for Probe Classification.</p></td>
+<td><p>Set to 1 to enable Probe Classification.</p></td>
 <td><p><a class="reference internal" href="#probe-states"><span class="std std-ref">Probe State Classification</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_PROBE_SCROLL</span></code></p></td>
+<td><p>Set to 1 to enable Infinite Scrolling Volume Movement.</p></td>
+<td><p><a class="reference internal" href="#infinite-scrolling-volume-movement">Infinite Scrolling Volume Movement</a></p></td>
 </tr>
 </tbody>
 </table>
@@ -342,20 +349,6 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ProbeBorderUpdateCS.hlsl</span></code></p></td>
 <td><p>Compute shader code that updates the 1-texel border of irradiance or distance octahedral texture maps. All probes of a volume are processed in parallel. This shader is dispatched by the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::UpdateProbes()</span></code> function. See <a class="reference internal" href="#probe-irradiance-and-distance-update">Probe Irradiance and Distance Update</a>.</p></td>
 </tr>
-</tbody>
-</table>
-<table class="colwidths-given docutils align-default" id="id4">
-<caption><span class="caption-text">DDGI HLSL Shaders (early access features)</span><a class="headerlink" href="#id4" title="Permalink to this table">¶</a></caption>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 75%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>File Name</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ProbeRelocationCS.hlsl</span></code></p></td>
 <td><p>Compute shader code that attempts to reposition probes if they are inside of geometry (e.g. walls). This shader is dispatched by the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::RelocateProbes()</span></code> function. See <a class="reference internal" href="#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a>.</p></td>
 </tr>
@@ -375,14 +368,14 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <p>Before creation, a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is described using a pair of descriptor structs that configure the various properites and resources of the volume. These structs are <code class="docutils literal notranslate"><span class="pre">DDGIVolumeDesc</span></code> and <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>A regularly spaced probe grid is not strictly required. The probe grid can be adjusted using the per-probe offsets that are part of the <a class="reference internal" href="#probe-offsets"><span class="std std-ref">Probe Relocation and Position Optimization</span></a> early access feature.</p>
+<p>A regularly spaced probe grid is not strictly required. The probe grid can be adjusted using the per-probe offsets that are part of the <a class="reference internal" href="#probe-offsets"><span class="std std-ref">Probe Relocation and Position Optimization</span></a> feature.</p>
 </div>
 <div class="section" id="describing-a-volume">
 <span id="ddgi-describevolume"></span><h3>Describing a Volume<a class="headerlink" href="#describing-a-volume" title="Permalink to this headline">¶</a></h3>
 <p>The <code class="docutils literal notranslate"><span class="pre">DDGIVolumeDesc</span></code> is a descriptor structure that specifies the attributes of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code>.</p>
 <p>This structure is defined in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/include/rtxgi/ddgi/DDGIVolume.h</span></code> and each member variable is described in the table below:</p>
-<table class="colwidths-given docutils align-default" id="id5">
-<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">DDGIVolumeDesc</span></code> Members</span><a class="headerlink" href="#id5" title="Permalink to this table">¶</a></caption>
+<table class="colwidths-given docutils align-default" id="id4">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">DDGIVolumeDesc</span></code> Members</span><a class="headerlink" href="#id4" title="Permalink to this table">¶</a></caption>
 <colgroup>
 <col style="width: 15%" />
 <col style="width: 10%" />
@@ -395,97 +388,93 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">origin</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">std::string</span></code></p></td>
+<td><p>The name of the volume.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">origin</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float3</span></code></p></td>
 <td><p>The world-space origin of the volume.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridSpacing</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridSpacing</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float3</span></code></p></td>
 <td><p>The world-space distance between probes.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridCounts</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridCounts</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int3</span></code></p></td>
 <td><p>The number of probes on each axis (x, y, z).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeMaxRayDistance</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeMaxRayDistance</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>The maximum distance a ray cast from a probe may travel.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeHysteresis</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeHysteresis</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>Controls the influence of new rays when updating probes. A value close to 1.0 slowly changes probe data, improving stability but reducing accuracy when objects move in the scene. Values of 0.9 or lower will rapidly react to scene changes, but may cause flickering or other instabilities in lighting.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeChangeThreshold</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeChangeThreshold</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A ratio used during probe radiance blending. Specifies a threshold to identify when large lighting changes occur. When the difference in the maximum color components between the previous and current irradiance is larger than this threshold, the hysteresis will be reduced.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeBrightnessThreshold</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeBrightnessThreshold</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A threshold value used during probe radiance blending that determines the maximum allowed difference in brightness between the previous and current irradiance values. This prevents impulses from drastically changing a texel’s irradiance in a single update cycle.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeDistanceExponent</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeDistanceExponent</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>The exponent used during visibility testing. A high value rapidly reacts to depth discontinuities, but may cause banding.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeIrradianceEncodingGamma</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeIrradianceEncodingGamma</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>An exponent that perceptually encodes irradiance for faster light-to-dark convergence. (See <a class="reference internal" href="#probe-irradiance-gamma">Probe Irradiance Gamma</a>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">numIrradianceTexels</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">numIrradianceTexels</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>The number of texels in one dimension of the probe irradiance texture (octahedral maps are square), not including the 1-texel border.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">numDistanceTexels</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">numDistanceTexels</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>The number of texels in one dimension of the probe distance texture (octahedral maps are square), not including the 1-texel border.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">numRaysPerProbe</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">numRaysPerProbe</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>The number of rays to cast per probe. When using <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY</span></code>, set this value to a multiple of the irradiance/distance probe texel resolution for best behavior.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">viewBias</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">viewBias</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A small offset along the camera view ray applied to the shaded surface point to avoid numerical instabilities when determining visibility.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">normalBias</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">normalBias</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A small offset along the surface normal applied to the shaded surface point to avoid numerical instabilities when determining visibility.</p></td>
 </tr>
-</tbody>
-</table>
-<table class="colwidths-given docutils align-default" id="id6">
-<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">DDGIVolumeDesc</span></code> Members (early access features)</span><a class="headerlink" href="#id6" title="Permalink to this table">¶</a></caption>
-<colgroup>
-<col style="width: 15%" />
-<col style="width: 10%" />
-<col style="width: 75%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Member</p></th>
-<th class="head"><p>Type</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeMinFrontfaceDistance</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeMinFrontfaceDistance</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>The minimum distance allowed to a front facing triangle before Probe Relocation moves the probe (see <a class="reference internal" href="#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeBackfaceThreshold</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeBackfaceThreshold</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>The ratio of rays cast for a probe that may hit back facing triangles before Probe Relocation and State Classification assume the probes is inside of geometry (used by <a class="reference internal" href="#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a> and <a class="reference internal" href="#probe-state-classification">Probe State Classification</a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">movementType</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">EDDGIVolumeMovementType</span></code></p></td>
+<td><p>The mode of movement used for the volume. Can be either <code class="docutils literal notranslate"><span class="pre">Default</span></code> or <code class="docutils literal notranslate"><span class="pre">Scrolling</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeScrollOffsets</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int3</span></code></p></td>
+<td><p>The probe grid-space offsets used for scrolling movement.</p></td>
 </tr>
 </tbody>
 </table>
 <p><strong>Octahedral Texture Maps</strong></p>
 <p>Octahedral Texture Maps are unwrapped as described in <a class="reference external" href="http://jcgt.org/published/0003/02/01/">Cigolle et al 2014</a>. To support fast hardware bilinear texture sampling, our octahedral texture maps include a 1-texel border. These border texels are <strong>added</strong> to the values specified in the <cite>numIrradianceTexels</cite> and <cite>numDistanceTexels</cite> members of <code class="docutils literal notranslate"><span class="pre">DDGIVolumeDesc</span></code>.</p>
-<div class="figure align-center" id="id7">
+<div class="figure align-center" id="id5">
 <a class="reference internal image-reference" href="../_images/octahedral-param.jpg"><img alt="../_images/octahedral-param.jpg" src="../_images/octahedral-param.jpg" style="width: 672.4000000000001px; height: 233.60000000000002px;" /></a>
-<p class="caption"><span class="caption-text">The octahedral parameterization of a sphere unwrapped to the unit square as described by <a class="reference external" href="http://jcgt.org/published/0003/02/01/">Cigolle et al. 2014</a></span><a class="headerlink" href="#id7" title="Permalink to this image">¶</a></p>
+<p class="caption"><span class="caption-text">The octahedral parameterization of a sphere unwrapped to the unit square as described by <a class="reference external" href="http://jcgt.org/published/0003/02/01/">Cigolle et al. 2014</a></span><a class="headerlink" href="#id5" title="Permalink to this image">¶</a></p>
 </div>
-<div class="figure align-center" id="id8">
+<div class="figure align-center" id="id6">
 <a class="reference internal image-reference" href="../_images/octahedral-border.png"><img alt="../_images/octahedral-border.png" src="../_images/octahedral-border.png" style="width: 1050.6px; height: 334.8px;" /></a>
-<p class="caption"><span class="caption-text">Three annotated diagrams of the unwrapped octahedral unit square for a single probe. The left and center diagrams highlight the 1-texel border added to the 6x6 texel interior, and identify the texels that map to the “front” and “back” of the probe. The scheme to populate border texels with the necessary data for bilinear interpolation is shown on the right.</span><a class="headerlink" href="#id8" title="Permalink to this image">¶</a></p>
+<p class="caption"><span class="caption-text">Three annotated diagrams of the unwrapped octahedral unit square for a single probe. The left and center diagrams highlight the 1-texel border added to the 6x6 texel interior, and identify the texels that map to the “front” and “back” of the probe. The scheme to populate border texels with the necessary data for bilinear interpolation is shown on the right.</span><a class="headerlink" href="#id6" title="Permalink to this image">¶</a></p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -502,8 +491,8 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <p>The resource management mode is specified at compile time by setting the <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_SDK_MANAGED_RESOURCES</span></code> define in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h</span></code>. Set <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_SDK_MANAGED_RESOURCES</span></code> to 0 for application management or 1 for SDK management.</p>
 <p><strong>Descriptor Heap and Constant Buffer(s)</strong></p>
 <p>Regardless of the selected resource management mode, the application is responsible for allocating, managing, and providing information about the descriptor heap where the descriptors for <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> resources are placed. The application provides this information to a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> using the <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> structure at volume creation time. This structure is defined in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/include/rtxgi/ddgi/DDGIVolume.h</span></code>, and the descriptor heap members are described in the table below:</p>
-<table class="colwidths-given docutils align-default" id="id9">
-<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> Descriptor Heap Members</span><a class="headerlink" href="#id9" title="Permalink to this table">¶</a></caption>
+<table class="colwidths-given docutils align-default" id="id7">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> Descriptor Heap Members</span><a class="headerlink" href="#id7" title="Permalink to this table">¶</a></caption>
 <colgroup>
 <col style="width: 15%" />
 <col style="width: 10%" />
@@ -531,8 +520,8 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 </tbody>
 </table>
 <p>In addition to descriptor heap space, the application must allocate a GPU resource for constant buffer data. Unlike the descriptor heap, a resource pointer for the constant buffer is not passed to the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> at creation time, and is instead passed through the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::Update(ID3D12Resource*,</span> <span class="pre">UINT64)</span></code> function (see <a class="reference internal" href="#updating-a-volume">Updating a Volume</a>). In order for the application to know how many descriptor heaps slots to reserve and how many constant buffer bytes to allocate per volume, the following helper functions are available in the <code class="docutils literal notranslate"><span class="pre">rtxgi</span></code> namespace:</p>
-<table class="colwidths-given docutils align-default" id="id10">
-<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">rtxgi</span></code> Namespace Functions for Resource Allocation</span><a class="headerlink" href="#id10" title="Permalink to this table">¶</a></caption>
+<table class="colwidths-given docutils align-default" id="id8">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">rtxgi</span></code> Namespace Functions for Resource Allocation</span><a class="headerlink" href="#id8" title="Permalink to this table">¶</a></caption>
 <colgroup>
 <col style="width: 25%" />
 <col style="width: 75%" />
@@ -557,14 +546,14 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The Test Harness application provides an example that sets the descriptor heap information with the <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> struct and allocates a constant buffer (for double buffering) in the <code class="docutils literal notranslate"><span class="pre">Harness::CreateVolume(...)</span></code> function of <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/harness/Harness.cpp</span></code>.</p>
+<p>The Test Harness application provides an example that sets the descriptor heap information with the <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> struct and allocates a constant buffer (for double buffering) in the <code class="docutils literal notranslate"><span class="pre">Harness::CreateVolumeMulti(...)</span></code> function of <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/harness/Harness.cpp</span></code>.</p>
 </div>
 <div class="section" id="sdk-managed-resources">
 <span id="ddgi-sdkresources"></span><h4>SDK Managed Resources<a class="headerlink" href="#sdk-managed-resources" title="Permalink to this headline">¶</a></h4>
 <p>In SDK managed mode, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> creates and manages the necessary GPU resources (except for the descriptor heap and constant buffer as described above), including the root signature, textures, descriptors, and pipeline state objects (PSO). The intent in providing a mode where the SDK manages GPU resources directly is to simplify the resource management process for applications that may benefit from a black box approach. Resources are allocated at volume creation time when calling the  <code class="docutils literal notranslate"><span class="pre">DDGIVolume::Create(...)</span></code> function.</p>
 <p>Although the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> manages resources in this mode, it does not handle shader compilation since most game engines and renderers already have existing infrastructure for this task. Pointers to compiled DXIL shader bytecode blobs for the blending and update compute shaders (provided in the SDK) must be passed to the volume through the <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> descriptor struct. These fields are described in the table below:</p>
-<table class="colwidths-given docutils align-default" id="id11">
-<caption><span class="caption-text">SDK Managed <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> Members (<code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_SDK_MANAGED_RESOURCES</span> <span class="pre">==</span> <span class="pre">1</span></code>)</span><a class="headerlink" href="#id11" title="Permalink to this table">¶</a></caption>
+<table class="colwidths-given docutils align-default" id="id9">
+<caption><span class="caption-text">SDK Managed <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> Members (<code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_SDK_MANAGED_RESOURCES</span> <span class="pre">==</span> <span class="pre">1</span></code>)</span><a class="headerlink" href="#id9" title="Permalink to this table">¶</a></caption>
 <colgroup>
 <col style="width: 15%" />
 <col style="width: 10%" />
@@ -619,8 +608,8 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <div class="section" id="application-managed-resources">
 <span id="ddgi-app-resources"></span><h4>Application Managed Resources<a class="headerlink" href="#application-managed-resources" title="Permalink to this headline">¶</a></h4>
 <p>For applications that require tighter control over the resource management process, the Application Managed resource mode leaves the task of resource allocation entirely to the host application. Like the SDK Managed mode, resource pointers are provided to the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> through the <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> struct at creation time; however, the application must provide the entire set of necessary GPU resources. These fields are described in the table below:</p>
-<table class="colwidths-given docutils align-default" id="id12">
-<caption><span class="caption-text">Application Managed <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> Members (<code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_SDK_MANAGED_RESOURCES</span> <span class="pre">==</span> <span class="pre">0</span></code>)</span><a class="headerlink" href="#id12" title="Permalink to this table">¶</a></caption>
+<table class="colwidths-given docutils align-default" id="id10">
+<caption><span class="caption-text">Application Managed <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> Members (<code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_SDK_MANAGED_RESOURCES</span> <span class="pre">==</span> <span class="pre">0</span></code>)</span><a class="headerlink" href="#id10" title="Permalink to this table">¶</a></caption>
 <colgroup>
 <col style="width: 15%" />
 <col style="width: 10%" />
@@ -693,8 +682,8 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 </div>
 <p><strong>Allocation Helpers</strong></p>
 <p>To aid the application in the resource allocation process, the following namespace functions are available in the <code class="docutils literal notranslate"><span class="pre">rtxgi</span></code> namespace:</p>
-<table class="colwidths-given docutils align-default" id="id13">
-<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">rtxgi</span></code> Namespace Helper Functions for Resource Allocation</span><a class="headerlink" href="#id13" title="Permalink to this table">¶</a></caption>
+<table class="colwidths-given docutils align-default" id="id11">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">rtxgi</span></code> Namespace Helper Functions for Resource Allocation</span><a class="headerlink" href="#id11" title="Permalink to this table">¶</a></caption>
 <colgroup>
 <col style="width: 25%" />
 <col style="width: 75%" />
@@ -737,14 +726,14 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <div class="section" id="creating-a-volume">
 <span id="ddgi-createvolume"></span><h3>Creating a Volume<a class="headerlink" href="#creating-a-volume" title="Permalink to this headline">¶</a></h3>
 <p>A minimum of one <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is required to use the DDGI algorithm. Volumes are specified as part of the scene, which is left to the host application. A common pattern is for artists and level designers to specify volumes in editor tools that expose RTXGI SDK functionality through their user interface. <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> parameters are then stored in data files, and used at level load time to instantiate the volumes. Alternatively, a volume may be programmatically generated based on scene parameters (bounding boxes, resolution, etc.).</p>
-<p>Assuming the set of desired parameters are available, the volume creation process begins by mapping each parameter into the <code class="docutils literal notranslate"><span class="pre">DDGIVolumeDesc</span></code> struct (see <a class="reference internal" href="#describing-a-volume">Describing a Volume</a> for details). Once the volume descriptor has the appropriate parameters, the required volume resources are set in a <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> struct (see <a class="reference internal" href="#resource-management">Resource Management</a> for details). After the parameter descriptor and resource descriptor are set up, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is created using the contructor after which the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::Create(...)</span></code> is called to finish creating the volume. See the <code class="docutils literal notranslate"><span class="pre">Harness::CreateVolume(...)</span></code> function in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/harness/Harness.cpp</span></code> for an example.</p>
+<p>Assuming the set of desired parameters are available, the volume creation process begins by mapping each parameter into the <code class="docutils literal notranslate"><span class="pre">DDGIVolumeDesc</span></code> struct (see <a class="reference internal" href="#describing-a-volume">Describing a Volume</a> for details). Once the volume descriptor has the appropriate parameters, the required volume resources are set in a <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> struct (see <a class="reference internal" href="#resource-management">Resource Management</a> for details). After the parameter descriptor and resource descriptor are set up, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is created using the constructor after which the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::Create(...)</span></code> is called to finish creating the volume. See the <code class="docutils literal notranslate"><span class="pre">Harness::CreateVolume(...)</span></code> function in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/harness/Harness.cpp</span></code> for an example.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The <a class="reference internal" href="Harness.html#harness"><span class="std std-ref">Test Harness</span></a> provides an example implementation of how to use a single <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> to add global illumination to a scene.</p>
+<p>The <a class="reference internal" href="Harness.html#harness"><span class="std std-ref">Test Harness</span></a> provides an example implementation of how to use one or more <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> to add global illumination to a scene.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>While this section focused on creation of a single volume, multiple volumes may be created by repeating the creation process in this section. See <a class="reference internal" href="#multiple-volume-blending">Multiple Volume Blending</a> for more information on how to use multiple volumes to compute global illumination.</p>
+<p>While this section focused on creation of a single volume, multiple volumes may be created by repeating the creation process in this section. See <a class="reference internal" href="#volume-blending">Volume Blending</a> for more information on how to use multiple volumes to compute global illumination.</p>
 </div>
 </div>
 <div class="section" id="destroying-a-volume">
@@ -801,6 +790,10 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <li><p>Blend the ray traced <strong>radiance</strong> values for each probe’s irradiance octahedral texture map.</p></li>
 <li><p>Blend the ray traced <strong>distance</strong> values for each probe’s distance octahedral texture map.</p></li>
 </ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_NUM_FIXED_RAYS</span></code> define represents the number of rays used for <a class="reference internal" href="#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a> and/or <a class="reference internal" href="#probe-state-classification">Probe State Classification</a> (when enabled). The radiance and distance results for these rays are not included in the blending phase since their directions are <strong>not</strong> randomly updated each frame. Inclusion of their results would create biased results. See <a class="reference internal" href="#fixed-rays-for-relocation-and-classification">Fixed Rays for Relocation and Classification</a> for more information.</p>
+</div>
 <p><strong>Phase 2: Border Texel Update</strong></p>
 <ol class="arabic simple" start="3">
 <li><p>Update all <strong>rows</strong> of border texels for <strong>irradiance</strong> octahedral texture maps.</p></li>
@@ -810,12 +803,12 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 </ol>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Set <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY</span></code> to 1 to enable shared memory in the probe blending shaders. Enabling shared memory is strongly recommended, since optimizations using shared memory provide a substantial performance benefit by cooperatively loading and computing values that are common within thread groups.</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY</span></code> to 1 to enable shared memory in the probe blending shaders. <strong>Enabling shared memory is strongly recommended</strong>, since optimizations using shared memory provide a substantial performance benefit by cooperatively loading and computing values that are common within thread groups.</p>
 </div>
 <p>During the probe update process, performance markers are inserted into the GPU command list of when <code class="docutils literal notranslate"><span class="pre">RTXGI_PERF_MARKERS</span></code> is set to 1. An example of these annotatations in Nsight Graphics is shown below:</p>
-<div class="figure align-center" id="id14">
+<div class="figure align-center" id="id12">
 <a class="reference internal image-reference" href="../_images/probe_update_nsight.jpg"><img alt="../_images/probe_update_nsight.jpg" src="../_images/probe_update_nsight.jpg" style="width: 100%;" /></a>
-<p class="caption"><span class="caption-text">The Nsight Graphics scrubber view, showing performance markers from the Test Harness. The probe update markers are highlighted.</span><a class="headerlink" href="#id14" title="Permalink to this image">¶</a></p>
+<p class="caption"><span class="caption-text">The Nsight Graphics scrubber view, showing performance markers from the Test Harness. The probe update markers are highlighted.</span><a class="headerlink" href="#id12" title="Permalink to this image">¶</a></p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -825,7 +818,7 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 </div>
 <div class="section" id="volume-movement">
 <span id="ddgi-volumemovement"></span><h2>Volume Movement<a class="headerlink" href="#volume-movement" title="Permalink to this headline">¶</a></h2>
-<p>For general use, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is designed to be stationary, and placed in a fixed scene location. However, for the best results in scenarios where the space that requires global illumination is itself not stationary, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> may also need to move. Examples of this scenario include elevators, trains, cars, and spaceships. To achieve consistent global lighting results for moving spaces, a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> can be attached to the moving space’s frame of reference and translated with the <code class="docutils literal notranslate"><span class="pre">DDGIVolume-&gt;Move(...)</span></code> function.</p>
+<p>For general use, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is designed to be stationary, and placed in a fixed scene location. However, for the best results in scenarios where the space that requires global illumination is itself not stationary, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> may also need to move. Examples of this include elevators, trains, cars, and spaceships. To achieve consistent global lighting results for moving spaces, a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> can be attached to the moving space’s frame of reference and translated with the <code class="docutils literal notranslate"><span class="pre">DDGIVolume-&gt;Move(...)</span></code> function.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Since <code class="docutils literal notranslate"><span class="pre">volume-&gt;Move(...)</span></code> <em>translates</em> a volume, the transformation is only correct for frames of reference undergoing translation only (i.e. not rotation also). As a result, the axis-aligned bounding box of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> needs to be large enough to cover the desired space when the space is under rotation.</p>
@@ -834,6 +827,9 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <p class="admonition-title">Note</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">DDGIVolume-&gt;Move(...)</span></code> functionality is also useful for debugging purposes, so that one may visualize how a set of probes function in different locations of a scene without creating multiple volumes.</p>
 </div>
+<p>To achieve dynamic global illumination results in an open or large world setting, it is desirable to anchor a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> to a player character or the camera view, and then update the volume as the player or camera moves. This effectively provides an <strong>“infinite” volume of global illumination</strong> for the player without needing an infinite amount of probes (and memory) to store radiance and distance information. In practice, simply moving a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> at the same rate as the player causes visual artifacts. In this release of the SDK, we are providing a new <em>infinite scrolling volume</em> feature in early access. Head over to the <a class="reference internal" href="#infinite-scrolling-volume-movement">Infinite Scrolling Volume Movement</a> section to learn more.</p>
+<blockquote>
+<div></div></blockquote>
 </div>
 <div class="section" id="computing-indirect-lighting-from-a-volume">
 <span id="ddgi-indirectlighting"></span><h2>Computing Indirect Lighting from a Volume<a class="headerlink" href="#computing-indirect-lighting-from-a-volume" title="Permalink to this headline">¶</a></h2>
@@ -861,10 +857,10 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 <span id="ddgi-compositing"></span><h3>Compositing Indirect Lighting<a class="headerlink" href="#compositing-indirect-lighting" title="Permalink to this headline">¶</a></h3>
 <p>One example of how to composite irradiance sampled from a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> with direct lighting and ambient occlusion is provided by the <code class="docutils literal notranslate"><span class="pre">Harness::RenderIndirect(...)</span></code> function and <code class="docutils literal notranslate"><span class="pre">samples/test-harness/shaders/Indirect.hlsl</span></code> fullscreen Pixel Shader.</p>
 </div>
-<div class="section" id="volume-blending-for-regions-outside-of-a-volume">
-<span id="ddgi-volumeblending"></span><h3>Volume Blending for Regions Outside of a Volume<a class="headerlink" href="#volume-blending-for-regions-outside-of-a-volume" title="Permalink to this headline">¶</a></h3>
-<p>Although no example is provided in the Test Harness, a separate HLSL shader function - <code class="docutils literal notranslate"><span class="pre">DDGIGetVolumeBlendWeight(...)</span></code> - is provided by the SDK to enable blending between regions covered by a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> and regions <strong>not</strong> covered by a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code>. This use case may arise if there is a region of the scene that needs dynamic diffuse irradiance and another part that strictly does not (for example, due to artistic or performance reasons).</p>
-<p>In this case, the example provided in the <code class="docutils literal notranslate"><span class="pre">samples/test-haress/shaders/Indirect.hlsl</span></code> shader can be modified as shown below:</p>
+<div class="section" id="volume-blending">
+<span id="ddgi-volumeblending"></span><h3>Volume Blending<a class="headerlink" href="#volume-blending" title="Permalink to this headline">¶</a></h3>
+<p>The SDK provides a separate HLSL shader function, <code class="docutils literal notranslate"><span class="pre">DDGIGetVolumeBlendWeight(...)</span></code>, to enable blending between multiple <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> and regions <strong>not</strong> covered by a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code>. This use case may arise if there is a region of the scene that needs dynamic diffuse irradiance and another part that strictly does not (for example, due to artistic or performance reasons), or if a scene has multiple overlapping volumes.</p>
+<p id="ddgi-multipleblending">To see how to use this function to blend between multiple volumes, see <code class="docutils literal notranslate"><span class="pre">samples/test-haress/shaders/Indirect.hlsl</span></code>. The test harness implementation takes an array of volumes (in order of descending priority) and blends together their contributions until it either finishes iterating through all volumes, or the total contribution reaches an acceptable threshold (1 by default). In the case of blending between a volume and a non-volume region, the example provided in the <code class="docutils literal notranslate"><span class="pre">samples/test-haress/shaders/Indirect.hlsl</span></code> shader can be modified as shown below:</p>
 <div class="highlight-hlsl notranslate"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
  2
  3
@@ -907,116 +903,77 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
 </pre></div>
 </td></tr></table></div>
 </div>
-<div class="section" id="multiple-volume-blending">
-<span id="ddgi-multipleblending"></span><h3>Multiple Volume Blending<a class="headerlink" href="#multiple-volume-blending" title="Permalink to this headline">¶</a></h3>
-<p>The use of multiple volumes is also possible; however, for best results the indirect lighting computed by each volume should be blended with overlapping and/or nearby volumes. There is no example implementation in the Test Harness for multiple volumes, but this scenario can be understood by replacing a single <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> with an array of volumes in the <code class="docutils literal notranslate"><span class="pre">samples/test-harness/shaders/Indirect.hlsl</span></code> fullscreen Pixel Shader. Here we assume the volumes in the array are ordered such that the last volume is the “fallback volume”.</p>
-<p>The irradiance computation would work as follows:</p>
-<div class="highlight-hlsl notranslate"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-33
-34
-35
-36
-37</pre></div></td><td class="code"><div class="highlight"><pre><span></span><span class="c1">// Start with a full irradiance contribution remaining (for the final volume)</span>
-<span class="kt">float</span> <span class="n">remainingVolumeBlendWeight</span> <span class="o">=</span> <span class="mf">1.f</span><span class="p">;</span>
-<span class="kt">float3</span> <span class="n">volumeIrradiance</span> <span class="o">=</span> <span class="mf">0.f</span><span class="p">;</span>
-
-<span class="c1">// Loop over all but the final volume</span>
-<span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">volumeIndex</span> <span class="o">=</span> <span class="mo">0</span><span class="p">;</span> <span class="n">volumeIndex</span> <span class="o">&lt;</span> <span class="n">volumeCount</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span> <span class="n">volumeIndex</span><span class="o">++</span><span class="p">)</span>
-<span class="p">{</span>
-    <span class="c1">// Get the volume blend weight (0-1)</span>
-    <span class="kt">float</span> <span class="n">volumeBlendWeight</span> <span class="o">=</span> <span class="n">DDGIGetVolumeBlendWeight</span><span class="p">(</span> <span class="n">worldPosHitT</span><span class="p">.</span><span class="n">xyz</span><span class="p">,</span> <span class="n">DDGIVolume</span><span class="p">);</span>
-
-    <span class="c1">// Only get irradiance if it will be used</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">volumeBlendWeight</span> <span class="o">&gt;</span> <span class="mo">0</span><span class="p">)</span>
-    <span class="p">{</span>
-        <span class="c1">// Get irradiance from the DDGIVolume</span>
-        <span class="n">volumeIrradiance</span> <span class="o">=</span> <span class="n">DDGIGetVolumeIrradiance</span><span class="p">(</span>
-            <span class="n">worldPosHitT</span><span class="p">.</span><span class="n">xyz</span><span class="p">,</span>
-            <span class="n">surfaceBias</span><span class="p">,</span>
-            <span class="n">normal</span><span class="p">,</span>
-            <span class="n">DDGIVolume</span><span class="p">[</span><span class="n">volumeIndex</span><span class="p">],</span>
-            <span class="n">resources</span><span class="p">);</span>
-    <span class="p">}</span>
-
-    <span class="c1">// Blend this volume&#39;s irradiance and reduce the remaining irradiance for the final volume</span>
-    <span class="n">irradiance</span> <span class="o">+=</span> <span class="n">volumeIrradiance</span> <span class="o">*</span> <span class="n">volumeBlendWeight</span><span class="p">;</span>
-    <span class="n">remainingVolumeBlendWeight</span> <span class="o">=</span> <span class="nb">clamp</span><span class="p">(</span><span class="n">remainingVolumeBlendWeight</span> <span class="o">-</span> <span class="n">volumeBlendWeight</span><span class="p">);</span>
-<span class="p">}</span>
-
-<span class="c1">// Get irradiance from the final DDGIVolume</span>
-<span class="n">volumeIrradiance</span> <span class="o">=</span> <span class="n">DDGIGetVolumeIrradiance</span><span class="p">(</span>
-    <span class="n">worldPosHitT</span><span class="p">.</span><span class="n">xyz</span><span class="p">,</span>
-    <span class="n">surfaceBias</span><span class="p">,</span>
-    <span class="n">normal</span><span class="p">,</span>
-    <span class="n">DDGIVolume</span><span class="p">[</span><span class="n">volumeCount</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span>
-    <span class="n">resources</span><span class="p">);</span>
-
-<span class="c1">// Blend between irradiance and the constant ambient term</span>
-<span class="n">irradiance</span> <span class="o">+=</span> <span class="n">remainingVolumeBlendWeight</span> <span class="o">*</span> <span class="n">volumeIrradiance</span><span class="p">;</span>
-</pre></div>
-</td></tr></table></div>
+</div>
+<div class="section" id="probe-relocation-and-position-optimization">
+<span id="probe-offsets"></span><h2>Probe Relocation and Position Optimization<a class="headerlink" href="#probe-relocation-and-position-optimization" title="Permalink to this headline">¶</a></h2>
+<p>Any regular grid has a hard time adapting to correctly handle all kinds of scenes, and the regular grids of DDGI are no exception. To mitigate this shortcoming, we provide a feature that allows world-space offsets to be added to each probe, and enable users to experiment with probe offset optimization using the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::RelocateProbes(...)</span></code> function in the Test Harness. You can enable this functionality by changing the corresponding SDK define (see note below).</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">DDGIVolume::RelocateProbes(...)</span></code> function attempts to move probes out of the interior of geometry by assuming that some proportion of probe rays intersecting back faces indicates the probe is inside geometry. The <code class="docutils literal notranslate"><span class="pre">probeBackfaceThreshold</span></code> variable, described in the <a class="reference internal" href="#describing-a-volume">Describing a Volume</a> section, controls the threshold beyond which a probe is considered “inside geometry”. When a probe is determined to be inside of geometry, the maximum allowable displacement is computed as 45% of the grid cell distance. This is implemented in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/shaders/ddgi/ProbeRelocationCS.hlsl</span></code>. For those probes that are not found to be inside geometry, the position optimizer attempts to move probes closer to nearby frontfacing geometry.</p>
+<p>Probe relocation can run at arbitrary frequencies, and is designed to produce stable results when run continuously. As an example of this, the Test Harness runs probe relocation once every frame.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Enable probe relocation by setting <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_PROBE_RELOCATION</span></code> to 1 in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h</span></code>.</p>
+</div>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Probe falling inside of geometry without probe relocation</p></th>
+<th class="head"><p>Probes adjusted to more useful positions with probe relocation enabled</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><img alt="probe_relocation-1" src="../_images/probe_relocation-1.jpg" /></p></td>
+<td><p><img alt="probe_relocation-2" src="../_images/probe_relocation-2.jpg" /></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="probe-state-classification">
+<span id="probe-states"></span><h2>Probe State Classification<a class="headerlink" href="#probe-state-classification" title="Permalink to this headline">¶</a></h2>
+<p>Not all scenes require all probes in a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> to contribute to the global illumination result. Some probes may be stuck inside geometry (e.g. walls), exist in space without nearby geometry, or be far enough outside the scene to not be useful. In these cases, it is best for these probes to not trace rays or spend time updating textures that ultimately won’t be used. The SDK provides a probe state classification feature that identifies probes that may be safely disabled, and maintains a per-probe state that is updated dynamically at runtime on the GPU.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Enable probe state classification by setting <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_PROBE_STATE_CLASSIFIER</span></code> to 1 in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h</span></code>.</p>
+</div>
+<table class="colwidths-given docutils align-default">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Disabled probes (in red) that are stuck inside geometry</p></th>
+<th class="head"><p>Disabled probes (in red) don’t have nearby geometry due to the dense grid</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><img alt="probe_classification_geometry" src="../_images/probe_classification_geometry.jpg" /></p></td>
+<td><p><img alt="probe_classification_space" src="../_images/probe_classification_space.jpg" /></p></td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="fixed-rays-for-relocation-and-classification">
+<h3>Fixed Rays for Relocation and Classification<a class="headerlink" href="#fixed-rays-for-relocation-and-classification" title="Permalink to this headline">¶</a></h3>
+<p>Since probe relocation and classification can be run at arbitrary frequencies, temporal stability is essential to ensure the best conditions for fast irradiance and distance convergence. Using random rays to drive the relocation and/or classification processes (as was done in the RTXGI SDK 1.0 early access version of this feature) leads to unstable jittering and/or oscillation of probe locations and states. To guarantee stable results, the <code class="docutils literal notranslate"><span class="pre">DDGIGetProbeRayDirection(...)</span></code> function <strong>does not apply the random rotation transform</strong> to the first <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_NUM_FIXED_RAYS</span></code> rays. These “fixed rays” always have the same directions every update cycle. As a result, the relocation and classification shaders only inspect the “fixed rays” for each probe; the quantity of which is specified by the <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_NUM_FIXED_RAYS</span></code> define. While these “fixed rays” are essential for stable relocation and classification, they are excluded from probe blending since their regularity causes artifacts due to bias. The Test Harness provides an example of probe classification running once every frame. See the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::ClassifyProbes(...)</span></code> function.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>You can change the value of <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_NUM_FIXED_RAYS</span></code> in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/shaders/Common.hlsl</span></code>. All probes trace at least <code class="docutils literal notranslate"><span class="pre">RTXGI_NUM_FIXED_RAYS</span></code> “fixed rays” every frame. If a probe is marked as disabled, only the fixed rays are traced and blending is disabled for the probe.</p>
+</div>
 </div>
 </div>
 <div class="section" id="early-access-features">
 <span id="ddgi-earlyaccess"></span><h2>Early Access Features<a class="headerlink" href="#early-access-features" title="Permalink to this headline">¶</a></h2>
 <p>The following early access features are available for experimental use, but may change substantially in future versions of the RTXGI SDK.</p>
-<div class="section" id="probe-relocation-and-position-optimization">
-<span id="probe-offsets"></span><h3>Probe Relocation and Position Optimization<a class="headerlink" href="#probe-relocation-and-position-optimization" title="Permalink to this headline">¶</a></h3>
-<p>Any regular grid has a hard time adapting to correctly handle all kinds of scenes, and the regular grids of DDGI are no exception. To mitigate this shortcoming, we provide a feature that allows world-space offsets to be added to each probe, and enable users to experiment with probe offset optimization using the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::RelocateProbes(...)</span></code> function in the Test Harness. You can enable this functionality by changing the corresponding SDK define (see note below).</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">DDGIVolume::RelocateProbes(...)</span></code> function attempts to move probes out of the interior of geometry by assuming that some proportion of probe rays intersecting back faces indicates the probe is inside geometry. The <code class="docutils literal notranslate"><span class="pre">probeBackfaceThreshold</span></code> variable, described in the <a class="reference internal" href="#describing-a-volume">Describing a Volume</a> section, controls the threshold beyond which the optimizer considers a probe “inside backfacing geometry”. When a probe is determined to be inside of geometry, the maximum allowable displacement is computed as 45% of the grid cell distance. This is implemented in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/shaders/ddgi/ProbeRelocationCS.hlsl</span></code>.</p>
-<p>The Test Harness provides an example of a simple linear descent optimizer using <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_MAX_PROBE_RELOCATION_ITERATIONS</span></code> iterations to improve the probe offsets. At each iteration, the <code class="docutils literal notranslate"><span class="pre">probeDistanceScale</span></code> is reduced, allowing smaller magnitude probe displacement until probes reach a favorable location. In our example, these optimization iterations happen on the first <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_MAX_PROBE_RELOCATION_ITERATIONS</span></code> frames, though these optimizations could be done as an offline pre-process or at level load time.</p>
+</div>
+<div class="section" id="infinite-scrolling-volume-movement">
+<span id="ddgi-scrollingmovement"></span><h2>Infinite Scrolling Volume Movement<a class="headerlink" href="#infinite-scrolling-volume-movement" title="Permalink to this headline">¶</a></h2>
+<p>To achieve dynamic global illumination results in an open or large world setting, it is desirable to anchor a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> to a player character or the camera view, and then update the anchored volume as the player or camera moves. This effectively provides an <strong>“infinite” volume of global illumination</strong> for the player without needing an infinite amount of probes (and memory) to store radiance and distance information. In practice, naively adjusting the position of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> relative to the environment causes visual artifacts. All probe locations change during volume movement, and all irradiance and distance data gathered for the volume’s probes become invalid. Probes must reconverge before their data is useful again.</p>
+<p>To mitigate this issue, the <em>infinite scrolling volume movement</em> feature is now available in early access. With this feature enabled for a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code>, movement of the volume does <strong>not</strong> move all of the probes within the volume; but instead, relocates a subset of the probes (a “plane” or “slice” of probes) from one end of the volume to the other. All interior probes remain stationary in their original positions. We refer to this process as probe <strong>scrolling</strong>. The stationary probes retain valid irradiance and distance values, and only the probes on the edges of the volume have to reconverge. This style of movement is analagous to how tank tread rolls forward while its individual segments stay fixed while in contact with the ground.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> provides two <code class="docutils literal notranslate"><span class="pre">Scroll(...)</span></code> functions that translate the volume in this manner. The <code class="docutils literal notranslate"><span class="pre">Scroll(int3</span> <span class="pre">translation)</span></code> function takes an <code class="docutils literal notranslate"><span class="pre">int3</span></code> argument, where the integers represent the number of probe “planes”. For example, <code class="docutils literal notranslate"><span class="pre">Scroll(int3(2,</span> <span class="pre">0,</span> <span class="pre">0))</span></code> means “scroll two planes of probes along the X axis to the other end of the volume”.  The <code class="docutils literal notranslate"><span class="pre">Scroll(float3</span> <span class="pre">translation,</span> <span class="pre">float3</span> <span class="pre">deadzoneRadii)</span></code> function takes a <code class="docutils literal notranslate"><span class="pre">float3</span></code> argument in world-space for the translation, and a second <code class="docutils literal notranslate"><span class="pre">float3</span></code> to define a “dead zone”. The dead zone defines the space (i.e. a padding) where the probes do not need to react to volume movement. A larger dead zone causes the volume to scroll in larger probe plane increments. On the other extreme, a dead zone of zero causes volume scrolling by a single probe plane as soon as the accumulated translation is larger than the inter-probe distance.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Enable probe relocation and the position optimizer by setting <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_PROBE_RELOCATION</span></code> to 1 in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h</span></code>.</p>
-</div>
-</div>
-<div class="section" id="probe-state-classification">
-<span id="probe-states"></span><h3>Probe State Classification<a class="headerlink" href="#probe-state-classification" title="Permalink to this headline">¶</a></h3>
-<p>Not all scenes will require all probes in a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> to contribute to diffuse global illumination. Some probes may be stuck inside geometry (e.g. walls), exist in space without nearby geometry, or be far enough outside the scene to not be useful. In these cases, it is best for these probes to not trace rays or spend time updating textures that won’t be used. An early preview of this kind of optimization technique is provided by <code class="docutils literal notranslate"><span class="pre">DDGIVolume::ClassifyProbes(...)</span></code> function.</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">DDGIVolume::ClassifyProbes(...)</span></code> function uses the latest results from the probe ray trace update to determine whether each probe should be <code class="docutils literal notranslate"><span class="pre">active</span></code> or <code class="docutils literal notranslate"><span class="pre">inactive</span></code>. Inactive probes do not trace rays. When a sudden change in scene geometry occurs, currently <code class="docutils literal notranslate"><span class="pre">inactive</span></code> probes should be made <code class="docutils literal notranslate"><span class="pre">active</span></code> to account for the potential affects to lighting. The <code class="docutils literal notranslate"><span class="pre">DDGIVolume::ActivateAllProbes(...)</span></code> function can be called to mark all probes as <code class="docutils literal notranslate"><span class="pre">active</span></code>. After the next ray tracing opportunity, run the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::ClassifyProbes(...)</span></code> function again to reclassify probes (and subsequently set some as <code class="docutils literal notranslate"><span class="pre">inactive</span></code>).</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Enable probe state classification by setting <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_PROBE_STATE_CLASSIFIER</span></code> to 1 in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h</span></code>.</p>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p><code class="docutils literal notranslate"><span class="pre">DDGIVolume::ClassifyProbes(...)</span></code> is a one way operation and only moves probes from <code class="docutils literal notranslate"><span class="pre">active</span></code> to <code class="docutils literal notranslate"><span class="pre">inactive</span></code>.</p>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>When combining probe state classification with <a class="reference internal" href="#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a>, it is a good practice to avoid classifying probes as inactive until their positions have become relatively stable. The optimization process occasionally moves probes on different sides of geometry due to the randomization of probe rays. This may change their classification.</p>
-</div>
+<p>Enable infinite scrolling volume movement by setting <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_PROBE_SCROLL</span></code> to 1 in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/include/rtxgi/ddgi/DDGIVolumeDefines.h</span></code>.</p>
 </div>
 </div>
 </div>
@@ -1028,6 +985,8 @@ Line 281: <code class="docutils literal notranslate"><span class="pre">Harness::
           <footer>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="UE4Plugin.html" class="btn btn-neutral float-right" title="Unreal Engine 4 Plugin" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
         <a href="SDKOverview.html" class="btn btn-neutral float-left" title="RTXGI SDK Overview" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>

@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Test Harness &mdash; RTXGI SDK 1.0  documentation</title>
+  <title>Test Harness &mdash; RTXGI SDK 1.1  documentation</title>
   
 
   
@@ -52,7 +52,7 @@
           
 
           
-            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.0
+            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.1
           
 
           
@@ -118,13 +118,14 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#additional-features">Additional Features</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#display-adaptation">Display Adaptation</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#ray-traced-ambient-occlusion-denoising">Ray Traced Ambient Occlusion &amp; Denoising</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#ray-traced-ambient-occlusion-and-denoising">Ray Traced Ambient Occlusion and Denoising</a></li>
 </ul>
 </li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="SDKOverview.html">RTXGI SDK Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="DDGI.html">Dynamic Diffuse Global Illumination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="UE4Plugin.html">Unreal Engine 4 Plugin</a></li>
 </ul>
 </li>
 </ul>
@@ -141,7 +142,7 @@
       <nav class="wy-nav-top" aria-label="top navigation">
         
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="../index.html">RTXGI SDK 1.0</a>
+          <a href="../index.html">RTXGI SDK 1.1</a>
         
       </nav>
 
@@ -199,8 +200,8 @@
 <p>The RTXGI SDK Test Harness includes the following features, most of which are described in greater detail in the rest of this document:</p>
 <ul class="simple">
 <li><p>Startup configuration using initialization (<code class="docutils literal notranslate"><span class="pre">.ini</span></code>) text files</p></li>
-<li><p>Scene loading from a custom binary (<code class="docutils literal notranslate"><span class="pre">.bin</span></code>) format</p></li>
-<li><p>HLSL shader loading and compilation with DXC</p></li>
+<li><p>Scene loading of geometry and material assets in the <a class="reference external" href="https://github.com/KhronosGroup/glTF/tree/master/specification/2.0">GLTF 2.0</a> text and binary formats (<code class="docutils literal notranslate"><span class="pre">.gltf</span></code>, <code class="docutils literal notranslate"><span class="pre">.glb</span></code>)</p></li>
+<li><p>HLSL shader loading and compilation with Microsoft’s DirectX Compiler (DXC)</p></li>
 <li><p>DXR and D3D12 resource creation and management</p></li>
 <li><p>DXR implementation</p></li>
 <li><p>Deferred rendering</p></li>
@@ -213,7 +214,7 @@
 <li><p>Ray Traced Ambient Occlusion (RTAO) &amp; Denoising</p></li>
 <li><p>Reference Path Tracer</p></li>
 </ul>
-<p>The Test Harness main loop (found in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/samples/test-harness/src/harness/main.cpp</span></code>) represents one way to use the <a class="reference internal" href="DDGI.html#ddgi"><span class="std std-ref">Dynamic Diffuse Global Illumination</span></a> implementation provided in the RTXGI SDK. The remainder of this document describes the ways in which the Test Harness configures test scenes, sets up the test volume, visualizes run-time behavior, and uses additional features to demonstrate interoperability with other rendering effects.</p>
+<p>The Test Harness main loop (found in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/samples/test-harness/src/harness/main.cpp</span></code>) represents one way to use the <a class="reference internal" href="DDGI.html#ddgi"><span class="std std-ref">Dynamic Diffuse Global Illumination</span></a> implementation provided in the RTXGI SDK. The remainder of this document describes the ways in which the Test Harness configures test scenes, sets up <code class="docutils literal notranslate"><span class="pre">DDGIVolumes</span></code>, visualizes run-time behavior, and uses additional features to demonstrate interoperability with other rendering effects.</p>
 </div>
 <div class="section" id="configuration">
 <span id="harness-config"></span><h2>Configuration<a class="headerlink" href="#configuration" title="Permalink to this headline">¶</a></h2>
@@ -264,9 +265,17 @@
 <td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
 <td><p>The path to the rtxgi-sdk directory (absolute, or relative to the executable).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scene</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scene-path</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
-<td><p>The path to the scene <code class="docutils literal notranslate"><span class="pre">.bin</span></code> file to use. This path is concatenated with the root path. See <a class="reference internal" href="#scene-and-asset-loading">Scene and Asset Loading</a>.</p></td>
+<td><p>The path to the GLTF scene file. This path is concatenated with the root path. See <a class="reference internal" href="#scene-and-asset-loading">Scene and Asset Loading</a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scene-file</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>The file name of the text or binary GLTF 2.0 scene to load. See <a class="reference internal" href="#scene-and-asset-loading">Scene and Asset Loading</a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">screenshot-file</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>The path and file name of the <code class="docutils literal notranslate"><span class="pre">.jpg</span></code> file written when a screenshot is captured. The image is stored relative to the application’s <code class="docutils literal notranslate"><span class="pre">root</span></code> working directory.</p></td>
 </tr>
 </tbody>
 </table>
@@ -464,47 +473,51 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">origin</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>A plain text name for the volume.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">origin</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float3</span></code></p></td>
 <td><p>The world-space origin of the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridCounts</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridCounts</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int3</span></code></p></td>
 <td><p>The number of probes along each axis (x, y, z).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridSpacing</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridSpacing</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float3</span></code></p></td>
 <td><p>The distance between probes on each axis (x, y, z), in world-space units.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">hysteresis</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">hysteresis</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>Controls the influence of newly traced rays when updating probes. See <a class="reference internal" href="DDGI.html#ddgi-describevolume"><span class="std std-ref">Describing a Volume</span></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeChangeThreshold</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeChangeThreshold</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A threshold ratio used during radiance blending. See <a class="reference internal" href="DDGI.html#ddgi-describevolume"><span class="std std-ref">Describing a Volume</span></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeBrightnessThreshold</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeBrightnessThreshold</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A threshold value used during radiance blending. See <a class="reference internal" href="DDGI.html#ddgi-describevolume"><span class="std std-ref">Describing a Volume</span></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">viewBias</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">viewBias</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>The <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> view bias. See <a class="reference internal" href="DDGI.html#ddgi-describevolume"><span class="std std-ref">Describing a Volume</span></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">normalBias</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">normalBias</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>The <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> normal bias. See <a class="reference internal" href="DDGI.html#ddgi-describevolume"><span class="std std-ref">Describing a Volume</span></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">numRaysPerProbe</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">numRaysPerProbe</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>The number of rays to cast per probe. See <a class="reference internal" href="DDGI.html#ddgi-describevolume"><span class="std std-ref">Describing a Volume</span></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">numIrradianceTexels</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">numIrradianceTexels</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>The number of irradiance texels per probe. See <a class="reference internal" href="DDGI.html#ddgi-describevolume"><span class="std std-ref">Describing a Volume</span></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">numDistanceTexels</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">numDistanceTexels</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>The number of distanctexels per probe. See <a class="reference internal" href="DDGI.html#ddgi-describevolume"><span class="std std-ref">Describing a Volume</span></a>.</p></td>
 </tr>
@@ -562,11 +575,15 @@
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AORadius</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
-<td><p>The maximum distance of an ambient occlusion ray can travel. See <a class="reference internal" href="#ray-traced-ambient-occlusion-denoising">Ray Traced Ambient Occlusion &amp; Denoising</a>.</p></td>
+<td><p>The maximum distance of an ambient occlusion ray can travel. See <a class="reference internal" href="#ray-traced-ambient-occlusion-and-denoising">Ray Traced Ambient Occlusion and Denoising</a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AOFilterDepthSigma</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AOBias</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
-<td><p>The ambient occlusion denoiser’s depth sigma. See <a class="reference internal" href="#ray-traced-ambient-occlusion-denoising">Ray Traced Ambient Occlusion &amp; Denoising</a>.</p></td>
+<td><p>A surface offset avoid self-intersection during ray tracing. See <a class="reference internal" href="#ray-traced-ambient-occlusion-and-denoising">Ray Traced Ambient Occlusion and Denoising</a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AOFilterDepthSigma</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>The ambient occlusion denoiser’s depth sigma. See <a class="reference internal" href="#ray-traced-ambient-occlusion-and-denoising">Ray Traced Ambient Occlusion and Denoising</a>.</p></td>
 </tr>
 </tbody>
 </table>
@@ -630,10 +647,10 @@
 </div>
 <div class="section" id="scene-and-asset-loading">
 <span id="harness-sceneloading"></span><h2>Scene and Asset Loading<a class="headerlink" href="#scene-and-asset-loading" title="Permalink to this headline">¶</a></h2>
-<p>Two test scenes are distributed with the SDK, and can be loaded in the Test Harness by setting the <code class="docutils literal notranslate"><span class="pre">scene</span></code> parameter in the <code class="docutils literal notranslate"><span class="pre">.ini</span></code> file to the path of the desired scene binary file. Scene files are located in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/data/scenes</span></code> and config files are located in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/config</span></code>.</p>
-<p>The following tables show images of each test scene from the default camera position with different global illumination solutions enabled:</p>
+<p>The Test Harness reads scene files encoded in the GLTF 2.0 file format. <a class="reference external" href="https://github.com/KhronosGroup/glTF-Sample-Models">A library of GLTF 2.0 sample scenes</a> is available from Khronos, and can be loaded by the Test Harness when paired with an intialization file with the proper settings. For example, the <code class="docutils literal notranslate"><span class="pre">sponza.ini</span></code> config file provided with the Test Harness is compatible with the <a class="reference external" href="https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/Sponza">Crytek Sponza scene</a> provided by Khronos. Copy or link the Sponza GLTF scene from the repository to the <code class="docutils literal notranslate"><span class="pre">samples/test-harness-data/gltf</span></code> directory.</p>
+<p>Two test scenes are distributed with the SDK, and can be loaded in the Test Harness by passing their configuration files to the executable. Scene files are located in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/data/gltf</span></code> and config files are located in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/config</span></code>. The following tables show images of the included test scenes from the default camera position with different global illumination solutions enabled:</p>
 <table class="colwidths-given docutils align-default" id="id11">
-<caption><span class="caption-text">Two Rooms (<code class="docutils literal notranslate"><span class="pre">two-rooms-plane.bin</span></code>, <code class="docutils literal notranslate"><span class="pre">two-rooms.ini</span></code>)</span><a class="headerlink" href="#id11" title="Permalink to this table">¶</a></caption>
+<caption><span class="caption-text">Two Rooms (<code class="docutils literal notranslate"><span class="pre">two-rooms.glb</span></code>, <code class="docutils literal notranslate"><span class="pre">two-rooms.ini</span></code>)</span><a class="headerlink" href="#id11" title="Permalink to this table">¶</a></caption>
 <colgroup>
 <col style="width: 33%" />
 <col style="width: 33%" />
@@ -653,7 +670,7 @@
 </tbody>
 </table>
 <table class="colwidths-given docutils align-default" id="id12">
-<caption><span class="caption-text">Cornell Box (<code class="docutils literal notranslate"><span class="pre">cornell.bin</span></code>, <code class="docutils literal notranslate"><span class="pre">cornell.ini</span></code>)</span><a class="headerlink" href="#id12" title="Permalink to this table">¶</a></caption>
+<caption><span class="caption-text">Cornell Box (<code class="docutils literal notranslate"><span class="pre">cornell.glb</span></code>, <code class="docutils literal notranslate"><span class="pre">cornell.ini</span></code>)</span><a class="headerlink" href="#id12" title="Permalink to this table">¶</a></caption>
 <colgroup>
 <col style="width: 33%" />
 <col style="width: 33%" />
@@ -672,48 +689,6 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Scene Binary File Format</strong></p>
-<p>Since loading additional scenes into the Test Harness will likely prove useful during experimentation and debugging, the custom binary file format is described below. The deserialization of this format is implemented in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/harness/Deserializer.cpp</span></code>.</p>
-<div class="highlight-hlsl notranslate"><div class="highlight"><pre><span></span><span class="c1">// Format</span>
-<span class="p">[</span> <span class="n">size</span> <span class="p">]</span> <span class="o">-</span> <span class="n">description</span>
-
-<span class="c1">// HEADER</span>
-<span class="p">[</span> <span class="mi">4</span> <span class="n">bytes</span> <span class="p">]</span> <span class="o">-</span> <span class="n">number</span> <span class="n">of</span> <span class="n">materials</span>
-<span class="p">[</span> <span class="mi">4</span> <span class="n">bytes</span> <span class="p">]</span> <span class="o">-</span> <span class="n">number</span> <span class="n">of</span> <span class="n">meshes</span>
-
-<span class="c1">// MATERIALS</span>
-
-<span class="c1">//---[material 0]---</span>
-<span class="p">[</span> <span class="mi">4</span> <span class="n">bytes</span>  <span class="p">]</span> <span class="o">-</span> <span class="n">number</span> <span class="n">of</span> <span class="n">characters</span> <span class="k">in</span> <span class="n">material</span> <span class="n">name</span> <span class="p">(</span><span class="kt">uint</span><span class="p">)</span>
-<span class="p">[</span> <span class="n">variable</span> <span class="p">]</span> <span class="o">-</span> <span class="n">material</span> <span class="n">name</span>
-<span class="p">[</span> <span class="mi">12</span> <span class="n">bytes</span> <span class="p">]</span> <span class="o">-</span> <span class="n">diffuse</span> <span class="n">color</span> <span class="p">(</span><span class="kt">float3</span><span class="p">)</span>
-<span class="c1">//-----------------</span>
-        <span class="p">.</span>
-        <span class="p">.</span>
-        <span class="p">.</span>
-<span class="c1">//---[material n]---</span>
-
-<span class="c1">// GEOMETRY</span>
-
-<span class="c1">//---[mesh 0]-----</span>
-<span class="p">[</span> <span class="mi">4</span> <span class="n">bytes</span>  <span class="p">]</span> <span class="o">-</span> <span class="n">number</span> <span class="n">of</span> <span class="n">vertices</span>
-<span class="p">[</span> <span class="mi">4</span> <span class="n">bytes</span>  <span class="p">]</span> <span class="o">-</span> <span class="n">number</span> <span class="n">of</span> <span class="n">indices</span>
-<span class="p">[</span> <span class="mi">4</span> <span class="n">bytes</span>  <span class="p">]</span> <span class="o">-</span> <span class="n">material</span> <span class="n">index</span>
-<span class="p">[</span> <span class="mi">4</span> <span class="n">bytes</span>  <span class="p">]</span> <span class="o">-</span> <span class="n">number</span> <span class="n">of</span> <span class="n">characters</span> <span class="k">in</span> <span class="n">the</span> <span class="n">mesh</span> <span class="n">name</span>
-<span class="p">[</span> <span class="n">variable</span> <span class="p">]</span> <span class="o">-</span> <span class="n">mesh</span> <span class="n">name</span>
-
-<span class="c1">// Vertex Stream (Position + Normal)</span>
-<span class="p">[</span> <span class="mi">4</span> <span class="n">bytes</span>  <span class="p">]</span> <span class="o">-</span> <span class="n">vertex</span> <span class="n">stride</span>
-<span class="p">[</span> <span class="mi">4</span> <span class="n">bytes</span>  <span class="p">]</span> <span class="o">-</span> <span class="n">index</span> <span class="n">stride</span>
-<span class="p">[</span> <span class="n">variable</span> <span class="p">]</span> <span class="o">-</span> <span class="n">vertex</span> <span class="n">data</span>
-<span class="p">[</span> <span class="n">variable</span> <span class="p">]</span> <span class="o">-</span> <span class="n">index</span> <span class="n">data</span>
-<span class="c1">//----------------</span>
-        <span class="p">.</span>
-        <span class="p">.</span>
-        <span class="p">.</span>
-<span class="c1">//---[mesh n]-----</span>
-</pre></div>
-</div>
 </div>
 <div class="section" id="shaders">
 <span id="harness-shaders"></span><h2>Shaders<a class="headerlink" href="#shaders" title="Permalink to this headline">¶</a></h2>
@@ -724,8 +699,7 @@
 <li><p>Top level shaders that define the entry points of GPU workloads that are dispatched from the host</p></li>
 </ul>
 </div></blockquote>
-<p>Most host side functionality related to shaders exists in the <code class="docutils literal notranslate"><span class="pre">Shaders</span></code> namespace, is declared in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/include/Shaders.h</span></code>, and defined in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/Shaders.cpp</span></code>. Shaders are compiled using the <a class="reference external" href="https://github.com/microsoft/DirectXShaderCompiler">DirectX Shader Compiler (DXC)</a> targeting Shader Model 6. The <code class="docutils literal notranslate"><span class="pre">Harness::CompileShaders(...)</span></code> function in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/Harness.cpp</span></code> loads and compiles the DDGI compute shaders.</p>
-<p>The following table provides a brief description of each shared shader file found in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/shaders/include</span></code>:</p>
+<p>Most host side functionality related to shaders exists in the <code class="docutils literal notranslate"><span class="pre">Shaders</span></code> namespace, is declared in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/include/Shaders.h</span></code>, and defined in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/Shaders.cpp</span></code>. Shaders are compiled using the <a class="reference external" href="https://github.com/microsoft/DirectXShaderCompiler">DirectX Shader Compiler (DXC)</a> targeting Shader Model 6. The <code class="docutils literal notranslate"><span class="pre">Harness::CompileVolumeShaders(...)</span></code> and <code class="docutils literal notranslate"><span class="pre">Harness::CompileVolumeShadersMulti</span></code> functions in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/Harness.cpp</span></code> load and compile shaders for <code class="docutils literal notranslate"><span class="pre">DDGIVolumes</span></code>. The following table provides a brief description of each shared shader file found in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/shaders/include</span></code>:</p>
 <table class="colwidths-given docutils align-default" id="id13">
 <caption><span class="caption-text">Include Shaders</span><a class="headerlink" href="#id13" title="Permalink to this table">¶</a></caption>
 <colgroup>
@@ -753,13 +727,16 @@
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RasterRS.hlsl</span></code></p></td>
 <td><p>The root signature for raster passes.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTCommon.hlsl</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RSCommon.hlsl</span></code></p></td>
+<td><p>Common elements shared between raster and compute root signatures.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTCommon.hlsl</span></code></p></td>
 <td><p>Common ray tracing methods and values (e.g. the payload).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTGlobalRS.hlsl</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTGlobalRS.hlsl</span></code></p></td>
 <td><p>The global root signature for ray tracing passes.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RTLocalRS.hlsl</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RTLocalRS.hlsl</span></code></p></td>
 <td><p>The local root signature for ray tracing passes. Includes helper functions to fetch vertex data for Closest Hit and Any Hit Shaders.</p></td>
 </tr>
 </tbody>
@@ -777,37 +754,40 @@
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AOFilterCS.hlsl</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AHS.hlsl</span></code></p></td>
+<td><p>Any Hit Shader that handles alpha testing.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AOFilterCS.hlsl</span></code></p></td>
 <td><p>A Compute Shader that filters raw ambient occlusion results.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AOTraceRGS.hlsl</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AOTraceRGS.hlsl</span></code></p></td>
 <td><p>A Ray Generation Shader that traces rays to compute ambient occlusion.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ClosestHit.hlsl</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">CHS.hlsl</span></code></p></td>
 <td><p>Closest Hit Shaders that return material properties in the payload.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Indirect.hlsl</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Indirect.hlsl</span></code></p></td>
 <td><p>Fullscreen Vertex and Pixel Shaders that compute indirect lighting and perform compositing (Direct+GI+AO).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Miss.hlsl</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Miss.hlsl</span></code></p></td>
 <td><p>A Miss Shader.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">PathTraceRGS.hlsl</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">PathTraceRGS.hlsl</span></code></p></td>
 <td><p>A Ray Generation Shader that implements path tracing (iteratively).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">PrimaryTraceRGS.hlsl</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">PrimaryTraceRGS.hlsl</span></code></p></td>
 <td><p>A Ray Generation Shader that traces primary visibility (camera) rays.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ProbeTraceRGS.hlsl</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ProbeTraceRGS.hlsl</span></code></p></td>
 <td><p>A Ray Generation Shader that traces rays from <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> probes.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VisDDGIBuffers.hlsl</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VisDDGIBuffers.hlsl</span></code></p></td>
 <td><p>Fullscreen Vertex and Pixel Shaders that visualize <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> textures.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VisDDGIProbes.hlsl</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VisDDGIProbes.hlsl</span></code></p></td>
 <td><p>A Ray Generation Shader that visualizes <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> probes.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">VisUpdateTLASCS.hlsl</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">VisUpdateTLASCS.hlsl</span></code></p></td>
 <td><p>A Compute Shader that updates the instances in the Top Level Acceleration Structure (TLAS).</p></td>
 </tr>
 </tbody>
@@ -861,14 +841,14 @@ When probe state classification is enabled, each probe’s state is also visuali
 <div class="section" id="texture-visualization">
 <span id="harness-texture-viz"></span><h3>Texture Visualization<a class="headerlink" href="#texture-visualization" title="Permalink to this headline">¶</a></h3>
 <p>The Test Harness includes a feature to visualize <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> probe data textures. <code class="docutils literal notranslate"><span class="pre">Visualization::RenderBuffers(...)</span></code> provides this functionality. The visualization can be enabled or disabled through the GUI or by pressing <code class="docutils literal notranslate"><span class="pre">b</span></code> on the keyboard.</p>
-<p>The size that the textures appear on screen can be configured through the corresponding values in the <code class="docutils literal notranslate"><span class="pre">.ini</span></code> file (see <a class="reference internal" href="#visualization-configuration">Visualization Configuration</a> for details). The top-most texture visualized is the irradiance texture, which shows the accumulated irradiance values for each probe. Next is the distance texture, which shows hit distance in green and distance² in red. The third texture shows the radiance computed for the probe rays.</p>
+<p>The size that the textures appear on screen can be configured through the corresponding values in the <code class="docutils literal notranslate"><span class="pre">.ini</span></code> file (see <a class="reference internal" href="#visualization-configuration">Visualization Configuration</a> for details), or through the UI sliders that appear when visualization is enabled. The top-most texture visualized is the irradiance texture, which shows the accumulated irradiance values for each probe. Next is the distance texture, which shows hit distance in green and distance² in red. The third texture shows the radiance computed for the probe rays.</p>
 <div class="figure align-center" id="id17" style="width: 100%">
 <img alt="Texture Visualization" src="../_images/buffer_visualization.jpg" />
 <p class="caption"><span class="caption-text">Probe texture visualization enabled in the Test Harness, with zoomed inlays to highlight the visualization.</span><a class="headerlink" href="#id17" title="Permalink to this image">¶</a></p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>When probe relocation (see <a class="reference internal" href="DDGI.html#probe-offsets"><span class="std std-ref">Probe Relocation and Position Optimization</span></a>) or probe state classification (see <a class="reference internal" href="DDGI.html#probe-states"><span class="std std-ref">Probe State Classification</span></a>) are enabled, additional textures are visualized. These appear after the probe radiance texture, and display world-space probe offsets (top) and probe states (bottom). Although these textures may not be obviously helpful at a glance, they reveal useful information when inspected in debugging tools such as Nsight Graphics or PIX.</p>
+<p>When probe relocation (see <a class="reference internal" href="DDGI.html#probe-offsets"><span class="std std-ref">Probe Relocation and Position Optimization</span></a>) or probe state classification (see <a class="reference internal" href="DDGI.html#probe-states"><span class="std std-ref">Probe State Classification</span></a>) are enabled, additional textures are visualized. These appear after the probe radiance texture, and display world-space probe offsets (top) and probe states (bottom). Although these textures may not be obviously helpful at a glance, they reveal useful information when inspected in debugging tools such as Nsight Graphics, PIX, or RenderDoc.</p>
 <div class="figure align-center" style="width: 60%">
 <img alt="../_images/buffer_visualization-ea.png" src="../_images/buffer_visualization-ea.png" />
 </div>
@@ -877,10 +857,6 @@ When probe state classification is enabled, each probe’s state is also visuali
 <div class="section" id="camera-and-volume-movement">
 <span id="harness-movement"></span><h3>Camera and Volume Movement<a class="headerlink" href="#camera-and-volume-movement" title="Permalink to this headline">¶</a></h3>
 <p>As described in <a class="reference internal" href="#mouse-and-keyboard">Mouse and Keyboard</a>, the camera and <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> can be translated with keyboard commands. Both camera and volume translation are provided to aid in visualizing and debugging the scene and volume. The mouse can be used to rotate the camera by holding the left mouse button, and pan the camera by holding the right mouse button.</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>While keyboard controls allow the volume to move, remember that a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is intended to store irradiance in a volume of space where the primary scene geometry is stationary relative to the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code>. Volume movement is intended as a debugging feature in this release. Artifacts are expected when the volume moves and its values are used on subsequent frames prior to convergence.</p>
-</div>
 </div>
 </div>
 <div class="section" id="input-controls">
@@ -960,13 +936,13 @@ When probe state classification is enabled, each probe’s state is also visuali
 <td><p>Toggle between DDGI and Path Tracing rendering modes.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">g</span></code></p></td>
-<td><p>Restart the probe optimizer (see early access feature <a class="reference internal" href="DDGI.html#probe-offsets"><span class="std std-ref">Probe Relocation and Position Optimization</span></a>).</p></td>
+<td><p>Toggles probe relocation (see <a class="reference internal" href="DDGI.html#probe-offsets"><span class="std std-ref">Probe Relocation and Position Optimization</span></a>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">k</span></code></p></td>
-<td><p>Reset all probes to active state (see early access feature <a class="reference internal" href="DDGI.html#probe-states"><span class="std std-ref">Probe State Classification</span></a>).</p></td>
+<td><p>Reset all probes to active state (see <a class="reference internal" href="DDGI.html#probe-states"><span class="std std-ref">Probe State Classification</span></a>).</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">l</span></code></p></td>
-<td><p>Toggle between allowing probes to become inactive or not (see early access feature <a class="reference internal" href="DDGI.html#probe-states"><span class="std std-ref">Probe State Classification</span></a>).</p></td>
+<td><p>Toggles probe classification on and off (see <a class="reference internal" href="DDGI.html#probe-states"><span class="std std-ref">Probe State Classification</span></a>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -976,7 +952,7 @@ When probe state classification is enabled, each probe’s state is also visuali
 </div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">g</span></code>, <code class="docutils literal notranslate"><span class="pre">k</span></code> and <code class="docutils literal notranslate"><span class="pre">l</span></code> keyboard controls are only available when the associated early access feature is enabled.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">g</span></code>, <code class="docutils literal notranslate"><span class="pre">k</span></code> and <code class="docutils literal notranslate"><span class="pre">l</span></code> keyboard controls are only available when the associated feature is enabled.</p>
 </div>
 </div>
 <div class="section" id="graphical-user-interface-gui">
@@ -1002,8 +978,8 @@ When probe state classification is enabled, each probe’s state is also visuali
 <li><p><strong>Linear to sRGB conversion:</strong> the sRGB transfer function is applied to the dithered linear SDR values to produce the final image.</p></li>
 </ol>
 </div>
-<div class="section" id="ray-traced-ambient-occlusion-denoising">
-<span id="harness-rtao"></span><h3>Ray Traced Ambient Occlusion &amp; Denoising<a class="headerlink" href="#ray-traced-ambient-occlusion-denoising" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="ray-traced-ambient-occlusion-and-denoising">
+<span id="harness-rtao"></span><h3>Ray Traced Ambient Occlusion and Denoising<a class="headerlink" href="#ray-traced-ambient-occlusion-and-denoising" title="Permalink to this headline">¶</a></h3>
 <p>A ray traced ambient occlusion (RTAO) implementation is included with the Test Harness to demonstrate one way to combine ambient occlusion with the dynamic indirect lighting provided by the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code>. Implementation details are in the <code class="docutils literal notranslate"><span class="pre">Harness::RayTraceAO(...)</span></code> and <code class="docutils literal notranslate"><span class="pre">Harness::FilterAO(...)</span></code> functions in <code class="docutils literal notranslate"><span class="pre">rtxgi-sdk/samples/test-harness/src/harness/Harness.cpp</span></code>.</p>
 <p>The RTAO implementation casts two rays per pixel in screen space at native resolution. These “raw” ambient occlusion results are then processed by a bilateral filter to reduce noise before the RTAO buffer is composited with direct and indirect lighting.</p>
 <p><strong>Implementation Details</strong></p>

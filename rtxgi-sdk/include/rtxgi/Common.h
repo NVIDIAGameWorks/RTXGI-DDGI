@@ -15,12 +15,12 @@ namespace rtxgi
     struct RTXGI_VERSION
     {
         static const int major = 1;
-        static const int minor = 0;
+        static const int minor = 1;
         static const int revision = 0;
 
         inline static const char* getVersionString()
         {
-            return "1.00.00";
+            return "1.10.00";
         }
     };
 

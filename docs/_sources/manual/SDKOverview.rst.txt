@@ -15,7 +15,7 @@ Versioning
 
 ``rtxgi-sdk/include/Common.h`` contains the ``RTXGI_VERSION`` struct, which defines the current version of the SDK. Applications can check the SDK version using either the static ``major``, ``minor``, and ``revision`` values or by comparing against the result of ``getVersionString()``. 
 
-This documentation is for version 1.00.00 of the SDK.
+This documentation is for version 1.10.00 of the SDK.
 
 ---------------------------------------------------
 Types
@@ -179,17 +179,19 @@ Defines
    * - Define Name
      - Description
    * - ``RTXGI_NAME_D3D_OBJECTS``
-     - When set to 1, Direct3D objects are assigned debug names using ``SetName()``
+     - When set to 1, Direct3D objects are assigned debug names using ``SetName()``.
    * - ``RTXGI_PERF_MARKERS``
-     - When set to 1, PIX performance markers are inserted in GPU command lists for debugging and profiling
+     - When set to 1, PIX performance markers are inserted in GPU command lists for debugging and profiling.
    * - ``RTXGI_COORDINATE_SYSTEM_LEFT``
-     - Represents a left handed, Y-up coordinate system
+     - Represents a left handed, Y-up coordinate system.
+   * - ``RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP``
+     - Represents a left handed, Z-up coordinate system. The coordinate system used by Unreal Engine.
    * - ``RTXGI_COORDINATE_SYSTEM_RIGHT``
-     - Represents a right handed, Y-up coordinate system
-   * - ``RTXGI_COORDINATE_SYSTEM_UNREAL``
-     - Represents a left handed, Z-up coordinate system. The coordinate system used in Unreal Engine.
+     - Represents a right handed, Y-up coordinate system.
+   * - ``RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP``
+     - Represents a left handed, Z-up coordinate system. The coordinate system used by Blender.
    * - ``RTXGI_COORDINATE_SYSTEM``
-     - Specifies the coordinate system to use. The chosen coordinate system must be either ``RTXGI_COORDINATE_SYSTEM_LEFT``, ``RTXGI_COORDINATE_SYSTEM_RIGHT``, or ``RTXGI_COORDINATE_SYSTEM_UNREAL``. The chosen coordinate system must match the coordinate system used for geometric assets.
+     - Specifies the coordinate system to use. The chosen coordinate system must be either ``RTXGI_COORDINATE_SYSTEM_LEFT``, ``RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP``, ``RTXGI_COORDINATE_SYSTEM_RIGHT``, or ``RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP``. The chosen coordinate system must match the coordinate system used for geometric assets.
 
 ---------------------------------------------------
 Math

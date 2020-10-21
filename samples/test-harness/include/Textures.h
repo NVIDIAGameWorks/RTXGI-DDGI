@@ -14,5 +14,7 @@
 
 namespace Textures
 {
-    bool LoadTexture(string filepath, bool sRGB, D3D12Info &d3d, D3D12Resources &resources, int &textureIndex, string textureName);
+    bool LoadTexture(Texture &texture);
+    void UnloadTexture(Texture &texture);
+    bool LoadAndCreateTexture(D3D12Global &d3d, D3D12Resources &resources, Texture &texture, int &index);
 }

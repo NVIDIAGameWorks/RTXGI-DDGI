@@ -10,30 +10,28 @@
 
 #pragma once
 
-#include "rtxgi/ddgi/DDGIVolume.h"
-
 #include "Common.h"
 #include "Input.h"
 
+#include "rtxgi/ddgi/DDGIVolume.h"
+
 namespace UI
 {
-    void Initialize(D3D12Info &d3d, D3D12Resources &resources, HWND window);
-    void Cleanup();
-
+    void Initialize(D3D12Global &d3d, D3D12Resources &resources, HWND window);
+    bool WantsMouseCapture();
     bool WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
     void OnNewFrame(
-        D3D12Info &d3d,
-        DXRInfo &dxr,
+        D3D12Global &d3d,
+        DXRGlobal &dxr,
         ConfigInfo &config,
-        CameraInfo &camera,
+        Camera &camera,
         LightInfo &lights,
-        rtxgi::DDGIVolume* volume,
+        std::vector<rtxgi::DDGIVolume*> volumes,
         InputInfo &input,
         InputOptions &inputOptions,
         RTOptions &rtOptions,
         VizOptions &vizOptions,
         PostProcessOptions &postOptions);
-    void OnRender(D3D12Info &d3d, D3D12Resources &resources);
-
-    bool WantsMouseCapture();
+    void OnRender(D3D12Global &d3d, D3D12Resources &resources);
+    void Cleanup();
 }

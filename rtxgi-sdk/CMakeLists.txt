@@ -8,7 +8,7 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.14.5)
 
 project(RTXGI)
 set(CMAKE_CXX_STANDARD 17)
@@ -17,7 +17,7 @@ set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "lib")
 
 set(RTXGI_SDK_VERSION_MAJOR 1)
-set(RTXGI_SDK_VERSION_MINOR 0)
+set(RTXGI_SDK_VERSION_MINOR 1)
 set(RTXGI_SDK_VERSION_REVISION 0)
 
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4" )

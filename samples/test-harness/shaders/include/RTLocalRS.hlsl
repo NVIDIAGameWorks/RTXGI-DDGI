@@ -13,15 +13,26 @@
 
 // --- [ Local Root Signature ] --------------------
 
-// Used by CHS when loading a binary scene file
-cbuffer ColorRootConstants    : register(b2, space2)
+cbuffer MaterialCB                 : register(b3)
 {
-    float3 materialColor;
-    float  materialColorPad;
+    float3  baseColor;
+    float   opacity;
+    float3  emissiveColor;
+    float   roughness;
+    float   metallic;
+    int     alphaMode;
+    float   alphaCutoff;
+    int     doubleSided;
+    int     baseColorTexIdx;
+    int     roughnessMetallicTexIdx;
+    int     normalTexIdx;
+    int     emissiveTexIdx;
 };
 
-ByteAddressBuffer Indices    : register(t3);
-ByteAddressBuffer Vertices    : register(t4);
+ByteAddressBuffer Indices          : register(t3);
+ByteAddressBuffer Vertices         : register(t4);
+//Texture2D<float4> BlueNoiseRGB   : register(t5);   // not used, part of the global root signature
+Texture2D<float4> Textures[]       : register(t6);
 
 // ---[ Helper Functions ]-------------------------------------------------
 
@@ -29,6 +40,9 @@ struct VertexAttributes
 {
     float3 position;
     float3 normal;
+    float3 tangent;
+    float3 bitangent;
+    float2 uv0;
 };
 
 uint3 GetIndices(uint primitiveIndex)
@@ -38,24 +52,58 @@ uint3 GetIndices(uint primitiveIndex)
     return Indices.Load3(address);
 }
 
-VertexAttributes GetVertexAttributes(uint primitiveIndex, float3 barycentrics)
+float2 GetInterpolatedUV0(uint primitiveIndex, float3 barycentrics)
 {
+    // Get the triangle indices
     uint3 indices = GetIndices(primitiveIndex);
-    float3 positions[3];
-    float3 normals[3];
 
-    VertexAttributes v;
+    // Interpolate the texture coordinates
+    float2 uv0 = float2(0.f, 0.f);
     for (uint i = 0; i < 3; i++)
     {
-        int address = (indices[i] * 6) * 4;
-        positions[i] = asfloat(Vertices.Load3(address));
-        address += 12;
-        normals[i] = asfloat(Vertices.Load3(address));
+        int address = (indices[i] * 12) * 4;    // 12 floats (3: pos, 3: normals, 4:tangent, 2:uv0)
+        address += 40;                          // 40 bytes (10 * 4): skip position, normal, and tangent
+        uv0 += asfloat(Vertices.Load2(address)) * barycentrics[i];
     }
 
-    v.position = positions[0] * barycentrics[0] + positions[1] * barycentrics[1] + positions[2] * barycentrics[2];
-    v.normal = normals[0] * barycentrics[0] + normals[1] * barycentrics[1] + normals[2] * barycentrics[2];
+    return uv0;
+}
+
+VertexAttributes GetInterpolatedAttributes(uint primitiveIndex, float3 barycentrics)
+{
+    // Get the triangle indices
+    uint3 indices = GetIndices(primitiveIndex);
+
+    // Interpolate the vertex attributes
+    float direction = 0;
+    VertexAttributes v = (VertexAttributes)0;
+    for (uint i = 0; i < 3; i++)
+    {
+        int address = (indices[i] * 12) * 4;
+
+        // Load and interpolate position
+        v.position += asfloat(Vertices.Load3(address)) * barycentrics[i];
+        address += 12;
+        
+        // Load and interpolate normal
+        v.normal += asfloat(Vertices.Load3(address)) * barycentrics[i];
+        address += 12;
+        
+        // Load and interpolate tangent
+        v.tangent += asfloat(Vertices.Load3(address)) * barycentrics[i];
+        address += 12;
+
+        // Load bitangent direction
+        direction = asfloat(Vertices.Load(address));
+        address += 4;
+
+        // Load and interpolate texture coordinates
+        v.uv0 += asfloat(Vertices.Load2(address)) * barycentrics[i];
+    }
+
     v.normal = normalize(v.normal);
+    v.tangent = normalize(v.tangent);
+    v.bitangent = normalize(cross(v.normal, v.tangent) * direction);
 
     return v;
 }

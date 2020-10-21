@@ -1,0 +1,538 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Unreal Engine 4 Plugin &mdash; RTXGI SDK 1.1  documentation</title>
+  
+
+  
+  
+    <link rel="shortcut icon" href="../_static/favicon.ico"/>
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Dynamic Diffuse Global Illumination" href="DDGI.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.1
+          
+
+          
+            
+            <img src="../_static/nvidia_logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="Index.html">User’s Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="License.html">License</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Welcome.html">Welcome</a></li>
+<li class="toctree-l2"><a class="reference internal" href="QuickStart.html">Quick Start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Harness.html">Test Harness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="SDKOverview.html">RTXGI SDK Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="DDGI.html">Dynamic Diffuse Global Illumination</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Unreal Engine 4 Plugin</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#plugin-contents">Plugin Contents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#getting-started">Getting Started</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#functionality">Functionality</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#artist-overview">Artist Overview</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#using-rtxgi">Using RTXGI</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tips-and-tricks">Tips and Tricks</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">RTXGI SDK 1.1</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="Index.html">User’s Guide</a> &raquo;</li>
+        
+      <li>Unreal Engine 4 Plugin</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="unreal-engine-4-plugin">
+<span id="ue4plugin"></span><h1>Unreal Engine 4 Plugin<a class="headerlink" href="#unreal-engine-4-plugin" title="Permalink to this headline">¶</a></h1>
+<p>To bring the advantages of RTXGI to as many developers as possible, all RTXGI 1.1 features are now available in Unreal Engine 4 through the RTXGI UE4 plugin. To use the RTXGI UE4 plugin, you’ll first need to meet the following software and hardware requirements:</p>
+<b>Software:</b> <br><ul class="simple">
+<li><p>Windows 10 v1809 or higher</p></li>
+<li><p>Visual Studio 2017 or 2019</p></li>
+<li><p>Windows SDK version 10.0.17763 or higher (can be installed using the Visual Studio Installer)</p></li>
+<li><p>The latest drivers for your GPU. NVIDIA drivers <a class="reference external" href="http://www.nvidia.com/drivers">are available here</a></p></li>
+<li><p>Unreal Engine 4.25.3 source code, available for free from <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Epic Games</a> or from the <a class="reference external" href="https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.25.3">NVIDIA NvRTX branch</a> of Unreal Engine.</p></li>
+</ul>
+<b>Hardware:</b> <br><ul>
+<li><p>Any DXR enabled GPU. NVIDIA DXR enabled GPUs:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>RTX 3090, 3080, 3070</p></li>
+<li><p>RTX 2080 Ti, 2080 SUPER, 2080, 2070 SUPER, 2070, 2060 SUPER, 2060</p></li>
+<li><p>GTX 1660 Ti, 1660 SUPER, 1660</p></li>
+<li><p>GTX 1080 Ti, 1080, 1070, 1060 with at least 6GB of memory</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Problems, Feedback, and Bugs</strong> <br/> If you encounter any problems, have feedback, or would like to report a bug, please contact: <a class="reference external" href="mailto:rtxgi-support-service&#37;&#52;&#48;nvidia&#46;com">rtxgi-support-service<span>&#64;</span>nvidia<span>&#46;</span>com</a></p>
+</div>
+<div class="section" id="plugin-contents">
+<h2>Plugin Contents<a class="headerlink" href="#plugin-contents" title="Permalink to this headline">¶</a></h2>
+<p><strong>RTXGI-UE4.25.3.patch</strong> and <strong>RTXGI-NvRTX4.25.3.patch</strong> are patch files to be applied to the appropriate engine branch.</p>
+</div>
+<div class="section" id="getting-started">
+<h2>Getting Started<a class="headerlink" href="#getting-started" title="Permalink to this headline">¶</a></h2>
+<p>Minor engine changes are required for the RTXGI plugin to work in UE4.25. This distribution of the RTXGI UE4 plugin is designed to be overlaid on top of Epic’s Unreal Engine 4.25.3 or <a class="reference external" href="https://docs.nvidia.com/rtx-dev-ue4/intro-relnotes/index.html">NVIDIA’s NvRTX 4.25.3</a> source code.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Patch files for the plugins are available in the RTXGI SDK Github repository under the <strong>ue4-plugin</strong> directory.</p>
+</div>
+<p><strong>Plugin Installation:</strong> <br/></p>
+<blockquote>
+<div><ol class="arabic">
+<li><p>Clone Unreal Engine 4.25.3 from Epic Games <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Unreal Engine GitHub</a>.</p>
+<ol class="arabic simple">
+<li><p>Select <strong>NvRTX 4.25.3</strong> if using the NVIDIA NvRTX UE4.25 branch.</p></li>
+</ol>
+</li>
+<li><p>Download <strong>RTXGI-UE4.25.3.patch</strong> or <strong>RTXGI-NvRTX4.25.3.patch</strong> from the <strong>ue4-plugin</strong> directory of the RTXGI GitHub repository. Select the patch that matches the engine branch you’ve chosen.</p></li>
+<li><p>Apply the necessary engine changes and RTXGI plugin:</p>
+<blockquote>
+<div><p>apply the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file to install the plugin and necessary engine changes.</p>
+<blockquote>
+<div><ul>
+<li><p>Copy the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file in the root directory of the cloned Unreal Engine source code.</p></li>
+<li><p>Open a command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">rtxgi-ue4.25.3.patch</span></code>, and hit enter.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>If using NvRTX, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">rtxgi-nvrtx4.25.3.patch</span></code> instead.</p></li>
+<li><p>This checks if the chosen patch can be applied to the respective engine build.</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns any errors, follow the prompt and resolve conflicts manually.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns nothing, or only warnings, everything is correct. Continue to the next step.</p></li>
+<li><p>In the same command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">rtxgi-ue4.25.3.patch</span></code> in the root directory and hit enter.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>If using NvRTX, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">rtxgi-nvrtx4.25.3.patch</span></code> instead.</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>After applying the patch, the engine must be built to include engine code changes needed by the plugin.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Run GenerateProjectFiles.bat to regenerate the project files.</p></li>
+<li><p>Build the engine.</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>All necessary patches have been applied! Proceed to the next step.</p></li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</li>
+<li><p>Run the UE4 editor in DirectX 12 mode by adding <code class="docutils literal notranslate"><span class="pre">-dx12</span></code> to the command line (DirectX12 is required for ray tracing).</p></li>
+<li><p>Enable the RTXGI plugin in the Editor.</p>
+<ol class="arabic simple">
+<li><p>Select <code class="docutils literal notranslate"><span class="pre">Edit-&gt;Plugins-&gt;Lighting-&gt;NVIDIA</span> <span class="pre">RTXGI</span> <span class="pre">Plugin</span></code>.</p></li>
+<li><p>Restart the editor.</p></li>
+</ol>
+</li>
+<li><p>Enable <code class="docutils literal notranslate"><span class="pre">Force</span> <span class="pre">No</span> <span class="pre">Precomputed</span> <span class="pre">Lighting</span></code> to avoid doubling lighting contributions (i.e. mixing RTXGI and baked indirect lighting)</p>
+<ol class="arabic simple">
+<li><p>To disable precomputed lighting in the current level, select <code class="docutils literal notranslate"><span class="pre">World</span> <span class="pre">Settings-&gt;Lightmass-&gt;Force</span> <span class="pre">No</span> <span class="pre">Precomputed</span> <span class="pre">Lighting</span></code>.</p></li>
+<li><p>To disable precomputed lighting globally, disable <code class="docutils literal notranslate"><span class="pre">Project</span> <span class="pre">Settings-&gt;Engine-&gt;Rendering-&gt;Lighting-&gt;Allow</span> <span class="pre">Static</span> <span class="pre">Lighting</span></code>.</p></li>
+</ol>
+</li>
+<li><p>Congratulations, you are now ready to use RTXGI in Unreal Engine 4!</p>
+<ul class="simple">
+<li><p>Place <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> actors in the scene to use RTXGI.</p></li>
+<li><p>Detailed instructions on further uses are available in the <a class="reference internal" href="#id2">Artist Overview</a>.</p></li>
+</ul>
+</li>
+</ol>
+</div></blockquote>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Probes will temporally accumulate bounced lighting within a few seconds after volume placement.</p>
+</div>
+</div>
+<div class="section" id="functionality">
+<h2>Functionality<a class="headerlink" href="#functionality" title="Permalink to this headline">¶</a></h2>
+<p id="id1">RTXGI implements the <em>Dynamic Diffuse Global Illumination (DDGI)</em> algorithm to compute diffuse global illumination. DDGI uses ray tracing to gather radiance and distance data on a regular grid of probes. This is similar to existing irradiance probe solutions you may already be familiar with, but radiance and distance calculations now occur in real time. RTXGI probes temporally accumulate data and use a statistics-based method to resolve visibility and prevent light leaking.</p>
+<p>To use RTXGI in UE4, place a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> actor in the scene. These volumes contain the regular grid of probes that RTXGI updates. Various properties of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> can be adjusted, and these are discussed in the <a class="reference internal" href="#id2">Artist Overview</a>. One <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is updated per frame in a weighted round robin fashion using the volume’s <strong>Update Priority</strong> property.</p>
+<p>Several new console variables (“cvars”) are available to with RTXGI. These are described in the table below.</p>
+<table class="colwidths-given docutils align-default" id="id3">
+<caption><span class="caption-text">RTXGI Console Variables</span><a class="headerlink" href="#id3" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 11%" />
+<col style="width: 74%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Command</p></th>
+<th class="head"><p>Options</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">r.RTXGI.DDGI</span></code></p></td>
+<td><p>0, 1</p></td>
+<td><p>Toggles RTXGI on or off.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">r.RTXGI.DDGIShowProbes</span></code></p></td>
+<td><p>0, 1</p></td>
+<td><p>Toggles a visualization of RTXGI volumes and probes on or off.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">r.RTXGI.DDGIProbeVis</span></code></p></td>
+<td><p>0, 1</p></td>
+<td><p>Toggles probe visualization. This allows the user to see what the probes see from the camera’s point of view.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Vis</span> <span class="pre">DDGIProbeVis</span></code></p></td>
+<td><p>None</p></td>
+<td><p>Allows the user to see the texture from the <code class="docutils literal notranslate"><span class="pre">r.RTXGI.DDGIProbeVis</span></code> command. This helps diagnose inaccuracies in the probes due to lighting or geometry not being configured to be visible to ray tracing.</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Project Settings:</strong> <br/>
+The RTXGI plugin has settings under the project settings.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>Irradiance Bits Per Channel</strong> - by default, a 10 bit per color channel texture format is used to store probe irradiance. With extended radiance or very bright light sources, 10-bits may not be enough. Irradiance bit depth can be changed to 32-bits for an RGBA32F texture format to solves the problems at the cost of increased memory use.</p></li>
+<li><p><strong>Debug Probe Radius</strong> - sets the size of the spheres used when visualizing <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> probes.</p></li>
+</ul>
+</div></blockquote>
+<p><strong>Current Limitations:</strong> <br/></p>
+<blockquote>
+<div><ul class="simple">
+<li><p>RTXGI indirect lighting doesn’t apply to forward rendering.</p></li>
+<li><p>RTXGI indirect lighting doesn’t apply to ray traced surfaces (for example, ray traced reflections).</p></li>
+</ul>
+</div></blockquote>
+</div>
+<div class="section" id="artist-overview">
+<h2>Artist Overview<a class="headerlink" href="#artist-overview" title="Permalink to this headline">¶</a></h2>
+<p id="id2">RTXGI adds a high performance option to compute dynamic global illumination in real-time in UE4. As implied by the name, RTXGI requires ray tracing to be enabled and the plugin to be active. If ray tracing is not available, the plugin will load the probe textures saved as part of the level from the disk upon load of level.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>without DirectX Raytracing support available from the graphics hardware and operating system, <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> probes operate in a static mode, where the probes do not update at runtime.</p>
+</div>
+<div class="section" id="using-rtxgi">
+<h3>Using RTXGI<a class="headerlink" href="#using-rtxgi" title="Permalink to this headline">¶</a></h3>
+<p>Find the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> actor under <strong>All Classes</strong> (as shown in the figure below) and place it in a level. Dynamic indirect lighting is generated inside the volume with RTXGI. The default <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> values should work well for many situations, but may need tweaking for your specific use case.</p>
+<table class="colwidths-given docutils align-center">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>The DDGIVolume Actor in the <strong>All Classes</strong> Actor category</p></th>
+<th class="head"><p>DDGIVolume Actor Settings</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><img alt="volume-actor" src="../_images/volume-actor.png" /></p></td>
+<td><p><img alt="volume-settings" src="../_images/settings.png" /></p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id4">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> Properties</span><a class="headerlink" href="#id4" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col style="width: 13%" />
+<col style="width: 88%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Property</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Rays Per Probe</p></td>
+<td><p>Sets the number of rays traced per probe. Higher numbers of rays traced per probe increases image quality by producing more stable indirect illumination, but will have a higher frame time cost. In many cases, the default of 288 rays per probe is acceptable.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Probe Counts</p></td>
+<td><p>Sets the number of probes placed on each axis of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code>. Generally, high probe counts within a volume are not necessary. We recommend probe grids arranged with probes every 2-3 meters. Sparse probe grids often produce better visual results than dense probe grids, since dense probes grids localize the effect of each probe and can (at times) reveal the structure of the probe grid.  When in doubt, use the minimum number of probes necessary to get the desired look.</p></td>
+</tr>
+<tr class="row-even"><td><p>Update Priority</p></td>
+<td><p>A weighted round robin system is used to update volumes. Volumes with higher priority values are updated more often. As a result, as more volumes are added to the scene, it will take longer for the system to update all volumes.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Probe Max Ray Distance</p></td>
+<td><p>The maximum distance a probe ray can travel. No surfaces are hit past this distance. Reducing this value can increase performance in some scenarios.</p></td>
+</tr>
+<tr class="row-even"><td><p>Probe Hysteresis</p></td>
+<td><p>Affects the temporal accumulation of ray tracing results in probes. A value of 1 always uses the historical values in the probes, ignoring new ray results. A value of 0 always uses the latest ray traced results, ignoring all previous probe data. This setting is best set to a value that balances historical and newly ray traced samples. In general, the default value will work well for most scenes.</p></td>
+</tr>
+<tr class="row-odd"><td><p>View and Normal Bias</p></td>
+<td><p>Similar to shadow map biases, these settings help adjust for visibility artifacts. If you are seeing shadow leaking or dark areas that look incorrect, consider adjusting these bias values. In general, the view bias value should be 4x larger than the normal bias.</p></td>
+</tr>
+<tr class="row-even"><td><p>Volume Blend Distance</p></td>
+<td><p>Specifies how the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> blends at the edges of the volume (in Unreal units). This can be used to create faded areas at the edge of the volume, and can be useful as an artistic control, if (for example) you wanted vaulted ceilings at the top of a volume to have less light.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Enable Probe Relocation</p></td>
+<td><p>When selected, this feature automatically moves probes inside their volume based on the world geometry. Probes move to more ideal locations the in playable space, instead of (for example) being positioned behind walls or other objects.</p></td>
+</tr>
+<tr class="row-even"><td><p>Enable Probe Scrolling</p></td>
+<td><p>When selected, probes keep their position in world-space when the volume moves. This is useful for moving volumes to have more temporaly stable lighting results.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="tips-and-tricks">
+<h3>Tips and Tricks<a class="headerlink" href="#tips-and-tricks" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="sparse-probe-layouts-recommended">
+<h4>Sparse probe layouts recommended<a class="headerlink" href="#sparse-probe-layouts-recommended" title="Permalink to this headline">¶</a></h4>
+<p>Relatively sparse probe grids are good practice for both high performance and quality results. As a starting point, we recommend setting probes about 2-3 meters apart from each other in a typical human-scale indoor scene. In large outdoor scenes, you can go much sparser and still get good results!</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>By design, RTXGI does <strong>not</strong> generate high frequency detail. Increasing probe density can help to an extent, but it won’t produce precise or sharp lighting and shadow at any density. For high frequency details, use other forms of lighting such as point lighting with shadows or SSGI.</p>
+</div>
+<p>You can have multiple <code class="docutils literal notranslate"><span class="pre">DDGIVolumes</span></code> with varying probe densities. The system will always make use of the probes in the denser volume. You might do this if you need a more precision in a specific area. It may not take an expensive volume to achieve more precise sampling. The volume on the bottom right is a 5x5x5 <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> set to the default 288 rays per probe. A volume like this is relatively inexpensive and can help achieve the result you want!</p>
+<table class="colwidths-given docutils align-center">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Recommended probe density</p></th>
+<th class="head"><p>A higher density “detail” volume</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><img alt="probe" src="../_images/probes.png" /></p></td>
+<td><p><img alt="sub-volume" src="../_images/probe-density.png" /></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="emissive-surfaces-are-light-sources-with-rtxgi">
+<h4>Emissive surfaces are light sources with RTXGI<a class="headerlink" href="#emissive-surfaces-are-light-sources-with-rtxgi" title="Permalink to this headline">¶</a></h4>
+<p>In this example of the NVIDIA Attic scene, there are large emissive meshes outside the windows to generate extra indirect light.</p>
+<div class="figure align-center" id="id5">
+<a class="reference internal image-reference" href="../_images/emissive-surfaces.png"><img alt="../_images/emissive-surfaces.png" src="../_images/emissive-surfaces.png" style="width: 1205.0px; height: 744.0px;" /></a>
+<p class="caption"><span class="caption-text">Emissive meshes added outside the NVIDIA Attic to add indirect lighting.</span><a class="headerlink" href="#id5" title="Permalink to this image">¶</a></p>
+</div>
+<p><em>Any emissive surface can be a light source with RTXGI</em>. The larger and more physically available the light emissive mesh is to RTXGI probes, the greater the lighting contribution. Emissive surface values can also be turned up to generate more light. With this approach, you might find it’s better to switch from 10-bit irradiance to 32-bit irradiance, since this provides a more detailed range of light contributions. <strong>32-bit irradiance should be used with caution</strong> though, since it increases the memory cost 3x. Only enable 32-bit irradiance when absolutely necessary!</p>
+<p>With RTXGI, it is now possible to light a scene with fewer point lights, spot lights, and/or area lights. Instead, you can rely on a combination of a few lights and emissive surfaces. This change will not only improve workflow and iteration time, but it can improve performance (due to fewer lights). You may find it’s better to take on the small fixed cost of RTXGI instead of using many shadow casting lights. <strong>Lighting a scene in this way is a different approach, but may produce a result that runs faster and is easier to create</strong>.</p>
+<p><strong>Here’s a practical example:</strong> <br/>
+Emissive meshes generate extra light without being a visible part of the scene. In UE4, the emissive meshes can be marked as <em>only visible to ray tracing</em>. You can create “hidden” emissive meshes to generate extra global illumination in areas where the visible mesh is too small to contribute on its own. To do this, make use of the <code class="docutils literal notranslate"><span class="pre">RayTracingQualitySwitch</span></code> node.</p>
+<table class="colwidths-given docutils align-center">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Indirect lighting from hidden emissive meshes</p></th>
+<th class="head"><p>Hidden emissive meshes visualized</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><img alt="emissive" src="../_images/emissive-surfaces2.png" /></p></td>
+<td><p><img alt="emissive2" src="../_images/green-lights.png" /></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="make-sure-rtxgi-is-contributing-light-where-you-want">
+<h4>Make sure RTXGI is contributing light where you want<a class="headerlink" href="#make-sure-rtxgi-is-contributing-light-where-you-want" title="Permalink to this headline">¶</a></h4>
+<p>RTXGI doesn’t automatically make every surface brighter. It can require some fine tuning and the final result is a combination of your materials, overall lighting, postprocess settings, and other choices. A handy way to start developing your baseline for the global illumination contribution is to look at your scene in <code class="docutils literal notranslate"><span class="pre">Lightingonly</span></code> mode. <code class="docutils literal notranslate"><span class="pre">Lightingonly</span></code> is useful in this case because it displays all surfaces with a flat 50% gray color. When turning RTXGI on and off, you’ll get a clear understanding of the true global illumination contribution being made by various lighting sources.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Even though the surfaces display as 50% gray, they still contribute color lighting and bounce, so you are getting a good look at what the lighting is doing.</p>
+</div>
+<table class="colwidths-given docutils align-center">
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Lightingonly mode, with direct lighting only</p></th>
+<th class="head"><p>Lightingonly mode, with direct lighting and RTXGI</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><img alt="direct" src="../_images/direct-only.png" /></p></td>
+<td><p><img alt="indirect" src="../_images/direct+rtxgi.png" /></p></td>
+</tr>
+</tbody>
+</table>
+<p>As you can imagine, dark surfaces don’t reflect light well (very dark surfaces don’t reflect light at all!). If your textures are dark (typically below the 50% brightness threshold), they will have less bounce light and a smaller global illumination contribution. This is not necessarily a bad result. If objects are meant to be very dark then the lighting is as intended and still physically based. Brighter surfaces will contribute more obvious bounce light (since they reflect it). Think of the visual look of a game like Mirror’s Edge - with it’s very bright and colorful surfaces and how much indirect bounce lighting it shows off.</p>
+<p><strong>The Ultimate Tip:</strong> <br/>
+Think about your surfaces and how they relate to global lighting. If your goal is to make sure you have a lot of indirect light in your scene, even small value changes can have an impact on the final indirect lighting result. It may not take much of a shift in some cases to get the result you want.</p>
+<div class="figure align-center" id="id6">
+<a class="reference internal image-reference" href="../_images/direct+rtxgi+texture.png"><img alt="../_images/direct+rtxgi+texture.png" src="../_images/direct+rtxgi+texture.png" style="width: 1167.0px; height: 716.0px;" /></a>
+<p class="caption"><span class="caption-text">Caption</span><a class="headerlink" href="#id6" title="Permalink to this image">¶</a></p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="DDGI.html" class="btn btn-neutral float-left" title="Dynamic Diffuse Global Illumination" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019-2020, NVIDIA
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

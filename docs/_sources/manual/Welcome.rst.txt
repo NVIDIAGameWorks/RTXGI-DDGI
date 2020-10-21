@@ -7,11 +7,11 @@
 Welcome
 =========
 
-Welcome to the NVIDIA |reg| RTX Global Illumination (RTXGI) SDK version 1.0. The RTXGI SDK is a software development kit that leverages the power of GPU ray tracing to provide scalable solutions for the computation of Global Illumination (GI) in real-time graphics applications.
+Welcome to the NVIDIA |reg| RTX Global Illumination (RTXGI) SDK version 1.1. The RTXGI SDK is a software development kit that leverages the power of GPU ray tracing to provide scalable solutions for the computation of Global Illumination (GI) in real-time graphics applications.
 
-A primary goal of this SDK is to maintain optimized implementations of global lighting algorithms that are flexible enough to be useful in both real-time and pre-computed lighting scenarios. This scalable design allows RTXGI to be an effective tool across a wide range of platforms of varying computational capability. Algorithm implementations provided in this SDK require support for Microsoft's DirectX |reg| Raytracing (DXR) API since the ability to trace arbitrary rays is an essential component that provides the flexibly to dynamically update lighting information at runtime. It is also possible to use RTXGI on development machines with DXR support, and load pre-computed RTXGI data for runtime use on platforms without DXR.
+A primary goal of this SDK is to maintain optimized implementations of global lighting algorithms that are flexible enough to be useful in both real-time and pre-computed lighting scenarios. This scalable design allows RTXGI to be an effective tool across a wide range of platforms of varying computational capability. Algorithm implementations provided in this SDK require support for Microsoft's DirectX |reg| Raytracing (DXR) API since the ability to trace arbitrary rays is an essential component that provides the flexibly to dynamically update lighting information at runtime. It is also possible to use RTXGI on development machines with DXR support, and load pre-computed RTXGI data for runtime use on platforms without DXR support.
 
-In time, the SDK will provide a collection of global illumination algorithms that represent various points on the image quality and performance spectrum. With this first release of the SDK, we introduce our implementation of the *Dynamic Diffuse Global Illumination (DDGI)* algorithm, `first described in this academic publication from NVIDIA Research <http://jcgt.org/published/0008/02/01/>`_ along with collaborators at McGill University and the University of Montreal. Since this algorithm is based on precomputed irradiance probes, a common solution employed in real-time rendering today, the DDGI algorithm serves as an ideal entry point for developers to bring the benefits of real-time ray tracing to their tools, technology, and applications without substantial effort. Furthermore, the implementation in this SDK includes performance improvements and optimization techniques not available elsewhere.
+In time, the SDK will provide a collection of global illumination algorithms that represent various points on the image quality and performance spectrum. With this first release of the SDK, we introduce our implementation of the *Dynamic Diffuse Global Illumination (DDGI)* algorithm, `first described in this academic publication from NVIDIA Research <http://jcgt.org/published/0008/02/01/>`_ along with collaborators at McGill University and the University of Montreal. Since this algorithm is based on precomputed irradiance probes, a common solution employed in real-time rendering today, the DDGI algorithm serves as an ideal entry point for developers to bring the benefits of real-time ray tracing to their tools, technology, and applications without substantial effort or runtime performance penalties. Furthermore, the implementation in this SDK includes performance improvements and optimization techniques not available elsewhere.
 
 We look forward to seeing the amazing things you create with RTXGI!
 
@@ -21,7 +21,7 @@ About This Document
 
 This guide is intended to help the reader understand the algorithms, features, and usage of the RTXGI SDK. This guide does not exhaustively cover all details of the API; however, the majority of the most relevant information is discussed. The reader should refer to the source code for a complete understanding of the API.
 
-.. note:: The `Github RTXGI SDK 1.0 Issues page <https://github.com/NVIDIAGameWorks/RTXGI/issues>`_ is a good place to ask questions and report bugs. You must be signed into GitHub on an account that has been granted read access to see this page.
+.. note:: The `Github RTXGI SDK Issues page <https://github.com/NVIDIAGameWorks/RTXGI/issues>`_ is a good place to ask questions and report bugs. You must be signed into GitHub on an account that has been granted read access to see this page.
 
 ----------------------------------
 Overview of the SDK Distribution
@@ -38,3 +38,6 @@ the **rtxgi-sdk** directory of the RTXGI SDK distribution contains the core of t
 
 **Test Harness Sample Application:**
 in addition to the core SDK source code, full source code samples are also provided in the RTXGI SDK distribution in the **samples** directory. The first sample available is the Test Harness sample application. The Test Harness serves as an example of how a host application is expected to integrate the SDK, manage resources, and interact with the public API. To get jump started, check out the :ref:`QUICKSTART` page. To learn more about the Test Harness application, head over to the :ref:`Harness` page.
+
+**Unreal Engine 4 Plugin:**
+the **ue4-plugin** directory of the RTXGI SDK distribution contains zip archives of the Unreal Engine 4 RTXGI plugin for the supported versions of the Unreal Engine. To learn more about the UE4 RTXGI plugin, head over to the :ref:`UE4Plugin` page.

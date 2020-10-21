@@ -18,6 +18,7 @@ namespace rtxgi
     const static float RTXGI_PI = 3.1415926535897932f;
 
     float3 Normalize(float3 vector);
+    int AbsFloor(float f);
 
     // --- Addition ------------------------------------------------------------
 
@@ -28,6 +29,10 @@ namespace rtxgi
     int3 operator+(const int3 &lhs, const int3 &rhs);
     int3 operator+(const int3 &lhs, const float3 &rhs);
     int3 operator+(const int3 &lhs, const int &rhs);
+
+    void operator+=(int2 &lhs, const int2 &rhs);
+    void operator+=(int3 &lhs, const int3 &rhs);
+    void operator+=(int4 &lhs, const int4 &rhs);
 
     float2 operator+(const float2 &lhs, const float2 &rhs);
     float2 operator+(const float2 &lhs, const int2 &rhs);
@@ -126,6 +131,13 @@ namespace rtxgi
     void operator/=(float2 &lhs, const float2 &rhs);
     void operator/=(float3 &lhs, const float3 &rhs);
     void operator/=(float4 &lhs, const float4 &rhs);
+
+    // --- Modulus ------------------------------------------------------------
+    int2 operator%(const int2& lhs, const int2& rhs);
+    int2 operator%(const int2& lhs, const int& rhs);
+
+    int3 operator%(const int3& lhs, const int3& rhs);
+    int3 operator%(const int3& lhs, const int& rhs);
 
     // --- Equalities ------------------------------------------------------------
 

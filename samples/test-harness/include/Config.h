@@ -10,24 +10,24 @@
 
 #pragma once
 
-#include <fstream>
-
 #include "Common.h"
 #include "Input.h"
 #include "rtxgi/ddgi/DDGIVolume.h"
 
+#include <fstream>
+
 namespace Config
 {
-    bool ParseCommandLine(LPWSTR lpCmdLine, ConfigInfo &config, ofstream &log);
+    bool ParseCommandLine(LPWSTR lpCmdLine, ConfigInfo &config, std::ofstream &log);
     bool Load(
         ConfigInfo &config,
         LightInfo &lights,
-        CameraInfo &camera,
-        rtxgi::DDGIVolumeDesc &desc,
+        Camera &camera,
+        std::vector<rtxgi::DDGIVolumeDesc> &descs,
         InputInfo &inputInfo,
         InputOptions &inputOptions,
         RTOptions &rtOptions,
         PostProcessOptions &postOptions,
         VizOptions &vizOptions,
-        ofstream &log);
+        std::ofstream &log);
 }

@@ -34,6 +34,15 @@ namespace rtxgi
         Count
     };
 
+#if RTXGI_DDGI_PROBE_SCROLL
+    enum class EDDGIVolumeMovementType
+    {
+        Default = 0,
+        Scrolling,
+        Count
+    };
+#endif
+
     /**
     * Resources provided by the host application to be used by the volume.
     */
@@ -94,6 +103,7 @@ namespace rtxgi
     */
     struct DDGIVolumeDesc
     {
+        std::string     name;                                   // Name for the volume
         float3          origin = { 0.f, 0.f, 0.f };             // World-space origin of the volume.
         float3          probeGridSpacing = { 0.f, 0.f, 0.f };   // World-space distance between probes.
 
@@ -140,6 +150,16 @@ namespace rtxgi
         // Probe relocation and state classifier assume probes with more than
         // this ratio of backface hits are inside of geometry.
         float           probeBackfaceThreshold = 0.25f;
+#endif
+
+#if RTXGI_DDGI_PROBE_SCROLL
+        // The type of movement the volume supports
+        // 0: Default movement with the Move() function
+        // 1: Scrolling movement with the Scroll() function
+        EDDGIVolumeMovementType movementType = EDDGIVolumeMovementType::Default;
+
+        // Volume grid-space offsets for probe scrolling
+        int3            probeScrollOffsets = { 0, 0, 0 };
 #endif
 
 #if RTXGI_DDGI_SDK_MANAGED_RESOURCES
@@ -222,9 +242,6 @@ namespace rtxgi
     class DDGIVolume
     {
     public:
-
-        DDGIVolume(std::string name) : m_name(name) {}
-
         /**
          * Allocates resources for the volume if resource management is enabled.
          * Computes the bounding box and performs other initialization.
@@ -232,9 +249,29 @@ namespace rtxgi
         ERTXGIStatus Create(DDGIVolumeDesc &desc, DDGIVolumeResources &resources);
 
         /**
-         * Move the volume's location by the given translation.
+         * Move the volume's location by the given translation in world-space units.
          */
         ERTXGIStatus Move(float3 translation);
+
+#if RTXGI_DDGI_PROBE_SCROLL
+        /**
+         * Move the volume probe grid by the given translation, preserving interior probe positions
+         * by swapping probes from the "back" side of the volume (i.e. the side opposite the motion
+         * direction) to the "front". This kind of motion is called "scolling" since a fixed set of
+         * probes will scroll within the volume's extent.
+         */
+        ERTXGIStatus Scroll(int3 translation);
+
+        /**
+        * Scrolling movement with an ellipsoid deadzone.
+        */
+        ERTXGIStatus Scroll(float3 translation, float3 deadzoneRadii);
+
+        /**
+        * Scrolling movement with an axis-aligned bounding box deadzone.
+        */
+        ERTXGIStatus Scroll(float3 translation, AABB deadzoneBBox);
+#endif /* RTXGI_DDGI_PROBE_SCROLL */
 
         /**
          * Updates the volume's random rotation and constant buffer.
@@ -326,12 +363,16 @@ namespace rtxgi
 
         void SetProbeBrightnessThreshold(float value) { m_desc.probeBrightnessThreshold = value; }
 
+#if RTXGI_DDGI_PROBE_SCROLL
+        void SetMovementType(EDDGIVolumeMovementType value) { m_desc.movementType = value; }
+#endif
+
         //------------------------------------------------------------------------
         // Getters
         //------------------------------------------------------------------------
 
         std::string GetName() const { return m_name; }
-        
+
         float GetViewBias() const { return m_desc.viewBias; }
 
         float GetNormalBias() const { return m_desc.normalBias; }
@@ -346,11 +387,19 @@ namespace rtxgi
 
         float GetProbeBrightnessThreshold() const { return m_desc.probeBrightnessThreshold; }
 
+        float3 GetProbeGridSpacing() const { return m_desc.probeGridSpacing; }
+
+        int3 GetProbeGridCounts() const { return m_desc.probeGridCounts; }
+
+#if RTXGI_DDGI_PROBE_SCROLL
+        EDDGIVolumeMovementType GetMovementType() const { return m_desc.movementType; }
+#endif
+
         DDGIVolumeDesc GetDesc() const { return m_desc; }
 
         DDGIVolumeResources GetResources() const { return m_resources; }
 
-        int GetNumProbes() const {  return (m_desc.probeGridCounts.x * m_desc.probeGridCounts.y * m_desc.probeGridCounts.z); }      
+        int GetNumProbes() const {  return (m_desc.probeGridCounts.x * m_desc.probeGridCounts.y * m_desc.probeGridCounts.z); }
 
         int GetNumRaysPerProbe() const { return static_cast<int>(m_desc.numRaysPerProbe); }
 
@@ -400,6 +449,11 @@ namespace rtxgi
         ID3D12PipelineState*        m_probeClassifierActivateAllPSO = nullptr;
 #endif
 
+#if RTXGI_DDGI_PROBE_SCROLL
+        int3                        m_probeScrollOffsets = { 0, 0, 0 };                 // Grid-space space offsets for scrolling movement
+        float3                      m_probeScrollTranslation = { 0.f, 0.f, 0.f };       // Accumulated world-space translations for scrolling movement
+#endif
+
         D3D12_ROOT_SIGNATURE_DESC   m_rootSignatureDesc;                                // The root signature descriptor for the volume's compute shaders
 
         D3D12_CPU_DESCRIPTOR_HANDLE m_descriptorHeapStart;                              // Start location of the descriptor heap
@@ -407,8 +461,6 @@ namespace rtxgi
         UINT                        m_descriptorHeapOffset = 0;                         // Offset to the first available slot in the descriptor heap
 
         float4x4                    m_rotationTransform;                                // A random rotation transform, updated each frame for computing probe ray directions
-
-        DDGIVolume() {}
         
 #if RTXGI_DDGI_SDK_MANAGED_RESOURCES
         void CreateDescriptors(ID3D12Device* device);

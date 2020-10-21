@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>User’s Guide &mdash; RTXGI SDK 1.0  documentation</title>
+  <title>User’s Guide &mdash; RTXGI SDK 1.1  documentation</title>
   
 
   
@@ -38,7 +38,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="License" href="License.html" />
-    <link rel="prev" title="NVIDIA RTXGI SDK 1.0 Documentation" href="../index.html" /> 
+    <link rel="prev" title="NVIDIA RTXGI SDK 1.1 Documentation" href="../index.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -52,7 +52,7 @@
           
 
           
-            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.0
+            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.1
           
 
           
@@ -93,6 +93,7 @@
 <li class="toctree-l2"><a class="reference internal" href="Harness.html">Test Harness</a></li>
 <li class="toctree-l2"><a class="reference internal" href="SDKOverview.html">RTXGI SDK Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="DDGI.html">Dynamic Diffuse Global Illumination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="UE4Plugin.html">Unreal Engine 4 Plugin</a></li>
 </ul>
 </li>
 </ul>
@@ -109,7 +110,7 @@
       <nav class="wy-nav-top" aria-label="top navigation">
         
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="../index.html">RTXGI SDK 1.0</a>
+          <a href="../index.html">RTXGI SDK 1.1</a>
         
       </nav>
 
@@ -160,7 +161,7 @@
   <div class="section" id="user-s-guide">
 <h1>User’s Guide<a class="headerlink" href="#user-s-guide" title="Permalink to this headline">¶</a></h1>
 <img alt="../_images/RTXGILogo.png" src="../_images/RTXGILogo.png" />
-<p>Built Apr 13, 2020</p>
+<p>Built Sep 10, 2020</p>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="License.html">License</a></li>
@@ -202,7 +203,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="Harness.html#additional-features">Additional Features</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="Harness.html#display-adaptation">Display Adaptation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="Harness.html#ray-traced-ambient-occlusion-denoising">Ray Traced Ambient Occlusion &amp; Denoising</a></li>
+<li class="toctree-l3"><a class="reference internal" href="Harness.html#ray-traced-ambient-occlusion-and-denoising">Ray Traced Ambient Occlusion and Denoising</a></li>
 </ul>
 </li>
 </ul>
@@ -239,13 +240,25 @@
 <li class="toctree-l2"><a class="reference internal" href="DDGI.html#computing-indirect-lighting-from-a-volume">Computing Indirect Lighting from a Volume</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="DDGI.html#probe-irradiance-gamma">Probe Irradiance Gamma</a></li>
 <li class="toctree-l3"><a class="reference internal" href="DDGI.html#compositing-indirect-lighting">Compositing Indirect Lighting</a></li>
-<li class="toctree-l3"><a class="reference internal" href="DDGI.html#volume-blending-for-regions-outside-of-a-volume">Volume Blending for Regions Outside of a Volume</a></li>
-<li class="toctree-l3"><a class="reference internal" href="DDGI.html#multiple-volume-blending">Multiple Volume Blending</a></li>
+<li class="toctree-l3"><a class="reference internal" href="DDGI.html#volume-blending">Volume Blending</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="DDGI.html#early-access-features">Early Access Features</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="DDGI.html#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a></li>
-<li class="toctree-l3"><a class="reference internal" href="DDGI.html#probe-state-classification">Probe State Classification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="DDGI.html#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="DDGI.html#probe-state-classification">Probe State Classification</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="DDGI.html#fixed-rays-for-relocation-and-classification">Fixed Rays for Relocation and Classification</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="DDGI.html#early-access-features">Early Access Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="DDGI.html#infinite-scrolling-volume-movement">Infinite Scrolling Volume Movement</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="UE4Plugin.html">Unreal Engine 4 Plugin</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="UE4Plugin.html#plugin-contents">Plugin Contents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="UE4Plugin.html#getting-started">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="UE4Plugin.html#functionality">Functionality</a></li>
+<li class="toctree-l2"><a class="reference internal" href="UE4Plugin.html#artist-overview">Artist Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="UE4Plugin.html#using-rtxgi">Using RTXGI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="UE4Plugin.html#tips-and-tricks">Tips and Tricks</a></li>
 </ul>
 </li>
 </ul>
@@ -265,7 +278,7 @@
         <a href="License.html" class="btn btn-neutral float-right" title="License" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="../index.html" class="btn btn-neutral float-left" title="NVIDIA RTXGI SDK 1.0 Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="../index.html" class="btn btn-neutral float-left" title="NVIDIA RTXGI SDK 1.1 Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   
