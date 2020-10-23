@@ -96,7 +96,7 @@ cbuffer RTRootConstants : register(b6)
     float NormalBias;
     float ViewBias;
     uint  NumBounces;
-    float RTPad;
+    float SkyIntensity;
 };
 
 #endif /* RT_GLOBAL_ROOT_SIGNATURE_HLSL */

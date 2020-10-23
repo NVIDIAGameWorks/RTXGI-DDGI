@@ -11,7 +11,8 @@
 #ifndef RTXGI_COMMON_HLSL
 #define RTXGI_COMMON_HLSL
 
-const static float RTXGI_PI = 3.1415926535897932f;
+static const float RTXGI_PI = 3.1415926535897932f;
+static const float RTXGI_2PI = 6.2831853071795864f;
 
 //------------------------------------------------------------------------
 // Math Helpers

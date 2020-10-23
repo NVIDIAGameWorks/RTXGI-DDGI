@@ -25,9 +25,9 @@ void AHS(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes attr
         float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);        
         float2 uv0 = GetInterpolatedUV0(PrimitiveIndex(), barycentrics);
 
-        if (baseColorTexIdx > -1)
+        if (albedoTexIdx > -1)
         {
-            alpha = Textures[baseColorTexIdx].SampleLevel(BilinearSampler, uv0, 0).a;
+            alpha = Textures[albedoTexIdx].SampleLevel(BilinearSampler, uv0, 0).a;
         }
     }
 

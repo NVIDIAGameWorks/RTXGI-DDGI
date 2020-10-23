@@ -85,7 +85,7 @@ float4 PS(PSInput input) : SV_TARGET
         input.position.y <= (irradianceRect.y + distanceRect.y))
     {
         coords = float2(input.position.x, (input.position.y - irradianceRect.y)) / distanceRect.xy;
-        return float4(DDGIProbeDistanceSRV.SampleLevel(PointSampler, coords, 0).rg / VizDistanceDivisor, 0.f, 1.f);
+        return float4((2.f * DDGIProbeDistanceSRV.SampleLevel(PointSampler, coords, 0).rg) / VizDistanceDivisor, 0.f, 1.f);
     }
 
     // RT Radiance

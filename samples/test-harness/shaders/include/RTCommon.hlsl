@@ -13,7 +13,7 @@
 
 struct Payload
 {                                         // Byte Offset
-    float3  baseColor;                    // 12
+    float3  albedo;                       // 12
     float   opacity;                      // 16
     float3  worldPosition;                // 28
     float   metallic;                     // 32
@@ -27,8 +27,8 @@ struct Payload
 
 struct PackedPayload
 {                                         // Byte Offset     Format
-    uint3 baseColorAndNormal;             //                 X: 16: BaseColor.r  16: BaseColor.g
-                                          //                 Y: 16: BaseColor.b  16: Normal.x
+    uint3 albedoAndNormal;                //                 X: 16: Albedo.r  16: Albedo.g
+                                          //                 Y: 16: Albedo.b  16: Normal.x
                                           //                 Z: 16: Normal.y     16: Normal.z
                                           // 12
     uint  metallicAndRoughness;           // 16                 16: Metallic        16: Roughness
@@ -47,12 +47,12 @@ struct PackedPayload
 PackedPayload PackPayload(Payload input)
 {
     PackedPayload output = (PackedPayload)0;
-    output.baseColorAndNormal.x  =  f32tof16(input.baseColor.r);
-    output.baseColorAndNormal.x |= f32tof16(input.baseColor.g) << 16;
-    output.baseColorAndNormal.y  = f32tof16(input.baseColor.b);
-    output.baseColorAndNormal.y |= f32tof16(input.normal.x) << 16;
-    output.baseColorAndNormal.z  = f32tof16(input.normal.y);
-    output.baseColorAndNormal.z |= f32tof16(input.normal.z) << 16;
+    output.albedoAndNormal.x  =  f32tof16(input.albedo.r);
+    output.albedoAndNormal.x |= f32tof16(input.albedo.g) << 16;
+    output.albedoAndNormal.y  = f32tof16(input.albedo.b);
+    output.albedoAndNormal.y |= f32tof16(input.normal.x) << 16;
+    output.albedoAndNormal.z  = f32tof16(input.normal.y);
+    output.albedoAndNormal.z |= f32tof16(input.normal.z) << 16;
     output.metallicAndRoughness  = f32tof16(input.metallic);
     output.metallicAndRoughness |= f32tof16(input.roughness) << 16;
     output.worldPosAndShadingNormal.x  = f32tof16(input.worldPosition.x);
@@ -76,14 +76,14 @@ PackedPayload PackPayload(Payload input)
 Payload UnpackPayload(PackedPayload input)
 {
     Payload output = (Payload)0;
-    output.baseColor.x = f16tof32(input.baseColorAndNormal.x);
-    output.baseColor.y = f16tof32(input.baseColorAndNormal.x >> 16);
-    output.baseColor.z = f16tof32(input.baseColorAndNormal.y);
-    output.normal.x = f16tof32(input.baseColorAndNormal.y >> 16);
-    output.normal.y = f16tof32(input.baseColorAndNormal.z);
-    output.normal.z = f16tof32(input.baseColorAndNormal.z >> 16);
+    output.albedo.x = f16tof32(input.albedoAndNormal.x);
+    output.albedo.y = f16tof32(input.albedoAndNormal.x >> 16);
+    output.albedo.z = f16tof32(input.albedoAndNormal.y);
+    output.normal.x = f16tof32(input.albedoAndNormal.y >> 16);
+    output.normal.y = f16tof32(input.albedoAndNormal.z);
+    output.normal.z = f16tof32(input.albedoAndNormal.z >> 16);
     output.metallic = f16tof32(input.metallicAndRoughness);
-    output.roughness = f16tof32(input.metallicAndRoughness >> 16);    
+    output.roughness = f16tof32(input.metallicAndRoughness >> 16);
     output.worldPosition.x = f16tof32(input.worldPosAndShadingNormal.x);
     output.worldPosition.y = f16tof32(input.worldPosAndShadingNormal.x >> 16);
     output.worldPosition.z = f16tof32(input.worldPosAndShadingNormal.y);

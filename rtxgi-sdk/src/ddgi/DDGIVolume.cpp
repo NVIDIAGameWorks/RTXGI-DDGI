@@ -50,8 +50,11 @@ namespace rtxgi
         }
         else if (type == EDDGITextureType::Distance)
         {
-            // Note: FP16 will cause artifacts in many scenarios
+#if RTXGI_DDGI_DEBUG_FORMAT_DISTANCE
             return DXGI_FORMAT_R32G32_FLOAT;
+#else
+            return DXGI_FORMAT_R16G16_FLOAT;  // Note: in large environments FP16 may not be sufficient
+#endif
         }
         else if (type == EDDGITextureType::Offsets)
         {
@@ -1014,11 +1017,11 @@ namespace rtxgi
         // Also available at: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.53.1357&rep=rep1&type=pdf
 
         // Setup a random rotation matrix using 3 uniform RVs
-        float u1 = 2.f * RTXGI_PI * GetRandomNumber();
+        float u1 = RTXGI_2PI * GetRandomNumber();
         float cos1 = std::cosf(u1);
         float sin1 = std::sinf(u1);
 
-        float u2 = 2.f * RTXGI_PI * GetRandomNumber();
+        float u2 = RTXGI_2PI * GetRandomNumber();
         float cos2 = std::cosf(u2);
         float sin2 = std::sinf(u2);
         

@@ -92,6 +92,7 @@ struct RTOptions
     float normalBias = 0.f;
     float viewBias = 0.f;
     UINT  numBounces = 1;
+    float skyIntensity = 0.f;
 };
 
 struct PostProcessOptions
@@ -210,7 +211,7 @@ struct Mesh
 
 struct GPUMaterial
 {
-    DirectX::XMFLOAT3 baseColor = DirectX::XMFLOAT3(1.f, 1.f, 1.f);
+    DirectX::XMFLOAT3 albedo = DirectX::XMFLOAT3(1.f, 1.f, 1.f);
     float   opacity = 1.f;
     DirectX::XMFLOAT3 emissiveColor = DirectX::XMFLOAT3(0.f, 0.f, 0.f);
     float   roughness = 1.f;
@@ -218,7 +219,7 @@ struct GPUMaterial
     int     alphaMode = 0;                  // 0: Opaque, 1: Blend, 2: Masked
     float   alphaCutoff = 0.f;
     int     doubleSided = 0;                // 0: false, 1: true
-    int     baseColorTexIdx = -1;           // RGBA
+    int     albedoTexIdx = -1;              // RGBA [0-1]
     int     roughnessMetallicTexIdx = -1;   // Occlusion in R (not supported), Roughness in G, Metallic in B
     int     normalTexIdx = -1;              // Tangent space XYZ
     int     emissiveTexIdx = -1;            // Emissive RGB

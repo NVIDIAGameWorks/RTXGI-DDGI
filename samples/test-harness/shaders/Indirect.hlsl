@@ -47,12 +47,12 @@ float4 PS(PSInput input) : SV_TARGET
     float3 result = 0.f;
     float  ambientOcclusion = 1.f;
 
-    // Load the baseColor
-    float4 baseColor = GBufferA.Load(input.position.xy);
-    result = baseColor.rgb;
+    // Load the albedo
+    float4 albedo = GBufferA.Load(input.position.xy);
+    result = albedo.rgb;
 
     // Primary ray hit, need to light it
-    if (baseColor.a > 0.f)
+    if (albedo.a > 0.f)
     {
         float4 worldPosHitT = GBufferB.Load(input.position.xy);
         float3 normal = GBufferC.Load(input.position.xy).xyz;
@@ -101,14 +101,11 @@ float4 PS(PSInput input) : SV_TARGET
         irradiance *= ambientOcclusion;
 #endif
 
-        // Compute color
+        // Compute final color
+        result = diffuse;
         if (UseDDGI == 1)
         {
-            result = saturate(diffuse + (baseColor.rgb / PI) * irradiance);
-        }
-        else
-        {
-            result = diffuse;
+            result += (albedo.rgb / PI) * irradiance;
         }
     }
 

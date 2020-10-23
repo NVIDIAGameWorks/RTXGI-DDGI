@@ -16,8 +16,6 @@
 void Miss(inout PackedPayload packedPayload)
 {
     Payload payload = (Payload)0;
-    //payload.baseColor = float3(1.f, 1.f, 1.f);
-    payload.baseColor = float3(0.f, 0.f, 0.f);
     payload.hitT = -1.f;
 
     packedPayload = PackPayload(payload);

@@ -11,6 +11,8 @@
 #ifndef NOISE_HLSL
 #define NOISE_HLSL
 
+#include "../../../../rtxgi-sdk/shaders/Common.hlsl"
+
 // ---[ Random Number Generation ]---
 
 /*
@@ -82,7 +84,7 @@ float3 GetWhiteNoise(uint2 screenPosition, uint screenWidth, uint frameNumber, f
 }
 
 /**
-* Compute a random direction on the hemisphere around the given direction.
+* Compute a uniformly distributed random direction on the hemisphere about the given (normal) direction.
 */
 float3 GetRandomDirectionOnHemisphere(float3 direction, inout uint seed)
 {
@@ -92,8 +94,28 @@ float3 GetRandomDirectionOnHemisphere(float3 direction, inout uint seed)
         p.x = GetRandomNumber(seed) * 2.f - 1.f;
         p.y = GetRandomNumber(seed) * 2.f - 1.f;
         p.z = GetRandomNumber(seed) * 2.f - 1.f;
-    } while (dot(direction, p) <= 0.f);
 
+        // Only accept unit length directions to stay inside
+        // the unit sphere and be uniformly distributed
+    } while (length(p) > 1.f);
+
+    // Direction is on the opposite hemisphere, flip and use it
+    if (dot(direction, p) < 0.f) p *= -1.f;
+    return normalize(p);
+}
+
+/**
+* Compute a cosine distributed random direction on the hemisphere about the given (normal) direction.
+*/
+float3 GetRandomCosineDirectionOnHemisphere(float3 direction, inout uint seed)
+{
+    // Choose random points on the unit sphere offset along the surface normal
+    // to produce a cosine distribution of random directions.
+    float a = GetRandomNumber(seed) * RTXGI_2PI;
+    float z = GetRandomNumber(seed) * 2.f - 1.f;
+    float r = sqrt(1.f - z * z);
+
+    float3 p = float3(r * cos(a), r * sin(a), z) + direction;
     return normalize(p);
 }
 

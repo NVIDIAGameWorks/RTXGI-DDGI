@@ -211,7 +211,7 @@ float2 DDGIGetOctahedralCoordinates(float3 direction)
 float3 DDGISphericalFibonacci(float index, float numSamples)
 {
     const float b = (sqrt(5.f) * 0.5f + 0.5f) - 1.f;
-    float phi = 2.f * RTXGI_PI * frac(index * b);
+    float phi = RTXGI_2PI * frac(index * b);
     float cosTheta = 1.f - (2.f * index + 1.f) * (1.f / numSamples);
     float sinTheta = sqrt(saturate(1.f - (cosTheta * cosTheta)));
 

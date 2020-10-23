@@ -98,11 +98,6 @@ void RayGen()
 #endif
             result = DDGIProbeIrradianceSRV.SampleLevel(BilinearSampler, uv, 0).rgb;
 
-            // Filtered Distance
-            /*float2 uv = DDGIGetProbeUV(payload.instanceIndex, coords, DDGIVolume.probeGridCounts, DDGIVolume.probeNumDistanceTexels);
-            float  distance = DDGIProbeDistanceSRV.SampleLevel(BilinearSampler, uv, 0).r;
-            result = float3(distance, distance, distance) / 2.f;*/
-
             // Decode the tone curve
             float3 exponent = DDGIVolume.probeIrradianceEncodingGamma * 0.5f;
             result = pow(result, exponent);
@@ -111,7 +106,12 @@ void RayGen()
             result *= result;
 
             // Factored out of the probes
-            result *= (0.5f * RTXGI_PI);
+            result *= RTXGI_2PI;
+
+            // Filtered Distance
+            /*float2 uv = DDGIGetProbeUV(payload.instanceIndex, coords, DDGIVolume.probeGridCounts, DDGIVolume.probeNumDistanceTexels);
+            float  distance = 2.f * DDGIProbeDistanceSRV.SampleLevel(BilinearSampler, uv, 0).r;
+            result = float3(distance, distance, distance) / 2.f;*/
 
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
             const float3 INACTIVE_COLOR = float3(1.f, 0.f, 0.f);      // Red

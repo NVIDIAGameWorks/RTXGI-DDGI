@@ -66,9 +66,11 @@ void RayGen()
     // Probe Ray Trace
     PackedPayload packedPayload = (PackedPayload)0;
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-    // pass in the probeState flag as the first uint, will be overwritten by the correct content at the end of TraceRay
-    packedPayload.baseColorAndNormal.x = probeState;
+    // Pass in the probeState flag as the first uint.
+    // It is overwritten by at the end of TraceRay.
+    packedPayload.albedoAndNormal.x = probeState;
 #endif
+
     TraceRay(
         SceneBVH,
         RAY_FLAG_NONE,
@@ -79,25 +81,21 @@ void RayGen()
         ray,
         packedPayload);
 
-    // Unpack the payload
-    Payload payload = UnpackPayload(packedPayload);
-
-    result = float4(payload.baseColor, payload.hitT);
-
-    Texture2D<float4> DDGIProbeIrradianceSRV = GetDDGIProbeIrradianceSRV(volumeSelect);
-    Texture2D<float4> DDGIProbeDistanceSRV = GetDDGIProbeDistanceSRV(volumeSelect);
     RWTexture2D<float4> DDGIProbeRTRadiance = GetDDGIProbeRTRadianceUAV(volumeSelect);
 
     // Ray miss. Set hit distance to a large value and exit early.
-    if (payload.hitT < 0.f)
+    if (packedPayload.hitT < 0.f)
     {
 #if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
-        DDGIProbeRTRadiance[DispatchIndex.xy] = float4(payload.baseColor / PI, 1e27f);
+        DDGIProbeRTRadiance[DispatchIndex.xy] = float4(SkyIntensity.xxx, 1e27f);
 #else
-        DDGIProbeRTRadiance[DispatchIndex.xy] = float4(asfloat(RTXGIFloat3ToUint(payload.baseColor / PI)), 1e27f, 0.f, 0.f);
+        DDGIProbeRTRadiance[DispatchIndex.xy] = float4(asfloat(RTXGIFloat3ToUint(SkyIntensity.xxx)), 1e27f, 0.f, 0.f);
 #endif
         return;
     }
+
+    // Unpack the payload
+    Payload payload = UnpackPayload(packedPayload);
 
     // Hit a surface backface.
     if (payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE)
@@ -113,9 +111,9 @@ void RayGen()
     }
 
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-    // hit a frontface, but probe is inactive, so this ray will only be used for reclassification, don't need any lighting
     if (probeState == PROBE_STATE_INACTIVE)
     {
+        // Hit a frontface, but probe is inactive, so this ray will only be used for reclassification, don't need any lighting
 #if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
         DDGIProbeRTRadiance[DispatchIndex.xy].w = payload.hitT;
 #else
@@ -131,6 +129,9 @@ void RayGen()
     // Indirect Lighting (recursive)
     float3 irradiance = 0.f;
 #if RTXGI_DDGI_COMPUTE_IRRADIANCE_RECURSIVE
+    Texture2D<float4> DDGIProbeIrradianceSRV = GetDDGIProbeIrradianceSRV(volumeSelect);
+    Texture2D<float4> DDGIProbeDistanceSRV = GetDDGIProbeDistanceSRV(volumeSelect);
+
     float3 surfaceBias = DDGIGetSurfaceBias(payload.normal, ray.Direction, DDGIVolume);
 
     DDGIVolumeResources resources;
@@ -142,6 +143,7 @@ void RayGen()
 #endif
 #if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
     resources.probeStates = DDGIProbeStates;
+
 #endif
 
     // Compute volume blending weight
@@ -162,9 +164,9 @@ void RayGen()
         irradiance *= volumeBlendWeight;
     }
 #endif
-    
+
     // Compute final color
-    result = float4(diffuse + ((payload.baseColor / PI) * irradiance), payload.hitT);
+    result = float4(diffuse + ((payload.albedo / PI) * irradiance), payload.hitT);
 
 #if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
     // Use R32G32B32A32_FLOAT format. Store color components and hit distance as 32-bit float values.

@@ -229,9 +229,12 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
 #endif
     }
 
-    // Normalize the blended irradiance (or filtered distance), if the combined weight is not close to zero
+    // Normalize the blended irradiance (or filtered distance), if the combined weight is not close to zero.
+    // To match the Monte Carlo Estimator for Irradiance, we should divide by N. Instead, we are dividing by
+    // N * sum(cos(theta)) (the sum of the weights) to reduce variance.
+    // To account for this, we must mulitply in a factor of 1/2.
     const float epsilon = 1e-9f * float(DDGIVolume.numRaysPerProbe);
-    result.rgb *= 1.f / max(result.a, epsilon);
+    result.rgb *= 1.f / max(2.f * result.a, epsilon);
 
 #if RTXGI_DDGI_BLEND_RADIANCE
     // Tone-mapping gamma adjustment

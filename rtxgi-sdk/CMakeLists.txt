@@ -18,7 +18,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "lib")
 
 set(RTXGI_SDK_VERSION_MAJOR 1)
 set(RTXGI_SDK_VERSION_MINOR 1)
-set(RTXGI_SDK_VERSION_REVISION 0)
+set(RTXGI_SDK_VERSION_REVISION 2)
 
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4" )
     message( FATAL_ERROR "The RTXGI SDK requires the Win10 64-bit toolset. Select a Visual Studio Win64 generator." )

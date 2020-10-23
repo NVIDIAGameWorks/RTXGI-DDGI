@@ -141,10 +141,10 @@ void ParseGLTFMaterials(const tinygltf::Model &gltfData, Scene &scene)
         material.name = gltfMaterial.name;
         material.data.doubleSided = (int)gltfMaterial.doubleSided;
 
-        // BaseColor and Opacity
-        material.data.baseColor = XMFLOAT3((float)pbr.baseColorFactor[0], (float)pbr.baseColorFactor[1], (float)pbr.baseColorFactor[2]);
+        // Albedo and Opacity
+        material.data.albedo = XMFLOAT3((float)pbr.baseColorFactor[0], (float)pbr.baseColorFactor[1], (float)pbr.baseColorFactor[2]);
         material.data.opacity = (float)pbr.baseColorFactor[3];
-        material.data.baseColorTexIdx = pbr.baseColorTexture.index;
+        material.data.albedoTexIdx = pbr.baseColorTexture.index;
 
         // Alpha
         material.data.alphaCutoff = static_cast<float>(gltfMaterial.alphaCutoff);

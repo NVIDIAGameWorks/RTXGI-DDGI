@@ -383,6 +383,7 @@ bool ParseRayTracing(std::string &configString, RTOptions &options, std::ofstrea
         if (ParseIfExists("rtViewBias=", options.viewBias, line, status, log)) continue;
         if (ParseIfExists("rtNormalBias=", options.normalBias, line, status, log)) continue;
         if (ParseIfExists("rtNumBounces=", options.numBounces, line, status, log)) continue;
+        if (ParseIfExists("rtSkyIntensity=", options.skyIntensity, line, status, log)) continue;
 
         if (!status) return false;
     }
@@ -408,6 +409,7 @@ bool ParsePostProcess(std::string &configString, PostProcessOptions &options, st
         if (ParseIfExists("AORadius=", options.AORadius, line, status, log)) continue;
         if (ParseIfExists("AOBias=", options.AOBias, line, status, log)) continue;
         if (ParseIfExists("AOFilterDepthSigma=", options.AOFilterDepthSigma, line, status, log)) continue;
+        if (ParseIfExists("AOPower=", options.AOPowerLog, line, status, log)) continue;
 
         if (!status) return false;
     }

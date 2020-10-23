@@ -520,7 +520,7 @@ bool CreateVolume(
 {
     log << "Creating RTXGI DDGI Volume...";
 
-    assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.10.00") == 0);
+    assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.10.20") == 0);
 
     rtxgi::ERTXGIStatus status = rtxgi::ERTXGIStatus::OK;
 
@@ -814,8 +814,8 @@ void RayTraceProbes(
     d3d.cmdList->SetComputeRootDescriptorTable(3, resources.samplerHeap->GetGPUDescriptorHandleForHeapStart());
 
     // Set ray tracing root constants
-    UINT rtConstants[2] = { *(UINT*)&rtOptions.normalBias, *(UINT*)&rtOptions.viewBias };
-    d3d.cmdList->SetComputeRoot32BitConstants(6, 2, &rtConstants, 0);
+    UINT rtConstants[4] = { *(UINT*)&rtOptions.normalBias, *(UINT*)&rtOptions.viewBias, 0, *(UINT*)&rtOptions.skyIntensity };
+    d3d.cmdList->SetComputeRoot32BitConstants(6, 4, &rtConstants, 0);
 
     // set volume select root constant
     d3d.cmdList->SetComputeRoot32BitConstant(7, cbIndex, 0);
@@ -871,8 +871,8 @@ void RayTracePrimary(D3D12Global &d3d, DXRGlobal &dxr, D3D12Resources &resources
     d3d.cmdList->SetComputeRootDescriptorTable(3, resources.samplerHeap->GetGPUDescriptorHandleForHeapStart());
 
     // Set ray tracing root constants
-    UINT rtConstants[2] = { *(UINT*)&rtOptions.normalBias, *(UINT*)&rtOptions.viewBias };
-    d3d.cmdList->SetComputeRoot32BitConstants(6, 2, &rtConstants, 0);
+    UINT rtConstants[4] = { *(UINT*)&rtOptions.normalBias, *(UINT*)&rtOptions.viewBias, 0, *(UINT*)&rtOptions.skyIntensity };
+    d3d.cmdList->SetComputeRoot32BitConstants(6, 4, &rtConstants, 0);
 
     // Dispatch rays
     D3D12_DISPATCH_RAYS_DESC desc = {};
@@ -1157,8 +1157,8 @@ void PathTrace(D3D12Global &d3d, DXRGlobal &dxr, D3D12Resources &resources, RTOp
     };
     d3d.cmdList->SetComputeRoot32BitConstants(4, 11, noiseConstants, 0);
 
-    UINT rtConstants[3] = { *(UINT*)&rtOptions.normalBias, *(UINT*)&rtOptions.viewBias, rtOptions.numBounces };
-    d3d.cmdList->SetComputeRoot32BitConstants(6, 3, &rtConstants, 0);
+    UINT rtConstants[4] = { *(UINT*)&rtOptions.normalBias, *(UINT*)&rtOptions.viewBias, rtOptions.numBounces, *(UINT*)&rtOptions.skyIntensity };
+    d3d.cmdList->SetComputeRoot32BitConstants(6, 4, &rtConstants, 0);
 
     // Dispatch rays
     D3D12_DISPATCH_RAYS_DESC desc = {};

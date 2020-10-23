@@ -20,6 +20,7 @@ float3 TracePath(RayDesc ray, uint seed)
 {
     float3 throughput = float3(1.f, 1.f, 1.f);
     float3 color = float3(0.f, 0.f, 0.f);
+
     for (int i = 0; i < NumBounces; i++)
     {
         // Trace the ray
@@ -40,8 +41,7 @@ float3 TracePath(RayDesc ray, uint seed)
         // Miss, exit loop
         if (payload.hitT < 0.f)
         {
-            throughput *= payload.baseColor;
-            color += payload.baseColor * throughput;
+            color += SkyIntensity.xxx * throughput;
             break;
         }
 
@@ -50,28 +50,25 @@ float3 TracePath(RayDesc ray, uint seed)
 
         // Attenuate the color
         color += diffuse * throughput;
-        throughput *= (payload.baseColor / PI);
 
         // Increment the seed
         seed += i;
 
         // Set the ray origin for the next bounce
         ray.Origin = payload.worldPosition;
-
-        // Determine reflection direction based on roughness
-        // Rougher the material, the larger the set of reflected ray directions
-        float3 mirrorDirection = reflect(ray.Direction, payload.normal);
-        float3 randomDirection = GetRandomDirectionOnHemisphere(payload.normal, seed);
-        float3 direction = normalize(lerp(randomDirection, mirrorDirection, payload.roughness));
-
         ray.Origin += (payload.normal * NormalBias);
-        float3 target = ray.Origin + payload.normal + direction;
 
-        // Compute the ray direction for the next bounce
-        ray.Direction = normalize(target - ray.Origin);
+        // Select random directions on the hemisphere with a cos(theta) distribution and compute throughput
+        ray.Direction = GetRandomCosineDirectionOnHemisphere(payload.normal, seed);
+        throughput *= payload.albedo;
+
+        // Select random directions on the hemisphere with a uniform distribution and compute throughput
+        // [BRDF * cos(theta)] / PDF, where PDF = 1 / Area of Integration = 1 / 2PI
+        //ray.Direction = GetRandomDirectionOnHemisphere(payload.normal, seed);
+        //throughput *= (payload.albedo / PI) * dot(payload.normal, ray.Direction) * (2.f * PI);
     }
 
-    return saturate(color);
+    return color;
 }
 
 // ---[ Ray Generation Shader ]---
@@ -141,7 +138,7 @@ void RayGen()
         // Clear the accumulation buffer when moving
         PTAccumulation[LaunchIndex.xy] = float4(0.f, 0.f, 0.f, 0.f);
     }
-    
+
     // Normalize
     color /= numPaths;
 

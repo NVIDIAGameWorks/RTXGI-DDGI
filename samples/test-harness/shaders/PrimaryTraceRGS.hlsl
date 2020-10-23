@@ -49,22 +49,23 @@ void RayGen()
         ray,
         packedPayload);
 
+    // Ray Miss, early out.
+    if (packedPayload.hitT < 0.f)
+    {
+        GBufferA[LaunchIndex] = float4(SkyIntensity.xxx, 0.f);
+        GBufferB[LaunchIndex].w = -1.f;
+        return;
+    }
+
     // Unpack the payload
     Payload payload = UnpackPayload(packedPayload);
 
-    GBufferA[LaunchIndex] = float4(payload.baseColor, payload.hitT > -1.f ? 1.f : 0.f);
-    GBufferB[LaunchIndex] = float4(payload.worldPosition, payload.hitT);
+    // Compute direct diffuse lighting
+    float3 diffuse = DirectDiffuseLighting(payload, NormalBias, ViewBias, SceneBVH);
 
-    if (payload.hitT > -1.f)
-    {
-        // Compute direct diffuse lighting
-        float3 diffuse = DirectDiffuseLighting(payload, NormalBias, ViewBias, SceneBVH);
-        GBufferC[LaunchIndex] = float4(payload.normal, 1.f);
-        GBufferD[LaunchIndex] = float4(saturate(diffuse), 1.f);
-    }
-    else
-    {
-        GBufferC[LaunchIndex] = float4(0.f, 0.f, 0.f, 1.f);
-        GBufferD[LaunchIndex] = float4(0.f, 0.f, 0.f, 1.f);
-    }
+    // Write the GBuffer
+    GBufferA[LaunchIndex] = float4(payload.albedo, 1.f);
+    GBufferB[LaunchIndex] = float4(payload.worldPosition, payload.hitT);
+    GBufferC[LaunchIndex] = float4(payload.normal, 1.f);
+    GBufferD[LaunchIndex] = float4(diffuse, 1.f);
 }

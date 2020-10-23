@@ -63,7 +63,7 @@ float3 EvaluateSpotLight(Payload payload, float normalBias, float viewBias, Rayt
 {
     float3 lightVector = (spotLight.position - payload.worldPosition);
     float  lightDistance = length(lightVector);
-    
+
     // Early out, light energy doesn't reach the surface
     if (lightDistance > spotLight.maxDistance) return float3(0.f, 0.f, 0.f);
 
@@ -80,7 +80,7 @@ float3 EvaluateSpotLight(Payload payload, float normalBias, float viewBias, Rayt
     float  attenuation = SpotAttenuation(spotDirection, -lightDirection, spotLight.umbraAngle, spotLight.penumbraAngle);
     float  falloff = LightFalloff(lightDistance);
     float  window = LightWindowing(lightDistance, spotLight.maxDistance);
-    
+
     return spotLight.power * spotLight.color * nol * attenuation * falloff * window * visibility;
 }
 
@@ -132,9 +132,9 @@ float3 EvaluateDirectionalLight(Payload payload, float normalBias, float viewBia
 */
 float3 DirectDiffuseLighting(Payload payload, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
 {
-    float3 albedo = (payload.baseColor / PI);
+    float3 brdf = (payload.albedo / PI);
     float3 lighting = 0.f;
-    
+
     if (lightMask & 0x00000001)
     {
         lighting += EvaluateDirectionalLight(payload, normalBias, viewBias, bvh);
@@ -150,5 +150,5 @@ float3 DirectDiffuseLighting(Payload payload, float normalBias, float viewBias, 
         lighting += EvaluateSpotLight(payload, normalBias, viewBias, bvh);
     }
 
-    return (albedo * lighting);
+    return (brdf * lighting);
 }

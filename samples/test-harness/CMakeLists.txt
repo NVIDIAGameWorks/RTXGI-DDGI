@@ -22,6 +22,7 @@ project(TestHarness)
 
 file(GLOB TEST_HARNESS_CONFIG
     "config/cornell.ini"
+    "config/furnace.ini"
     "config/sponza.ini"
     "config/two-rooms.ini"
 )
@@ -133,7 +134,6 @@ ${TEST_HARNESS_CONFIG}
 ${TEST_HARNESS_SOURCE}
 ${TEST_HARNESS_SHADER_INCLUDE}
 ${TEST_HARNESS_SHADER_SOURCE}
-${TEST_HARNESS_HIT_SHADER_SOURCE}
 ${THIRD_PARTY_DXC_INCLUDE}
 ${THIRD_PARTY_DIRECTXTK_INCLUDE}
 ${THIRD_PARTY_DIRECTXTK_SOURCE}

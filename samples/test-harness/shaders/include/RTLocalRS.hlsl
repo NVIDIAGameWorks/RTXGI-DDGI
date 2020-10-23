@@ -15,7 +15,7 @@
 
 cbuffer MaterialCB                 : register(b3)
 {
-    float3  baseColor;
+    float3  albedo;
     float   opacity;
     float3  emissiveColor;
     float   roughness;
@@ -23,7 +23,7 @@ cbuffer MaterialCB                 : register(b3)
     int     alphaMode;
     float   alphaCutoff;
     int     doubleSided;
-    int     baseColorTexIdx;
+    int     albedoTexIdx;
     int     roughnessMetallicTexIdx;
     int     normalTexIdx;
     int     emissiveTexIdx;

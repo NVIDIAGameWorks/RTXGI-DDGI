@@ -140,7 +140,7 @@ float3 DDGIGetVolumeIrradiance(
 #else
         float2 probeTextureCoords = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeGridCounts, volume.probeNumDistanceTexels);
 #endif
-        float2 filteredDistance = resources.probeDistanceSRV.SampleLevel(resources.bilinearSampler, probeTextureCoords, 0).rg;
+        float2 filteredDistance = 2.f * resources.probeDistanceSRV.SampleLevel(resources.bilinearSampler, probeTextureCoords, 0).rg;
 
         float meanDistanceToSurface = filteredDistance.x;
         float variance = abs((filteredDistance.x * filteredDistance.x) - filteredDistance.y);
@@ -194,7 +194,11 @@ float3 DDGIGetVolumeIrradiance(
 
     irradiance *= (1.f / accumulatedWeights);   // Normalize by the accumulated weights
     irradiance *= irradiance;                   // Go back to linear irradiance
-    irradiance *= (0.5f * RTXGI_PI);            // Factored out of the probes
+    irradiance *= RTXGI_2PI;                    // Multiply by the area of the integration domain (hemisphere) to complete the Monte Carlo Estimator equation
+
+#if !RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE
+    irradiance *= 1.0989f;                      // Adjust for energy loss due to reduced precision in the R10G10B10A2 irradiance texture format
+#endif
 
     return irradiance;
 }

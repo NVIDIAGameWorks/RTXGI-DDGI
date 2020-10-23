@@ -23,7 +23,7 @@ void CHS(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttribute
     payload.instanceIndex = InstanceIndex();
 
     // load the probeState from the first uint
-    int probeState = packedPayload.baseColorAndNormal.x;
+    int probeState = packedPayload.albedoAndNormal.x;
     if (probeState == 1 /*PROBE_STATE_INACTIVE*/)
     {
         // inactive probe does not need any material data, so can return immediately
@@ -34,7 +34,7 @@ void CHS(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttribute
     float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
     VertexAttributes v = GetInterpolatedAttributes(PrimitiveIndex(), barycentrics);
 
-    payload.baseColor = baseColor;
+    payload.albedo = albedo;
     payload.worldPosition = mul(ObjectToWorld3x4(), float4(v.position, 1.f)).xyz;
 
     // Geometric normal
@@ -42,11 +42,11 @@ void CHS(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttribute
     payload.normal = normalize(mul(ObjectToWorld3x4(), float4(payload.normal, 1.f)).xyz);
     payload.shadingNormal = payload.normal;
 
-    // BaseColor and Opacity
-    if (baseColorTexIdx > -1)
+    // Albedo and Opacity
+    if (albedoTexIdx > -1)
     {
-        float4 bco = Textures[baseColorTexIdx].SampleLevel(BilinearSampler, v.uv0, 0);
-        payload.baseColor = bco.rgb;
+        float4 bco = Textures[albedoTexIdx].SampleLevel(BilinearSampler, v.uv0, 0);
+        payload.albedo = bco.rgb;
         payload.opacity = bco.a;
     }
 
@@ -55,10 +55,9 @@ void CHS(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttribute
     {
         float3x3 TBN = { v.tangent, v.bitangent, payload.normal };
         payload.shadingNormal = Textures[normalTexIdx].SampleLevel(BilinearSampler, v.uv0, 0).xyz;
-        payload.shadingNormal = (payload.shadingNormal * 2.f) - 1.f;        // Transform to [-1, 1]
-        payload.shadingNormal = normalize(mul(payload.shadingNormal, TBN)); // Transform tangent space normal to world space
+        payload.shadingNormal = (payload.shadingNormal * 2.f) - 1.f;                                                // Transform to [-1, 1]
+        payload.shadingNormal = normalize(mul(ObjectToWorld3x4(), float4(mul(payload.shadingNormal, TBN), 1.f)));   // Transform tangent space normal to world space
     }
-    payload.shadingNormal = normalize(mul(ObjectToWorld3x4(), float4(payload.shadingNormal, 1.f)).xyz);
 
     // Roughness and Metallic
     if (roughnessMetallicTexIdx > -1)
@@ -74,7 +73,7 @@ void CHS(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttribute
     {
         emissive = Textures[emissiveTexIdx].SampleLevel(BilinearSampler, v.uv0, 0).rgb;
     }
-    payload.baseColor += emissive;
+    payload.albedo += emissive;
 
     // Pack the payload
     packedPayload = PackPayload(payload);
