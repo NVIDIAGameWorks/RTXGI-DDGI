@@ -31,6 +31,16 @@ float3 LinearToSRGB(float3 rgb)
     );
 }
 
+float3 SRGBToLinear(float3 rgb)
+{
+    rgb = clamp(rgb, 0.f, 1.f);
+    return lerp(
+        pow((rgb + 0.055f) / 1.055f, 2.4f),
+        rgb / 12.92f,
+        LessThan(rgb, 0.04045f)
+    );
+}
+
 // ACES tone mapping curve fit to go from HDR to LDR
 //https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
 float3 ACESFilm(float3 x)

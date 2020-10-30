@@ -911,20 +911,6 @@ bool CreateRasterRootSignature(D3D12Global &d3d, D3D12Resources &resources)
 }
 
 /**
- * Create a compute pipeline state object.
- */
-bool CreateComputePSO(D3D12Global &d3d, D3D12_SHADER_BYTECODE &cs, ID3D12RootSignature* rs, ID3D12PipelineState** pso)
-{
-    D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
-    desc.pRootSignature = rs;
-    desc.CS = cs;
-
-    HRESULT hr = d3d.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(pso));
-    if (FAILED(hr)) return false;
-    return true;
-}
-
-/**
  * Create a graphics pipeline state object for full screen passes.
  */
 bool CreatePSO(D3D12Global &d3d, D3D12_SHADER_BYTECODE &vs, D3D12_SHADER_BYTECODE &ps, ID3D12RootSignature* rs, ID3D12PipelineState** pso)
@@ -996,12 +982,8 @@ bool CreateAOFilterPSO(D3D12Global &d3d, D3D12Resources &resources, ShaderCompil
 
     if (!Shaders::Compile(shaderCompiler, csInfo, true)) return false;
 
-    D3D12_SHADER_BYTECODE cs;
-    cs.BytecodeLength = csInfo.bytecode->GetBufferSize();
-    cs.pShaderBytecode = csInfo.bytecode->GetBufferPointer();
-
     // Create the PSO
-    if (!CreateComputePSO(d3d, cs, resources.computeRootSig, &resources.AOFilterPSO)) return false;
+    if (!D3D12::CreateComputePSO(d3d.device, resources.computeRootSig, csInfo.bytecode, &resources.AOFilterPSO)) return false;
 #if RTXGI_NAME_D3D_OBJECTS
     resources.AOFilterPSO->SetName(L"AO Filter PSO");
 #endif

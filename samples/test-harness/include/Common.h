@@ -37,15 +37,7 @@
 #include <crtdbg.h>
 #endif
 
-// Sets the number of probe relocation iterations to use during probe relocation
-#if RTXGI_DDGI_PROBE_RELOCATION
-const static int RTXGI_DDGI_MAX_PROBE_RELOCATION_ITERATIONS = 50;
-#endif
-
-#define VOLUME_DESCRIPTOR_HEAP_START_SLOT 11
-#define SCENE_TEXTURE_HEAP_START_SLOT 20
 #define AO_FILTER_BLOCK_SIZE 8 // Block is NxN. Tuned for perf. 32 maximum.
-
 #define NUM_MAX_VOLUMES 4
 
 //-----------------------------------------------------------------------------
@@ -240,38 +232,6 @@ struct Texture
     int width = 0;
     int height = 0;
     int stride = 0;
-};
-
-// ---[ Animation ] -----------------------------------------------------------
-
-enum class EAnimationTarget
-{
-    NONE = 0,
-    TRANSLATION,
-    ROTATION,
-    SCALE,
-    COUNT
-};
-
-enum class EAnimationInterpolation
-{
-    NONE = 0,
-    LINEAR,
-    STEP,
-    CUBICSPLINE,
-    COUNT
-};
-
-struct Animation
-{
-    int node = 0;
-    EAnimationInterpolation type = EAnimationInterpolation::NONE;
-    EAnimationTarget target = EAnimationTarget::NONE;
-
-    std::vector<float> keys;
-    std::vector<DirectX::XMFLOAT3> translation;
-    std::vector<DirectX::XMFLOAT4> rotation;
-    std::vector<DirectX::XMFLOAT3> scale;
 };
 
 // ---[ Scene Graph ] ---------------------------------------------------------

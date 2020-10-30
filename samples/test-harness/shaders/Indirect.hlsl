@@ -47,8 +47,9 @@ float4 PS(PSInput input) : SV_TARGET
     float3 result = 0.f;
     float  ambientOcclusion = 1.f;
 
-    // Load the albedo
+    // Load the sRGB albedo and convert it to linear before lighting
     float4 albedo = GBufferA.Load(input.position.xy);
+    albedo.rgb = SRGBToLinear(albedo.rgb);
     result = albedo.rgb;
 
     // Primary ray hit, need to light it

@@ -105,8 +105,12 @@ void RayGen()
             // Go back to linear irradiance
             result *= result;
 
-            // Factored out of the probes
-            result *= RTXGI_2PI;
+            // Multiply by the area of the integration domain (2PI) to complete the irradiance estimate. Divide by PI to normalize for the display.
+            result *= 2;
+
+#if !RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE
+            result *= 1.0989f;                      // Adjust for energy loss due to reduced precision in the R10G10B10A2 irradiance texture format
+#endif
 
             // Filtered Distance
             /*float2 uv = DDGIGetProbeUV(payload.instanceIndex, coords, DDGIVolume.probeGridCounts, DDGIVolume.probeNumDistanceTexels);
@@ -140,10 +144,7 @@ void RayGen()
             }
 #endif
 
-            // Apply tonemapping
-            result = ACESFilm(result);
-
-            // Gamma correct
+            // Convert to sRGB before storing
             result = LinearToSRGB(result);
 
             GBufferA[LaunchIndex] = float4(result, 0.f);

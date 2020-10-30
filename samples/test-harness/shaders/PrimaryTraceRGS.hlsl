@@ -52,7 +52,8 @@ void RayGen()
     // Ray Miss, early out.
     if (packedPayload.hitT < 0.f)
     {
-        GBufferA[LaunchIndex] = float4(SkyIntensity.xxx, 0.f);
+        // Convert albedo to sRGB before storing
+        GBufferA[LaunchIndex] = float4(LinearToSRGB(SkyIntensity.xxx), 0.f);
         GBufferB[LaunchIndex].w = -1.f;
         return;
     }
@@ -62,6 +63,9 @@ void RayGen()
 
     // Compute direct diffuse lighting
     float3 diffuse = DirectDiffuseLighting(payload, NormalBias, ViewBias, SceneBVH);
+
+    // Convert albedo to sRGB before storing
+    payload.albedo = LinearToSRGB(payload.albedo);
 
     // Write the GBuffer
     GBufferA[LaunchIndex] = float4(payload.albedo, 1.f);
