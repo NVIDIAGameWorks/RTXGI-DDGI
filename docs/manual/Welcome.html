@@ -1,8 +1,7 @@
 
 
 <!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<html class="writer-html5" lang="en" >
 <head>
   <meta charset="utf-8">
   
@@ -12,6 +11,10 @@
   
 
   
+  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
   
     <link rel="shortcut icon" href="../_static/favicon.ico"/>
   
@@ -19,7 +22,9 @@
   
 
   
-  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
   
     
       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
@@ -31,10 +36,6 @@
     <script type="text/javascript" src="../_static/js/theme.js"></script>
 
     
-
-  
-  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Quick Start" href="QuickStart.html" />
@@ -52,7 +53,7 @@
           
 
           
-            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.1
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> RTXGI SDK 1.1
           
 
           
@@ -78,6 +79,7 @@
           
         </div>
 
+        
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
             
@@ -105,6 +107,7 @@
             
           
         </div>
+        
       </div>
     </nav>
 
@@ -143,7 +146,7 @@
 
   <ul class="wy-breadcrumbs">
     
-      <li><a href="../index.html">Docs</a> &raquo;</li>
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
         
           <li><a href="Index.html">User’s Guide</a> &raquo;</li>
         
@@ -164,8 +167,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="welcome">
-<span id="id1"></span><h1>Welcome<a class="headerlink" href="#welcome" title="Permalink to this headline">¶</a></h1>
+  <span class="target" id="welcome"></span><div class="section" id="id1">
+<h1>Welcome<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
 <p>Welcome to the NVIDIA® RTX Global Illumination (RTXGI) SDK version 1.1. The RTXGI SDK is a software development kit that leverages the power of GPU ray tracing to provide scalable solutions for the computation of Global Illumination (GI) in real-time graphics applications.</p>
 <p>A primary goal of this SDK is to maintain optimized implementations of global lighting algorithms that are flexible enough to be useful in both real-time and pre-computed lighting scenarios. This scalable design allows RTXGI to be an effective tool across a wide range of platforms of varying computational capability. Algorithm implementations provided in this SDK require support for Microsoft’s DirectX® Raytracing (DXR) API since the ability to trace arbitrary rays is an essential component that provides the flexibly to dynamically update lighting information at runtime. It is also possible to use RTXGI on development machines with DXR support, and load pre-computed RTXGI data for runtime use on platforms without DXR support.</p>
 <p>In time, the SDK will provide a collection of global illumination algorithms that represent various points on the image quality and performance spectrum. With this first release of the SDK, we introduce our implementation of the <em>Dynamic Diffuse Global Illumination (DDGI)</em> algorithm, <a class="reference external" href="http://jcgt.org/published/0008/02/01/">first described in this academic publication from NVIDIA Research</a> along with collaborators at McGill University and the University of Montreal. Since this algorithm is based on precomputed irradiance probes, a common solution employed in real-time rendering today, the DDGI algorithm serves as an ideal entry point for developers to bring the benefits of real-time ray tracing to their tools, technology, and applications without substantial effort or runtime performance penalties. Furthermore, the implementation in this SDK includes performance improvements and optimization techniques not available elsewhere.</p>
@@ -181,15 +184,15 @@
 <div class="section" id="overview-of-the-sdk-distribution">
 <h2>Overview of the SDK Distribution<a class="headerlink" href="#overview-of-the-sdk-distribution" title="Permalink to this headline">¶</a></h2>
 <p><strong>License:</strong>
-the RTXGI SDK distribution includes the license as a text file at the root level. To learn more about the license and terms, head over to the <a class="reference internal" href="License.html#license"><span class="std std-ref">License</span></a> page.</p>
+the RTXGI SDK distribution includes the license as a text file at the root level. To learn more about the license and terms, head over to the <span class="xref std std-ref">License</span> page.</p>
 <p><strong>Documentation:</strong>
 the <strong>docs</strong> directory of the RTXGI SDK distribution contains the HTML documentation you are currently reading.</p>
 <p><strong>RTXGI SDK:</strong>
-the <strong>rtxgi-sdk</strong> directory of the RTXGI SDK distribution contains the core of the SDK, and the source code necessary to integrate RTXGI into your rendering engine. To learn more about the contents of the SDK, head over to the <a class="reference internal" href="SDKOverview.html#sdkoverview"><span class="std std-ref">RTXGI SDK Overview</span></a> page. Alternatively, you can jump ahead to the <a class="reference internal" href="DDGI.html#ddgi"><span class="std std-ref">Dynamic Diffuse Global Illumination</span></a> page to learn more about the algorithm.</p>
+the <strong>rtxgi-sdk</strong> directory of the RTXGI SDK distribution contains the core of the SDK, and the source code necessary to integrate RTXGI into your rendering engine. To learn more about the contents of the SDK, head over to the <span class="xref std std-ref">SDKOverview</span> page. Alternatively, you can jump ahead to the <span class="xref std std-ref">DDGI</span> page to learn more about the algorithm.</p>
 <p><strong>Test Harness Sample Application:</strong>
-in addition to the core SDK source code, full source code samples are also provided in the RTXGI SDK distribution in the <strong>samples</strong> directory. The first sample available is the Test Harness sample application. The Test Harness serves as an example of how a host application is expected to integrate the SDK, manage resources, and interact with the public API. To get jump started, check out the <a class="reference internal" href="QuickStart.html#quickstart"><span class="std std-ref">Quick Start</span></a> page. To learn more about the Test Harness application, head over to the <a class="reference internal" href="Harness.html#harness"><span class="std std-ref">Test Harness</span></a> page.</p>
+in addition to the core SDK source code, full source code samples are also provided in the RTXGI SDK distribution in the <strong>samples</strong> directory. The first sample available is the Test Harness sample application. The Test Harness serves as an example of how a host application is expected to integrate the SDK, manage resources, and interact with the public API. To get jump started, check out the <span class="xref std std-ref">QUICKSTART</span> page. To learn more about the Test Harness application, head over to the <span class="xref std std-ref">Harness</span> page.</p>
 <p><strong>Unreal Engine 4 Plugin:</strong>
-the <strong>ue4-plugin</strong> directory of the RTXGI SDK distribution contains zip archives of the Unreal Engine 4 RTXGI plugin for the supported versions of the Unreal Engine. To learn more about the UE4 RTXGI plugin, head over to the <a class="reference internal" href="UE4Plugin.html#ue4plugin"><span class="std std-ref">Unreal Engine 4 Plugin</span></a> page.</p>
+the <strong>ue4-plugin</strong> directory of the RTXGI SDK distribution contains zip archives of the Unreal Engine 4 RTXGI plugin for the supported versions of the Unreal Engine. To learn more about the UE4 RTXGI plugin, head over to the <span class="xref std std-ref">UE4Plugin</span> page.</p>
 </div>
 </div>
 
@@ -213,11 +216,19 @@ the <strong>ue4-plugin</strong> directory of the RTXGI SDK distribution contains
 
   <div role="contentinfo">
     <p>
+        
         &copy; Copyright 2019-2020, NVIDIA
 
     </p>
   </div>
-  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -228,7 +239,6 @@ the <strong>ue4-plugin</strong> directory of the RTXGI SDK distribution contains
 
   </div>
   
-
 
   <script type="text/javascript">
       jQuery(function () {

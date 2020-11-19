@@ -1,8 +1,7 @@
 
 
 <!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<html class="writer-html5" lang="en" >
 <head>
   <meta charset="utf-8">
   
@@ -12,6 +11,10 @@
   
 
   
+  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
   
     <link rel="shortcut icon" href="../_static/favicon.ico"/>
   
@@ -19,7 +22,9 @@
   
 
   
-  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
   
     
       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
@@ -31,10 +36,6 @@
     <script type="text/javascript" src="../_static/js/theme.js"></script>
 
     
-
-  
-  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="prev" title="Dynamic Diffuse Global Illumination" href="DDGI.html" /> 
@@ -51,7 +52,7 @@
           
 
           
-            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.1
+            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> RTXGI SDK 1.1
           
 
           
@@ -77,6 +78,7 @@
           
         </div>
 
+        
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
             
@@ -110,6 +112,7 @@
             
           
         </div>
+        
       </div>
     </nav>
 
@@ -148,7 +151,7 @@
 
   <ul class="wy-breadcrumbs">
     
-      <li><a href="../index.html">Docs</a> &raquo;</li>
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
         
           <li><a href="Index.html">User’s Guide</a> &raquo;</li>
         
@@ -169,15 +172,15 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="unreal-engine-4-plugin">
-<span id="ue4plugin"></span><h1>Unreal Engine 4 Plugin<a class="headerlink" href="#unreal-engine-4-plugin" title="Permalink to this headline">¶</a></h1>
+  <span class="target" id="ue4plugin"></span><div class="section" id="unreal-engine-4-plugin">
+<h1>Unreal Engine 4 Plugin<a class="headerlink" href="#unreal-engine-4-plugin" title="Permalink to this headline">¶</a></h1>
 <p>To bring the advantages of RTXGI to as many developers as possible, all RTXGI 1.1 features are now available in Unreal Engine 4 through the RTXGI UE4 plugin. To use the RTXGI UE4 plugin, you’ll first need to meet the following software and hardware requirements:</p>
 <b>Software:</b> <br><ul class="simple">
 <li><p>Windows 10 v1809 or higher</p></li>
 <li><p>Visual Studio 2017 or 2019</p></li>
 <li><p>Windows SDK version 10.0.17763 or higher (can be installed using the Visual Studio Installer)</p></li>
 <li><p>The latest drivers for your GPU. NVIDIA drivers <a class="reference external" href="http://www.nvidia.com/drivers">are available here</a></p></li>
-<li><p>Unreal Engine 4.25.3 source code, available for free from <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Epic Games</a> or from the <a class="reference external" href="https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.25.3">NVIDIA NvRTX branch</a> of Unreal Engine.</p></li>
+<li><p>Unreal Engine 4.25.3 or 4.25.4 source code, available for free from <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Epic Games</a> or from the <a class="reference external" href="https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.25.3">NVIDIA NvRTX branch</a> of Unreal Engine.</p></li>
 </ul>
 <b>Hardware:</b> <br><ul>
 <li><p>Any DXR enabled GPU. NVIDIA DXR enabled GPUs:</p>
@@ -197,47 +200,52 @@
 </div>
 <div class="section" id="plugin-contents">
 <h2>Plugin Contents<a class="headerlink" href="#plugin-contents" title="Permalink to this headline">¶</a></h2>
-<p><strong>RTXGI-UE4.25.3.patch</strong> and <strong>RTXGI-NvRTX4.25.3.patch</strong> are patch files to be applied to the appropriate engine branch.</p>
+<p><code class="docutils literal notranslate"><span class="pre">RTXGI-UE4.25.3.patch</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI-UE4.25.4.patch</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI-NvRTX4.25.3.patch</span></code> and <code class="docutils literal notranslate"><span class="pre">RTXGI-NvRTX4.25.4.patch</span></code> are patch files to be applied to the appropriate engine branch.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Patch files are available in the RTXGI SDK Github repository under the <strong>ue4-plugin</strong> directory.</p>
+</div>
 </div>
 <div class="section" id="getting-started">
 <h2>Getting Started<a class="headerlink" href="#getting-started" title="Permalink to this headline">¶</a></h2>
-<p>Minor engine changes are required for the RTXGI plugin to work in UE4.25. This distribution of the RTXGI UE4 plugin is designed to be overlaid on top of Epic’s Unreal Engine 4.25.3 or <a class="reference external" href="https://docs.nvidia.com/rtx-dev-ue4/intro-relnotes/index.html">NVIDIA’s NvRTX 4.25.3</a> source code.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Patch files for the plugins are available in the RTXGI SDK Github repository under the <strong>ue4-plugin</strong> directory.</p>
-</div>
+<p>Minor engine changes are required for the RTXGI plugin to work in UE4.25. This distribution of the RTXGI UE4 plugin is designed to be overlaid on top of Epic’s Unreal Engine or <a class="reference external" href="https://docs.nvidia.com/rtx-dev-ue4/intro-relnotes/index.html">NVIDIA’s NvRTX</a>  4.25.3 or 4.25.4 source code.</p>
 <p><strong>Plugin Installation:</strong> <br/></p>
 <blockquote>
 <div><ol class="arabic">
-<li><p>Clone Unreal Engine 4.25.3 from Epic Games <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Unreal Engine GitHub</a>.</p>
+<li><p>Clone Unreal Engine 4.25.3 or 4.25.4 from Epic Games <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Unreal Engine GitHub</a>.</p>
 <ol class="arabic simple">
-<li><p>Select <strong>NvRTX 4.25.3</strong> if using the NVIDIA NvRTX UE4.25 branch.</p></li>
+<li><p>Select <strong>NvRTX 4.25.3</strong> or <strong>NvRTX 4.25.4</strong> if using the NVIDIA NvRTX UE4.25 branch.</p></li>
 </ol>
 </li>
-<li><p>Download <strong>RTXGI-UE4.25.3.patch</strong> or <strong>RTXGI-NvRTX4.25.3.patch</strong> from the <strong>ue4-plugin</strong> directory of the RTXGI GitHub repository. Select the patch that matches the engine branch you’ve chosen.</p></li>
+<li><p>Download the appropriate patch file from the <strong>ue4-plugin</strong> directory of the RTXGI GitHub repository. Select the patch that matches the engine branch you’ve chosen.</p></li>
 <li><p>Apply the necessary engine changes and RTXGI plugin:</p>
 <blockquote>
-<div><p>apply the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file to install the plugin and necessary engine changes.</p>
+<div><ul>
+<li><p>Apply the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file to install the plugin and necessary engine changes.</p>
 <blockquote>
 <div><ul>
 <li><p>Copy the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file in the root directory of the cloned Unreal Engine source code.</p></li>
-<li><p>Open a command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">rtxgi-ue4.25.3.patch</span></code>, and hit enter.</p>
+<li><p>Open a command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">RTXGI-UE4.25.x.patch</span></code> and hit enter (replace <code class="docutils literal notranslate"><span class="pre">x</span></code> with the minor engine version number).</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>If using NvRTX, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">rtxgi-nvrtx4.25.3.patch</span></code> instead.</p></li>
+<li><p>If you are applying a patch file for NvRTX, use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">RTXGI-NvRTX4.25.x.patch</span></code> instead.</p></li>
 <li><p>This checks if the chosen patch can be applied to the respective engine build.</p></li>
 </ul>
 </div></blockquote>
 </li>
 <li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns any errors, follow the prompt and resolve conflicts manually.</p></li>
 <li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns nothing, or only warnings, everything is correct. Continue to the next step.</p></li>
-<li><p>In the same command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">rtxgi-ue4.25.3.patch</span></code> in the root directory and hit enter.</p>
-<blockquote>
-<div><ul class="simple">
-<li><p>If using NvRTX, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">rtxgi-nvrtx4.25.3.patch</span></code> instead.</p></li>
+<li><p>In the same command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">RTXGI-UE4.25.x.patch</span></code> in the root directory and hit enter. (again, replace <code class="docutils literal notranslate"><span class="pre">x</span></code> with the minor engine version number).</p>
+<ul class="simple">
+<li><p>If you are applying a patch file for NvRTX, use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">RTXGI-NvRTX4.25.x.patch</span></code> instead.</p></li>
+</ul>
+</li>
 </ul>
 </div></blockquote>
 </li>
+</ul>
+<blockquote>
+<div><ul>
 <li><p>After applying the patch, the engine must be built to include engine code changes needed by the plugin.</p>
 <blockquote>
 <div><ul class="simple">
@@ -272,15 +280,15 @@
 </li>
 </ol>
 </div></blockquote>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Probes will temporally accumulate bounced lighting within a few seconds after volume placement.</p>
-</div>
 </div>
 <div class="section" id="functionality">
 <h2>Functionality<a class="headerlink" href="#functionality" title="Permalink to this headline">¶</a></h2>
-<p id="id1">RTXGI implements the <em>Dynamic Diffuse Global Illumination (DDGI)</em> algorithm to compute diffuse global illumination. DDGI uses ray tracing to gather radiance and distance data on a regular grid of probes. This is similar to existing irradiance probe solutions you may already be familiar with, but radiance and distance calculations now occur in real time. RTXGI probes temporally accumulate data and use a statistics-based method to resolve visibility and prevent light leaking.</p>
+<p id="id1">RTXGI implements the <em>Dynamic Diffuse Global Illumination (DDGI)</em> algorithm to compute diffuse global illumination. DDGI uses ray tracing to gather irradiance and distance data on a regular grid of probes. This is similar to existing irradiance probe solutions you may already be familiar with, but irradiance and distance calculations now occur in real time. RTXGI probes temporally accumulate data and use a statistics-based method to resolve visibility and prevent light leaking.</p>
 <p>To use RTXGI in UE4, place a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> actor in the scene. These volumes contain the regular grid of probes that RTXGI updates. Various properties of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> can be adjusted, and these are discussed in the <a class="reference internal" href="#id2">Artist Overview</a>. One <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is updated per frame in a weighted round robin fashion using the volume’s <strong>Update Priority</strong> property.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Probes will temporally accumulate bounce lighting within a few seconds after volume placement.</p>
+</div>
 <p>Several new console variables (“cvars”) are available to with RTXGI. These are described in the table below.</p>
 <table class="colwidths-given docutils align-default" id="id3">
 <caption><span class="caption-text">RTXGI Console Variables</span><a class="headerlink" href="#id3" title="Permalink to this table">¶</a></caption>
@@ -305,21 +313,27 @@
 <td><p>Toggles a visualization of RTXGI volumes and probes on or off.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">r.RTXGI.DDGIProbeVis</span></code></p></td>
-<td><p>0, 1</p></td>
-<td><p>Toggles probe visualization. This allows the user to see what the probes see from the camera’s point of view.</p></td>
+<td><p>0, 1, 2</p></td>
+<td><p>Toggles probe visualization. This allows the user to see what the probes see from the camera’s point of view. In mode 2, it shows ray misses in blue, ray hits in green and ray back face hits in red.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Vis</span> <span class="pre">DDGIProbeVis</span></code></p></td>
 <td><p>None</p></td>
 <td><p>Allows the user to see the texture from the <code class="docutils literal notranslate"><span class="pre">r.RTXGI.DDGIProbeVis</span></code> command. This helps diagnose inaccuracies in the probes due to lighting or geometry not being configured to be visible to ray tracing.</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">r.RTXGI.MemoryUsed</span></code></p></td>
+<td><p>None</p></td>
+<td><p>Shows the summary and details of video memory being used by RTXGI in the output log.</p></td>
+</tr>
 </tbody>
 </table>
 <p><strong>Project Settings:</strong> <br/>
-The RTXGI plugin has settings under the project settings.</p>
+The RTXGI plugin has several settings in UE4’s project settings dialog.</p>
 <blockquote>
 <div><ul class="simple">
-<li><p><strong>Irradiance Bits Per Channel</strong> - by default, a 10 bit per color channel texture format is used to store probe irradiance. With extended radiance or very bright light sources, 10-bits may not be enough. Irradiance bit depth can be changed to 32-bits for an RGBA32F texture format to solves the problems at the cost of increased memory use.</p></li>
-<li><p><strong>Debug Probe Radius</strong> - sets the size of the spheres used when visualizing <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> probes.</p></li>
+<li><p><strong>Irradiance Bits</strong> - by default, a 10-bit per color channel texture format is used to store probe irradiance. With extended radiance or very bright light sources, 10-bits may not be enough to properly represent the light’s energy. The Irradiance texture’s bit depth can be changed to 32-bits (using a RGBA32F texture format) to support extended radiance at the cost of increased memory use. Alteratively, use the <strong>Irradiance Scalar</strong> option on a volume, which reduces lighting magnitudes before storage and then scales them back up after reading. This saves memory at the cost of precision.</p></li>
+<li><p><strong>Distance Bits</strong> - by default, 16-bit floating point format is used to store distance and distance squared in a probe for use when determiniming occlusion. When distances are large, 16-bits may not be sufficient. This setting can also be changed to 32-bits for increased precision.</p></li>
+<li><p><strong>Debug Probe Radius</strong> - sets the size of the spheres, in world-space units, when visualizing <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> probes.</p></li>
+<li><p><strong>Probe Update Ray Budget</strong> - sets the maximum number of rays that can be cast when updating probes. 0 specifies an unlimited number of rays. An 8x8x8 volume using 288 rays per probe would specify 147,456 to fully update all probes each frame. One volume is updated each frame based on the volume’s priority. A higher volume priority means the volume is updated more often. These settings make it possibe to place a ceiling on performance costs, while also controlling the proportion of ray updates (or amount light lag) a volume recieves.</p></li>
 </ul>
 </div></blockquote>
 <p><strong>Current Limitations:</strong> <br/></p>
@@ -394,6 +408,18 @@ The RTXGI plugin has settings under the project settings.</p>
 </tr>
 <tr class="row-even"><td><p>Enable Probe Scrolling</p></td>
 <td><p>When selected, probes keep their position in world-space when the volume moves. This is useful for moving volumes to have more temporaly stable lighting results.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Runtime Static</p></td>
+<td><p>When selected, volumes use the lighting seen in the editor, and will not update dynamically during gameplay. This can be used to decrease performance costs.  An example usage case for this would be to put large static volumes in a level with sparse probe density as a static GI “fill” and then have a smaller denser volume follow the player or camera around to provide higher detailed dynamic GI.</p></td>
+</tr>
+<tr class="row-even"><td><p>Skylight</p></td>
+<td><p>When unselected, sky light will not contribute to GI for this volume. The sky light does not use raytracing for occlusion tests for the GI probes, so the sky light contribution is sometimes not desired.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Light Multiplier</p></td>
+<td><p>Use this setting to artificially increase or decrease the GI lighting contribution from this volume.</p></td>
+</tr>
+<tr class="row-even"><td><p>Emissive Multiplier</p></td>
+<td><p>Use this setting to artificially increase or decrease how much emissive contributes to the GI in this volume.</p></td>
 </tr>
 </tbody>
 </table>
@@ -506,11 +532,19 @@ Think about your surfaces and how they relate to global lighting. If your goal i
 
   <div role="contentinfo">
     <p>
+        
         &copy; Copyright 2019-2020, NVIDIA
 
     </p>
   </div>
-  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -521,7 +555,6 @@ Think about your surfaces and how they relate to global lighting. If your goal i
 
   </div>
   
-
 
   <script type="text/javascript">
       jQuery(function () {

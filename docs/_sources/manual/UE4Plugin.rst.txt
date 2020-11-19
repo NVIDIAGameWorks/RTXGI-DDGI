@@ -24,7 +24,7 @@ To bring the advantages of RTXGI to as many developers as possible, all RTXGI 1.
 * Visual Studio 2017 or 2019
 * Windows SDK version 10.0.17763 or higher (can be installed using the Visual Studio Installer)
 * The latest drivers for your GPU. NVIDIA drivers `are available here <http://www.nvidia.com/drivers>`_
-* Unreal Engine 4.25.3 source code, available for free from `Epic Games <https://www.unrealengine.com/en-US/ue4-on-github>`_ or from the `NVIDIA NvRTX branch <https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.25.3>`_ of Unreal Engine. 
+* Unreal Engine 4.25.3 or 4.25.4 source code, available for free from `Epic Games <https://www.unrealengine.com/en-US/ue4-on-github>`_ or from the `NVIDIA NvRTX branch <https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.25.3>`_ of Unreal Engine. 
 
 .. raw:: html
 
@@ -43,49 +43,49 @@ To bring the advantages of RTXGI to as many developers as possible, all RTXGI 1.
 Plugin Contents
 -------------------------------
 
-**RTXGI-UE4.25.3.patch** and **RTXGI-NvRTX4.25.3.patch** are patch files to be applied to the appropriate engine branch.
+``RTXGI-UE4.25.3.patch``, ``RTXGI-UE4.25.4.patch``, ``RTXGI-NvRTX4.25.3.patch`` and ``RTXGI-NvRTX4.25.4.patch`` are patch files to be applied to the appropriate engine branch.
+
+.. note:: Patch files are available in the RTXGI SDK Github repository under the **ue4-plugin** directory.
 
 -------------------------------
 Getting Started
 -------------------------------
 
-Minor engine changes are required for the RTXGI plugin to work in UE4.25. This distribution of the RTXGI UE4 plugin is designed to be overlaid on top of Epic’s Unreal Engine 4.25.3 or `NVIDIA's NvRTX 4.25.3 <https://docs.nvidia.com/rtx-dev-ue4/intro-relnotes/index.html>`_ source code. 
-
-.. note:: Patch files for the plugins are available in the RTXGI SDK Github repository under the **ue4-plugin** directory.
+Minor engine changes are required for the RTXGI plugin to work in UE4.25. This distribution of the RTXGI UE4 plugin is designed to be overlaid on top of Epic’s Unreal Engine or `NVIDIA's NvRTX <https://docs.nvidia.com/rtx-dev-ue4/intro-relnotes/index.html>`_  4.25.3 or 4.25.4 source code. 
 
 **Plugin Installation:** |br|
 
-   #. Clone Unreal Engine 4.25.3 from Epic Games `Unreal Engine GitHub <https://www.unrealengine.com/en-US/ue4-on-github>`_.
+   #. Clone Unreal Engine 4.25.3 or 4.25.4 from Epic Games `Unreal Engine GitHub <https://www.unrealengine.com/en-US/ue4-on-github>`_.
       
-      #. Select **NvRTX 4.25.3** if using the NVIDIA NvRTX UE4.25 branch.
+      #. Select **NvRTX 4.25.3** or **NvRTX 4.25.4** if using the NVIDIA NvRTX UE4.25 branch.
 
-   #. Download **RTXGI-UE4.25.3.patch** or **RTXGI-NvRTX4.25.3.patch** from the **ue4-plugin** directory of the RTXGI GitHub repository. Select the patch that matches the engine branch you’ve chosen.
+   #. Download the appropriate patch file from the **ue4-plugin** directory of the RTXGI GitHub repository. Select the patch that matches the engine branch you’ve chosen.
 
    #. Apply the necessary engine changes and RTXGI plugin:
 
-        apply the provided ``.patch`` file to install the plugin and necessary engine changes.
+       - Apply the provided ``.patch`` file to install the plugin and necessary engine changes.
 
             - Copy the provided ``.patch`` file in the root directory of the cloned Unreal Engine source code.
 
-            - Open a command prompt, type ``git apply --check rtxgi-ue4.25.3.patch``, and hit enter.
+            - Open a command prompt, type ``git apply --check RTXGI-UE4.25.x.patch`` and hit enter (replace ``x`` with the minor engine version number).
 
-               - If using NvRTX, type ``git apply --check rtxgi-nvrtx4.25.3.patch`` instead.
+               - If you are applying a patch file for NvRTX, use ``git apply RTXGI-NvRTX4.25.x.patch`` instead.
 
                - This checks if the chosen patch can be applied to the respective engine build.               
             
             - If ``git apply --check ...`` returns any errors, follow the prompt and resolve conflicts manually.
             - If ``git apply --check ...`` returns nothing, or only warnings, everything is correct. Continue to the next step.
          
-            - In the same command prompt, type ``git apply rtxgi-ue4.25.3.patch`` in the root directory and hit enter.
+            - In the same command prompt, type ``git apply RTXGI-UE4.25.x.patch`` in the root directory and hit enter. (again, replace ``x`` with the minor engine version number).
 
-               - If using NvRTX, type ``git apply rtxgi-nvrtx4.25.3.patch`` instead.
+              - If you are applying a patch file for NvRTX, use ``git apply RTXGI-NvRTX4.25.x.patch`` instead.
 
-            - After applying the patch, the engine must be built to include engine code changes needed by the plugin.
+        - After applying the patch, the engine must be built to include engine code changes needed by the plugin.
 
-               - Run GenerateProjectFiles.bat to regenerate the project files.
-               - Build the engine.
+            - Run GenerateProjectFiles.bat to regenerate the project files.
+            - Build the engine.
 
-            - All necessary patches have been applied! Proceed to the next step.
+        - All necessary patches have been applied! Proceed to the next step.
 
    #. Run the UE4 editor in DirectX 12 mode by adding ``-dx12`` to the command line (DirectX12 is required for ray tracing).
    #. Enable the RTXGI plugin in the Editor.
@@ -105,17 +105,17 @@ Minor engine changes are required for the RTXGI plugin to work in UE4.25. This d
       
       - Detailed instructions on further uses are available in the `Artist Overview`_.
    
-.. note:: Probes will temporally accumulate bounced lighting within a few seconds after volume placement. 
-
 -------------------------------
 Functionality
 -------------------------------
 
 .. _Functionality:
 
-RTXGI implements the *Dynamic Diffuse Global Illumination (DDGI)* algorithm to compute diffuse global illumination. DDGI uses ray tracing to gather radiance and distance data on a regular grid of probes. This is similar to existing irradiance probe solutions you may already be familiar with, but radiance and distance calculations now occur in real time. RTXGI probes temporally accumulate data and use a statistics-based method to resolve visibility and prevent light leaking.
+RTXGI implements the *Dynamic Diffuse Global Illumination (DDGI)* algorithm to compute diffuse global illumination. DDGI uses ray tracing to gather irradiance and distance data on a regular grid of probes. This is similar to existing irradiance probe solutions you may already be familiar with, but irradiance and distance calculations now occur in real time. RTXGI probes temporally accumulate data and use a statistics-based method to resolve visibility and prevent light leaking.
 
 To use RTXGI in UE4, place a ``DDGIVolume`` actor in the scene. These volumes contain the regular grid of probes that RTXGI updates. Various properties of a ``DDGIVolume`` can be adjusted, and these are discussed in the `Artist Overview`_. One ``DDGIVolume`` is updated per frame in a weighted round robin fashion using the volume's **Update Priority** property.
+
+.. note:: Probes will temporally accumulate bounce lighting within a few seconds after volume placement.
 
 Several new console variables ("cvars") are available to with RTXGI. These are described in the table below.
 
@@ -133,19 +133,26 @@ Several new console variables ("cvars") are available to with RTXGI. These are d
     - 0, 1
     - Toggles a visualization of RTXGI volumes and probes on or off.
   * - ``r.RTXGI.DDGIProbeVis``
-    - 0, 1
-    - Toggles probe visualization. This allows the user to see what the probes see from the camera's point of view.
+    - 0, 1, 2
+    - Toggles probe visualization. This allows the user to see what the probes see from the camera's point of view. In mode 2, it shows ray misses in blue, ray hits in green and ray back face hits in red.
   * - ``Vis DDGIProbeVis``
     - None
     - Allows the user to see the texture from the ``r.RTXGI.DDGIProbeVis`` command. This helps diagnose inaccuracies in the probes due to lighting or geometry not being configured to be visible to ray tracing.
+  * - ``r.RTXGI.MemoryUsed``
+    - None
+    - Shows the summary and details of video memory being used by RTXGI in the output log.
 
 
 **Project Settings:** |br|
-The RTXGI plugin has settings under the project settings.
+The RTXGI plugin has several settings in UE4's project settings dialog.
 
-   - **Irradiance Bits Per Channel** - by default, a 10 bit per color channel texture format is used to store probe irradiance. With extended radiance or very bright light sources, 10-bits may not be enough. Irradiance bit depth can be changed to 32-bits for an RGBA32F texture format to solves the problems at the cost of increased memory use.
+   - **Irradiance Bits** - by default, a 10-bit per color channel texture format is used to store probe irradiance. With extended radiance or very bright light sources, 10-bits may not be enough to properly represent the light's energy. The Irradiance texture's bit depth can be changed to 32-bits (using a RGBA32F texture format) to support extended radiance at the cost of increased memory use. Alteratively, use the **Irradiance Scalar** option on a volume, which reduces lighting magnitudes before storage and then scales them back up after reading. This saves memory at the cost of precision.
 
-   - **Debug Probe Radius** - sets the size of the spheres used when visualizing ``DDGIVolume`` probes.
+   - **Distance Bits** - by default, 16-bit floating point format is used to store distance and distance squared in a probe for use when determiniming occlusion. When distances are large, 16-bits may not be sufficient. This setting can also be changed to 32-bits for increased precision.
+
+   - **Debug Probe Radius** - sets the size of the spheres, in world-space units, when visualizing ``DDGIVolume`` probes.
+
+   - **Probe Update Ray Budget** - sets the maximum number of rays that can be cast when updating probes. 0 specifies an unlimited number of rays. An 8x8x8 volume using 288 rays per probe would specify 147,456 to fully update all probes each frame. One volume is updated each frame based on the volume's priority. A higher volume priority means the volume is updated more often. These settings make it possibe to place a ceiling on performance costs, while also controlling the proportion of ray updates (or amount light lag) a volume recieves.
 
 
 **Current Limitations:** |br|
@@ -211,6 +218,14 @@ Find the ``DDGIVolume`` actor under **All Classes** (as shown in the figure belo
     - When selected, this feature automatically moves probes inside their volume based on the world geometry. Probes move to more ideal locations the in playable space, instead of (for example) being positioned behind walls or other objects.
   * - Enable Probe Scrolling
     - When selected, probes keep their position in world-space when the volume moves. This is useful for moving volumes to have more temporaly stable lighting results. 
+  * - Runtime Static
+    - When selected, volumes use the lighting seen in the editor, and will not update dynamically during gameplay. This can be used to decrease performance costs.  An example usage case for this would be to put large static volumes in a level with sparse probe density as a static GI “fill” and then have a smaller denser volume follow the player or camera around to provide higher detailed dynamic GI. 
+  * - Skylight
+    - When unselected, sky light will not contribute to GI for this volume. The sky light does not use raytracing for occlusion tests for the GI probes, so the sky light contribution is sometimes not desired.
+  * - Light Multiplier
+    - Use this setting to artificially increase or decrease the GI lighting contribution from this volume.
+  * - Emissive Multiplier
+    - Use this setting to artificially increase or decrease how much emissive contributes to the GI in this volume.
 
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

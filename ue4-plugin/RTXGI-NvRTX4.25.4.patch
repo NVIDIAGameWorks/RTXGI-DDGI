@@ -1,3 +1,6 @@
+diff --git a/Engine/Binaries/ThirdParty/NVIDIA/NGX/Win64/nvngx_dlss.dll b/Engine/Binaries/ThirdParty/NVIDIA/NGX/Win64/nvngx_dlss.dll
+index cb1736ccbe7..49d414ba065 100644
+Binary files a/Engine/Binaries/ThirdParty/NVIDIA/NGX/Win64/nvngx_dlss.dll and b/Engine/Binaries/ThirdParty/NVIDIA/NGX/Win64/nvngx_dlss.dll differ
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/RTXGI.uplugin b/Engine/Plugins/Runtime/Nvidia/RTXGI/RTXGI.uplugin
 new file mode 100644
 index 00000000000..df851f14812
@@ -1509,7 +1512,7 @@ index 00000000000..36ef643325e
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf
 new file mode 100644
-index 00000000000..c03b0f62da2
+index 00000000000..923498dd2a3
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf
 @@ -0,0 +1,129 @@
@@ -2185,7 +2188,7 @@ index 00000000000..76bf750248f
 +#endif /* RTXGI_DDGI_PROBE_COMMON_HLSL */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf
 new file mode 100644
-index 00000000000..fc61598f7de
+index 00000000000..8b4c76a670f
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf
 @@ -0,0 +1,158 @@
@@ -2324,7 +2327,7 @@ index 00000000000..fc61598f7de
 +        {
 +            // Ensures the probe never moves through the farthest frontface
 +            farthestFrontfaceDistance *= min(farthestFrontfaceDistance, 1.f);
-+            
++
 +            // ProbeDistanceScale decreases from 1.f - 0.f for backface movement
 +            // It can go to 0 to ensure some movement away from close surfaces
 +            fullOffset = currentOffset + farthestFrontfaceDirection * ProbeDistanceScale;
@@ -5812,7 +5815,7 @@ index 00000000000..e8491787b18
 +};
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIBlueprintLibrary.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIBlueprintLibrary.h
 new file mode 100644
-index 00000000000..80cd5effbd7
+index 00000000000..c0a3e27ef58
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIBlueprintLibrary.h
 @@ -0,0 +1,27 @@
@@ -6371,7 +6374,7 @@ index 00000000000..3bb307dbdca
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/UpdatingSDK.txt b/Engine/Plugins/Runtime/Nvidia/RTXGI/UpdatingSDK.txt
 new file mode 100644
-index 00000000000..f6da9f62365
+index 00000000000..4bd21306ac5
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/UpdatingSDK.txt
 @@ -0,0 +1,23 @@
@@ -6399,63 +6402,6 @@ index 00000000000..f6da9f62365
 +* C:\UE4\Engine\Plugins\Runtime\Nvidia\RTXGI\Source\RTXGI\Private\
 + * this is where the CPU side logic is.
 \ No newline at end of file
-diff --git a/Engine/Shaders/Private/BasePassPixelShader.usf b/Engine/Shaders/Private/BasePassPixelShader.usf
-index c7649966cef..08835225871 100644
---- a/Engine/Shaders/Private/BasePassPixelShader.usf
-+++ b/Engine/Shaders/Private/BasePassPixelShader.usf
-@@ -971,7 +971,7 @@ void FPixelShaderInOut_MainPS(
- 
- #if WRITES_VELOCITY_TO_GBUFFER
- 	BRANCH
--	if ((GetPrimitiveData(MaterialParameters.PrimitiveId).OutputVelocityAndVisibleInRayTracing & 0x1) > 0 || View.ForceDrawAllVelocities != 0)
-+	if ( (GetPrimitiveData(MaterialParameters.PrimitiveId).OutputVelocityAndVisibleInRayTracing & 0x1) > 0)
- 	{
- 		// 2d velocity, includes camera an object motion
- 	#if WRITES_VELOCITY_TO_GBUFFER_USE_POS_INTERPOLATOR
-@@ -980,15 +980,8 @@ void FPixelShaderInOut_MainPS(
- 		float2 Velocity = Calculate2DVelocity(MaterialParameters.ScreenPosition, BasePassInterpolants.VelocityPrevScreenPosition);
- 	#endif
- 
--		float4 EncodedVelocity = float4(EncodeVelocityToTexture(Velocity), 0, 0);
--
--		FLATTEN
--		if (GetPrimitiveData(MaterialParameters.PrimitiveId).DrawsVelocity == 0.0 && View.ForceDrawAllVelocities == 0)
--		{
--			// TODO: remove one of the DrawsVelocity or OutputVelocity
--			EncodedVelocity = 0.0;
--		}
--
-+		// Make sure not to touch 0,0 which is clear color
-+		float4 EncodedVelocity = float4(EncodeVelocityToTexture(Velocity) * GetPrimitiveData(MaterialParameters.PrimitiveId).DrawsVelocity, 0, 0);
- 	#if USES_GBUFFER
- 		GBuffer.Velocity = EncodedVelocity;
- 	#else
-diff --git a/Engine/Shaders/Private/BasePassVertexShader.usf b/Engine/Shaders/Private/BasePassVertexShader.usf
-index 599cd52ec1c..1d817e1b89a 100644
---- a/Engine/Shaders/Private/BasePassVertexShader.usf
-+++ b/Engine/Shaders/Private/BasePassVertexShader.usf
-@@ -201,7 +201,7 @@ void Main(
- 	{
- 		float4 PrevTranslatedWorldPosition = float4(0, 0, 0, 1);
- 		BRANCH
--		if ((GetPrimitiveData(VFIntermediates.PrimitiveId).OutputVelocityAndVisibleInRayTracing & 0x1) >0 || View.ForceDrawAllVelocities != 0)
-+		if ( (GetPrimitiveData(VFIntermediates.PrimitiveId).OutputVelocityAndVisibleInRayTracing & 0x1) >0)
- 		{
- 			PrevTranslatedWorldPosition = VertexFactoryGetPreviousWorldPosition( Input, VFIntermediates );	
- 			VertexParameters = GetMaterialVertexParameters(Input, VFIntermediates, PrevTranslatedWorldPosition.xyz, TangentToLocal);
-diff --git a/Engine/Shaders/Private/DiaphragmDOF/DOFSetup.usf b/Engine/Shaders/Private/DiaphragmDOF/DOFSetup.usf
-index 8b1d2cf9402..4e2aad003dc 100644
---- a/Engine/Shaders/Private/DiaphragmDOF/DOFSetup.usf
-+++ b/Engine/Shaders/Private/DiaphragmDOF/DOFSetup.usf
-@@ -157,7 +157,7 @@ void SetupCS(
- 		float OutCocRadius;
- 		DownsampleSceneColorWithCoc(DownsampleParams, SceneColors, CocRadii, OutColor, OutCocRadius);
- 	
--		uint2 HalfResOutputPixelPosition = GroupId * (GROUP_BORDER_SIZE / 2) + SubGroupPos + ViewportRect.xy / 2;
-+		uint2 HalfResOutputPixelPosition = GroupId * (GROUP_BORDER_SIZE / 2) + SubGroupPos;
- 
- 		//if (all(HalfResOutputPixelPosition < ViewportRect.zw))
- 		#if CONFIG_DOF_ALPHA
 diff --git a/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp b/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp
 index f6f908fba18..30b0f39cfb9 100644
 --- a/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp
@@ -6469,18 +6415,166 @@ index f6f908fba18..30b0f39cfb9 100644
  static int32 GD3DDumpAMDCodeXLFile = 0;
  
  static const uint32 GD3DMaximumNumUAVs = 8; // Limit for feature level 11.0
-diff --git a/Engine/Source/Runtime/Engine/Public/SceneView.h b/Engine/Source/Runtime/Engine/Public/SceneView.h
-index e27d33a5828..2f797fdffd7 100644
---- a/Engine/Source/Runtime/Engine/Public/SceneView.h
-+++ b/Engine/Source/Runtime/Engine/Public/SceneView.h
-@@ -644,7 +644,6 @@ enum ETranslucencyVolumeCascade
- 	VIEW_UNIFORM_BUFFER_MEMBER_ARRAY(FVector4, TranslucencyLightingVolumeInvSize, [TVC_MAX]) \
- 	VIEW_UNIFORM_BUFFER_MEMBER(FVector4, TemporalAAParams) \
- 	VIEW_UNIFORM_BUFFER_MEMBER(FVector4, CircleDOFParams) \
--	VIEW_UNIFORM_BUFFER_MEMBER(uint32, ForceDrawAllVelocities) \
- 	VIEW_UNIFORM_BUFFER_MEMBER(float, DepthOfFieldSensorWidth) \
- 	VIEW_UNIFORM_BUFFER_MEMBER(float, DepthOfFieldFocalDistance) \
- 	VIEW_UNIFORM_BUFFER_MEMBER(float, DepthOfFieldScale) \
+diff --git a/Engine/Source/Runtime/D3D12RHI/Private/Windows/WindowsD3D12Device.cpp b/Engine/Source/Runtime/D3D12RHI/Private/Windows/WindowsD3D12Device.cpp
+index 8cde57d9bb9..69d311fe6ea 100644
+--- a/Engine/Source/Runtime/D3D12RHI/Private/Windows/WindowsD3D12Device.cpp
++++ b/Engine/Source/Runtime/D3D12RHI/Private/Windows/WindowsD3D12Device.cpp
+@@ -526,29 +526,6 @@ void FD3D12DynamicRHIModule::ShutdownModule()
+ #endif
+ }
+ 
+-#if NV_NGX
+-NVSDK_NGX_Result Init_NGX_D3D12(unsigned long long InApplicationId, const wchar_t* InApplicationDataPath, ID3D12Device* InHandle, const NVSDK_NGX_FeatureCommonInfo* InFeatureInfo)
+-{
+-	NVSDK_NGX_Result Result = NVSDK_NGX_Result_Fail;
+-	int API_Version = NVSDK_NGX_VERSION_API_MACRO;
+-	do {
+-		Result = NVSDK_NGX_D3D12_Init(InApplicationId, InApplicationDataPath, InHandle, InFeatureInfo, static_cast<NVSDK_NGX_Version>(API_Version));
+-		--API_Version;
+-		if (NVSDK_NGX_FAILED(Result))
+-		{
+-			NVSDK_NGX_D3D12_Shutdown();
+-		}
+-	} while (NVSDK_NGX_FAILED(Result) && API_Version >= 0x0000013);
+-
+-	if (!NVSDK_NGX_FAILED(Result) && API_Version + 1 < 0x0000014)
+-	{
+-		UE_LOG(LogD3D12RHI, Log, TEXT("Warning: NVSDK_NGX_D3D12_Init succeeded, but the driver installed on this system is too old the support the NGX logging API. The console variables r.NGX.LogLevel and r.NGX.DisableOtherLoggingSinks will have no effect and NGX logs will only show up in their own log files, and not in UE4's log files."));
+-	}
+-
+-	return Result;
+-}
+-#endif
+-
+ void FD3D12DynamicRHI::Init()
+ {
+ 	for (TSharedPtr<FD3D12Adapter>& Adapter : ChosenAdapters)
+@@ -790,7 +767,7 @@ void FD3D12DynamicRHI::Init()
+ 	}
+ 
+ 	const NVSDK_NGX_FeatureCommonInfo* FeatureInfo = GetNGXCommonFeatureInfo();
+-	NVSDK_NGX_Result Status = Init_NGX_D3D12((unsigned long long)NGXAppId, *FPaths::ProjectLogDir(), ChosenAdapters[0]->GetD3DDevice(), FeatureInfo);
++	NVSDK_NGX_Result Status = NVSDK_NGX_D3D12_Init((unsigned long long)NGXAppId, *FPaths::ProjectLogDir(), ChosenAdapters[0]->GetD3DDevice(), FeatureInfo, NVSDK_NGX_Version_API);
+ 	UE_LOG(LogD3D12RHI, Log, TEXT("NVSDK_NGX_D3D12_Init (Log %s) -> (%u %s)"), *FPaths::ProjectLogDir(), Status, GetNGXResultAsString(Status));
+ 	if (NVSDK_NGX_Result_FAIL_OutOfDate == Status)
+ 	{
+diff --git a/Engine/Source/Runtime/RHI/Private/RHINGX.cpp b/Engine/Source/Runtime/RHI/Private/RHINGX.cpp
+index 3b9973d0fd3..ea94689f2c0 100644
+--- a/Engine/Source/Runtime/RHI/Private/RHINGX.cpp
++++ b/Engine/Source/Runtime/RHI/Private/RHINGX.cpp
+@@ -56,30 +56,6 @@ TAutoConsoleVariable<int32> CVarNGXDLSSFallbackPerfQualitySetting(
+ 	TEXT("0: Performance, 1: Balanced, 2: Quality."),
+ 	ECVF_RenderThreadSafe);
+ 
+-static TAutoConsoleVariable<int32> CVarNGXLogLevel(
+-	TEXT("r.NGX.LogLevel"), 1,
+-	TEXT("Determines the minimal amount of logging the NGX implementation. Please refer to the NGX documentation on other ways to change the logging level.\n")
+-	TEXT("0: off \n")
+-	TEXT("1: on (default)\n")
+-	TEXT("2: verbose "),
+-	ECVF_ReadOnly);
+-
+-static TAutoConsoleVariable<int32> CVarNGXLogToFile(
+-	TEXT("r.NGX.LogToFile"), 0,
+-	TEXT("Determines whether the NGX implementation will write its logs to its own logs files \n")
+-	TEXT("0: off (default) \n")
+-	TEXT("1: on \n"),
+-	ECVF_ReadOnly);
+-
+-static TAutoConsoleVariable<int32> CVarNGXLogToLog(
+-	TEXT("r.NGX.LogToLog"), 1,
+-	TEXT("Determines whether the NGX implementation will pipe its logs into LogDLSSNGXRHI  \n")
+-	TEXT("0: off \n")
+-	TEXT("1: on (default)\n"),
+-	ECVF_ReadOnly);
+-
+-DEFINE_LOG_CATEGORY_STATIC(LogDLSSNGXRHI, Log, All);
+-
+ RHI_API TMap<FDLSSParameters, FDLSSOptimalSettings> GDLSSOptimalSettings;
+ 
+ RHI_API SIZE_T GetTypeHash(const FDLSSParameters& Param)
+@@ -89,28 +65,6 @@ RHI_API SIZE_T GetTypeHash(const FDLSSParameters& Param)
+ 
+ #if NV_NGX
+ 
+-void NVSDK_CONV NGXLogSink(const char* InNGXMessage, NVSDK_NGX_Logging_Level InLoggingLevel, NVSDK_NGX_Feature InSourceComponent)
+-{
+-	FString Message(FString(InNGXMessage).TrimEnd());
+-	const TCHAR* NGXComponent = TEXT("Unknown");
+-
+-	switch (InSourceComponent)
+-	{
+-	case NVSDK_NGX_Feature_SuperSampling: NGXComponent = TEXT("DLSS");	break;
+-	case NVSDK_NGX_Feature_Reserved_SDK: NGXComponent = TEXT("SDK");	break;
+-	case NVSDK_NGX_Feature_Reserved_Core: NGXComponent = TEXT("Core");	break;
+-	}
+-
+-	if (InLoggingLevel == NVSDK_NGX_LOGGING_LEVEL_VERBOSE)
+-	{
+-		UE_LOG(LogDLSSNGXRHI, Verbose, TEXT("[%s]: %s"), NGXComponent, *Message);
+-	}
+-	else
+-	{
+-		UE_LOG(LogDLSSNGXRHI, Log, TEXT("[%s]: %s"), NGXComponent, *Message);
+-	}
+-}
+-
+ void GetNGXOptimalSettings(NVSDK_NGX_Parameter * Params, const FDLSSParameters &InParams, FDLSSOptimalSettings &OutSettings)
+ {
+ 	NGX_DLSS_GET_OPTIMAL_SETTINGS(
+@@ -211,31 +165,6 @@ RHI_API NVSDK_NGX_FeatureCommonInfo* GetNGXCommonFeatureInfo()
+ 		FeatureInfo.PathListInfo.Length = NumNGXDLLSearchPaths;
+ 	}
+ 
+-	// logging
+-	{
+-		FeatureInfo.LoggingInfo.DisableOtherLoggingSinks = !CVarNGXLogToFile.GetValueOnAnyThread();
+-
+-		switch (CVarNGXLogLevel.GetValueOnAnyThread())
+-		{
+-		case 0:
+-			FeatureInfo.LoggingInfo.MinimumLoggingLevel = NVSDK_NGX_LOGGING_LEVEL_OFF;
+-			break;
+-			// should matches the CVarNGXLogLevel default value
+-		default:
+-		case 1:
+-			FeatureInfo.LoggingInfo.MinimumLoggingLevel = NVSDK_NGX_LOGGING_LEVEL_ON;
+-			break;
+-		case 2:
+-			FeatureInfo.LoggingInfo.MinimumLoggingLevel = NVSDK_NGX_LOGGING_LEVEL_VERBOSE;
+-			break;
+-		};
+-
+-		if (CVarNGXLogToLog.GetValueOnAnyThread())
+-		{
+-			FeatureInfo.LoggingInfo.LoggingCallback = &NGXLogSink;
+-		}
+-	}
+-
+ 	return &FeatureInfo;
+ }
+ 
+diff --git a/Engine/Source/Runtime/RHI/Public/RHIResources.h b/Engine/Source/Runtime/RHI/Public/RHIResources.h
+index f3aa0310a67..57becd2c4e1 100644
+--- a/Engine/Source/Runtime/RHI/Public/RHIResources.h
++++ b/Engine/Source/Runtime/RHI/Public/RHIResources.h
+@@ -2127,6 +2127,8 @@ public:
+ 	};
+ };
+ 
++#if RHI_RAYTRACING
++
+ class FRayTracingPipelineStateSignature
+ {
+ public:
+@@ -2243,6 +2245,7 @@ private:
+ 	TArrayView<FRHIRayTracingShader*> HitGroupTable;
+ 	TArrayView<FRHIRayTracingShader*> CallableTable;
+ };
++#endif // RHI_RAYTRACING
+ 
+ // This PSO is used as a fallback for RHIs that dont support PSOs. It is used to set the graphics state using the legacy state setting APIs
+ class FRHIGraphicsPipelineStateFallBack : public FRHIGraphicsPipelineState
 diff --git a/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.cpp b/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.cpp
 index 109fca7f986..8fbdc6e2df3 100644
 --- a/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.cpp
@@ -6604,101 +6698,23 @@ index 3234a8ae364..5f510e4743e 100644
  }
  
 diff --git a/Engine/Source/Runtime/Renderer/Private/PostProcess/DiaphragmDOF.cpp b/Engine/Source/Runtime/Renderer/Private/PostProcess/DiaphragmDOF.cpp
-index 3f0adfa43e6..7b2c9c3e51a 100644
+index 7275db25f4a..3f0adfa43e6 100644
 --- a/Engine/Source/Runtime/Renderer/Private/PostProcess/DiaphragmDOF.cpp
 +++ b/Engine/Source/Runtime/Renderer/Private/PostProcess/DiaphragmDOF.cpp
-@@ -1422,12 +1422,7 @@ FRDGTextureRef DiaphragmDOF::AddPasses(
- 		}
- 		
- 		TAAParameters.SetupViewRect(View, PrefilteringResolutionDivisor);
--
--		if (View.AntiAliasingMethod == AAM_DLSS)
--        {
--            // For DLSS's TAA pass, use origin texture as input.
--            TAAParameters.InputViewRect = View.ViewRect.Scale(PrefilteringResolutionDivisor);
--        }
-+		TAAParameters.TopLeftCornerViewRects();
- 
- 		TAAParameters.bUseFast = CVarDOFTemporalAAQuality.GetValueOnRenderThread() == 0;
- 	}
-@@ -1570,7 +1565,7 @@ FRDGTextureRef DiaphragmDOF::AddPasses(
- 		{
- 			PassParameters->CommonParameters = CommonParameters;
- 			SetCocModelParameters(&PassParameters->CocModel, CocModel, CocRadiusBasis);
--			PassParameters->ViewportRect = View.ViewRect;
-+			PassParameters->ViewportRect = FIntRect(FIntPoint::ZeroValue, PassViewSize);
- 			PassParameters->CocRadiusBasis = FVector2D(GatheringViewSize.X, PreprocessViewSize.X);
- 			PassParameters->SceneColorTexture = InputSceneColor;
- 			PassParameters->SceneDepthTexture = SceneTextures.SceneDepthBuffer;
-@@ -1621,8 +1616,7 @@ FRDGTextureRef DiaphragmDOF::AddPasses(
+@@ -1620,10 +1620,9 @@ FRDGTextureRef DiaphragmDOF::AddPasses(
+ 	// TAA the setup for the convolution to be temporally stable.
  	if ((View.AntiAliasingMethod == AAM_TemporalAA || View.AntiAliasingMethod == AAM_DLSS) && ViewState)
  	{
- 		TAAParameters.SceneColorInput = HalfResGatherInputTextures.SceneColor;
--		// DLSS use origin scene color.
--        TAAParameters.SceneColorInput = View.AntiAliasingMethod == AAM_DLSS ? FullResGatherInputTextures.SceneColor : HalfResGatherInputTextures.SceneColor;
-+		TAAParameters.SceneMetadataInput = HalfResGatherInputTextures.SeparateCoc;
+-		// DLSS uses the original scene color.
+-		TAAParameters.SceneColorInput = View.AntiAliasingMethod == AAM_DLSS ? FullResGatherInputTextures.SceneColor : HalfResGatherInputTextures.SceneColor;
+-
+-		TAAParameters.SceneMetadataInput = HalfResGatherInputTextures.SeparateCoc;
++		TAAParameters.SceneColorInput = HalfResGatherInputTextures.SceneColor;
++		// DLSS use origin scene color.
++        TAAParameters.SceneColorInput = View.AntiAliasingMethod == AAM_DLSS ? FullResGatherInputTextures.SceneColor : HalfResGatherInputTextures.SceneColor;
  
  		FTAAOutputs TAAOutputs = AddTemporalAAPass(
  			GraphBuilder,
-diff --git a/Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessTemporalAA.cpp b/Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessTemporalAA.cpp
-index dc39c69eeb1..542ca50bdbe 100644
---- a/Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessTemporalAA.cpp
-+++ b/Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessTemporalAA.cpp
-@@ -333,7 +333,9 @@ const TCHAR* const kTAAOutputNames[] = {
- 	TEXT("LightShaftTemporalAA"),
- 	TEXT("DOFTemporalAA"),
- 	TEXT("DOFTemporalAA"),
-+#if NV_NGX
- 	TEXT("AfterDLSSTranslucencyTemporalAA"),
-+#endif
- };
- 
- const TCHAR* const kTAAPassNames[] = {
-@@ -344,7 +346,9 @@ const TCHAR* const kTAAPassNames[] = {
- 	TEXT("LightShaft"),
- 	TEXT("DOF"),
- 	TEXT("DOFUpsampling"),
-+#if NV_NGX
- 	TEXT("AfterDLSSTranslucency"),
-+#endif
- };
- 
- static_assert(UE_ARRAY_COUNT(kTAAOutputNames) == int32(ETAAPassConfig::MAX), "Missing TAA output name.");
-@@ -391,7 +395,7 @@ FIntPoint FTAAPassParameters::GetOutputExtent() const
- 
- bool FTAAPassParameters::Validate() const
- {
--	if (IsTAAUpsamplingConfig(Pass) || IsDOFTAAConfig(Pass))
-+	if (IsTAAUpsamplingConfig(Pass))
- 	{
- 		check(OutputViewRect.Min == FIntPoint::ZeroValue);
- 	}
-diff --git a/Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessTemporalAA.h b/Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessTemporalAA.h
-index 5c3c2a92197..ad8247fc387 100644
---- a/Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessTemporalAA.h
-+++ b/Engine/Source/Runtime/Renderer/Private/PostProcess/PostProcessTemporalAA.h
-@@ -25,8 +25,9 @@ enum class ETAAPassConfig
- 	DiaphragmDOF,
- 	DiaphragmDOFUpsampling,
- 
-+#if NV_NGX
- 	AfterDLSSTranslucency,
--
-+#endif
- 	MAX
- };
- 
-@@ -113,9 +114,7 @@ struct FTAAPassParameters
- #endif
- 
- 		// When upsampling, always upsampling to top left corner to reuse same RT as before upsampling.
--		// In multi-view mode, we still want the output of TAA align with (0, 0), So the following DOF 
--		// operations can be done correctly.
--		if (IsTAAUpsamplingConfig(Pass) || IsDOFTAAConfig(Pass))
-+		if (IsTAAUpsamplingConfig(Pass))
- 		{
- 			OutputViewRect.Min = FIntPoint(0, 0);
- 			OutputViewRect.Max = View.GetSecondaryViewRectSize();
 diff --git a/Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingLighting.h b/Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingLighting.h
 index 93a6cd090d7..88f1dfed357 100644
 --- a/Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingLighting.h
@@ -6712,33 +6728,30 @@ index 93a6cd090d7..88f1dfed357 100644
  	SHADER_PARAMETER(uint32, Count)
  	SHADER_PARAMETER(float, IESLightProfileInvCount)
  	SHADER_PARAMETER_TEXTURE(Texture2D, LTCMatTexture)
-diff --git a/Engine/Source/Runtime/Renderer/Private/SceneRendering.cpp b/Engine/Source/Runtime/Renderer/Private/SceneRendering.cpp
-index 42915b2cec4..9a189d7a38e 100644
---- a/Engine/Source/Runtime/Renderer/Private/SceneRendering.cpp
-+++ b/Engine/Source/Runtime/Renderer/Private/SceneRendering.cpp
-@@ -311,13 +311,6 @@ TAutoConsoleVariable<int32> CVarTransientResourceAliasing_Buffers(
- 	TEXT("Enables transient resource aliasing for specified buffers. Used only if GSupportsTransientResourceAliasing is true.\n"),
- 	ECVF_ReadOnly);
- 
--static TAutoConsoleVariable<int32> CVarBasePassForceOutputsVelocity(
--	TEXT("r.BasePassForceOutputsVelocity"), 0,
--	TEXT("Force the base pass to compute motion vector, regardless of FPrimitiveUniformShaderParameters.")
--	TEXT("0: Disabled (default)")
--	TEXT("1: Enabled"),
--	ECVF_RenderThreadSafe);
--
- #if !UE_BUILD_SHIPPING
- 
- static TAutoConsoleVariable<int32> CVarTestInternalViewRectOffset(
-@@ -1551,8 +1544,6 @@ void FViewInfo::SetupUniformBufferParameters(
- 			TemporalJitterPixels.X,
- 			TemporalJitterPixels.Y);
+diff --git a/Engine/Source/Runtime/Renderer/Private/SceneVisibility.cpp b/Engine/Source/Runtime/Renderer/Private/SceneVisibility.cpp
+index 813727ad735..175e0ff803b 100644
+--- a/Engine/Source/Runtime/Renderer/Private/SceneVisibility.cpp
++++ b/Engine/Source/Runtime/Renderer/Private/SceneVisibility.cpp
+@@ -3984,8 +3984,9 @@ void FSceneRenderer::ComputeViewVisibility(FRHICommandListImmediate& RHICmdList,
+ 		Scene->PrimitivesNeedingStaticMeshUpdateWithoutVisibilityCheck.Reset();
  	}
--
--	ViewUniformShaderParameters.ForceDrawAllVelocities = CVarBasePassForceOutputsVelocity.GetValueOnRenderThread();
- 		
- 	uint32 FrameIndex = 0;
- 	if (ViewState)
+ 
+-	bool bAnyRayTracingPassEnabled = false;
+ #if RHI_RAYTRACING
++	bool bAnyRayTracingPassEnabled = false;
++
+ 	// Record whether this frame needs any ray tracing data
+ 	if (IsRayTracingEnabled() && Views.Num() > 0)
+ 	{
+@@ -4020,8 +4021,6 @@ void FSceneRenderer::ComputeViewVisibility(FRHICommandListImmediate& RHICmdList,
+ 		Scene->RayTracingRelevantPrimitiveMap.Empty();
+ 		Scene->RayTracingStaticRelevantPrimitiveMap.Empty();
+ 	}
+-#else
+-	const bool bPreGather = false;
+ #endif
+ 
+ 	uint8 ViewBit = 0x1;
 diff --git a/Engine/Source/Runtime/Renderer/Private/SystemTextures.h b/Engine/Source/Runtime/Renderer/Private/SystemTextures.h
 index 260ef3dd273..129a37dbf23 100644
 --- a/Engine/Source/Runtime/Renderer/Private/SystemTextures.h
@@ -6752,28 +6765,347 @@ index 260ef3dd273..129a37dbf23 100644
  {
  public:
  	FSystemTextures()
-diff --git a/README.md b/README.md
-index 5fd4f0a65ea..6a1b26a7cd0 100644
---- a/README.md
-+++ b/README.md
-@@ -123,6 +123,7 @@ It’s recommended that you glance through the steps below so you have an unders
-   * r.NGX.DLSS.SceneCaptures.Enable
-     * 0: don't enable DLSS for scene captures (default)
-     * 1: enable DLSS for scene captures
-+ 
+diff --git a/Engine/Source/Runtime/Windows/D3D11RHI/Private/Windows/WindowsD3D11Device.cpp b/Engine/Source/Runtime/Windows/D3D11RHI/Private/Windows/WindowsD3D11Device.cpp
+index 1c5c085eab7..3fcef3fb34b 100644
+--- a/Engine/Source/Runtime/Windows/D3D11RHI/Private/Windows/WindowsD3D11Device.cpp
++++ b/Engine/Source/Runtime/Windows/D3D11RHI/Private/Windows/WindowsD3D11Device.cpp
+@@ -1515,29 +1515,6 @@ double FD3D11DynamicRHI::IntelMetricsDicoveryGetGPUTime()
+ }
+ #endif // INTEL_METRICSDISCOVERY
  
- ## DLSS Project Settings
- 
-@@ -153,12 +154,6 @@ Enabling DLSS in the editor (and especially a Play-in-Editor) viewport is not su
- 
- Since translucent particles always has ghosting problem in DLSS, User can select these particles to be drawn after DLSS pass via set the flag of "Render after DLSS".
- 
--## Other Potentially Useful Settings for DLSS
--  * Force the base pass to compute motion vector, regardless of FPrimitiveUniformShaderParameters
--    * r.BasePassForceOutputsVelocity
--      * 0: Disabled (default)
--      * 1: Enabled
+-#if NV_NGX
+-NVSDK_NGX_Result Init_NGX_D3D11(unsigned long long InApplicationId, const wchar_t* InApplicationDataPath, ID3D11Device* InHandle, const NVSDK_NGX_FeatureCommonInfo* InFeatureInfo)
+-{
+-	NVSDK_NGX_Result Result = NVSDK_NGX_Result_Fail;
+-	int API_Version = NVSDK_NGX_VERSION_API_MACRO;
+-	do {
+-		Result = NVSDK_NGX_D3D11_Init(InApplicationId, InApplicationDataPath, InHandle, InFeatureInfo, static_cast<NVSDK_NGX_Version>(API_Version));
+-		--API_Version;
+-		if (NVSDK_NGX_FAILED(Result))
+-		{
+-			NVSDK_NGX_D3D11_Shutdown();
+-		}
+-	} while (NVSDK_NGX_FAILED(Result) && API_Version >= 0x0000013);
 -
- ## FAQ
+-	if (!NVSDK_NGX_FAILED(Result) && API_Version + 1 < 0x0000014)
+-	{
+-		UE_LOG(LogD3D11RHI, Log, TEXT("Warning: NVSDK_NGX_D3D11_Init succeeded, but the driver installed on this system is too old the support the NGX logging API. The console variables r.NGX.LogLevel and r.NGX.DisableOtherLoggingSinks will have no effect and NGX logs will only show up in their own log files, and not in UE4's log files."));
+-	}
+-
+-	return Result;
+-}
+-#endif
+-
+ void FD3D11DynamicRHI::InitD3DDevice()
+ {
+ 	check( IsInGameThread() );
+@@ -2101,7 +2078,7 @@ void FD3D11DynamicRHI::InitD3DDevice()
+ 		}
  
- * DLSS isn't being enabled even though I have turned it on. What should I do?
+ 		const NVSDK_NGX_FeatureCommonInfo *FeatureInfo = GetNGXCommonFeatureInfo();
+-		NVSDK_NGX_Result Status = Init_NGX_D3D11((unsigned long long)NGXAppId, *FPaths::ProjectLogDir(), Direct3DDevice, FeatureInfo);
++		NVSDK_NGX_Result Status = NVSDK_NGX_D3D11_Init((unsigned long long)NGXAppId, *FPaths::ProjectLogDir(), Direct3DDevice, FeatureInfo, NVSDK_NGX_Version_API);
+ 		UE_LOG(LogD3D11RHI, Log, TEXT("NVSDK_NGX_D3D11_Init (Log %s) -> (%u %s)"), *FPaths::ProjectLogDir(), Status, GetNGXResultAsString(Status));
+ 		if (NVSDK_NGX_Result_FAIL_OutOfDate == Status)
+ 		{
+diff --git a/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx.h b/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx.h
+index 2324feaa60f..f211363b6a7 100644
+--- a/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx.h
++++ b/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx.h
+@@ -114,8 +114,6 @@ typedef void (NVSDK_CONV *PFN_NVSDK_NGX_D3D11_BufferAllocCallback)(D3D11_BUFFER_
+ typedef void (NVSDK_CONV *PFN_NVSDK_NGX_D3D11_Tex2DAllocCallback)(D3D11_TEXTURE2D_DESC *InDesc, ID3D11Texture2D **OutResource);
+ typedef void (NVSDK_CONV *PFN_NVSDK_NGX_ResourceReleaseCallback)(IUnknown *InResource);
+ 
+-typedef unsigned long long CUtexObject;
+-
+ ///////////////////////////////////////////////////////////////////////////////////////////////////
+ // NVSDK_NGX_Init
+ // -------------------------------------
+diff --git a/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx_defs.h b/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx_defs.h
+index 7eaab62eb89..82e336c4955 100644
+--- a/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx_defs.h
++++ b/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx_defs.h
+@@ -56,10 +56,10 @@ extern "C"
+ #define NVSDK_NGX_ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
+     
+ //  Version Notes:
+-//      Version 0x0000014:
+-//          * Added a logging callback that the app may pass in on init
+-//          * Added ability for the app to override the logging level
+-#define NVSDK_NGX_VERSION_API_MACRO 0x0000014  // NGX_VERSION_DOT 1.4.0
++//      Version 0x0000013:
++//          * Added InternalData to the NVSDK_NGX_FeatureCommonInfo struct.
++//          * Added the capability flag REQUIRE_CMSID to class NGX_CORE_SUPPORT
++#define NVSDK_NGX_VERSION_API_MACRO 0x0000013  // NGX_VERSION_DOT 1.3.0
+ 
+ typedef struct NVSDK_NGX_FeatureCommonInfo_Internal NVSDK_NGX_FeatureCommonInfo_Internal;
+ 
+@@ -150,16 +150,7 @@ typedef enum NVSDK_NGX_Feature
+     NVSDK_NGX_Feature_Reserved4,
+ 
+     // New features go here
+-    NVSDK_NGX_Feature_Count,
+-
+-    // These members are not strictly NGX features, but are 
+-    // components of the NGX system, and it may sometimes
+-    // be useful to identify them using the same enum
+-    NVSDK_NGX_Feature_Reserved_SDK = 32764,
+-
+-    NVSDK_NGX_Feature_Reserved_Core,
+-
+-    NVSDK_NGX_Feature_Reserved_Unknown
++    NVSDK_NGX_Feature_Count
+ } NVSDK_NGX_Feature;
+ 
+ //TODO create grayscale format (R32F?)
+@@ -267,56 +258,12 @@ typedef struct NVSDK_NGX_PathListInfo
+     unsigned int Length;
+ } NVSDK_NGX_PathListInfo;
+ 
+-typedef enum NVSDK_NGX_Logging_Level
+-{
+-    NVSDK_NGX_LOGGING_LEVEL_OFF = 0,
+-    NVSDK_NGX_LOGGING_LEVEL_ON,
+-    NVSDK_NGX_LOGGING_LEVEL_VERBOSE,
+-    NVSDK_NGX_LOGGING_LEVEL_NUM
+-} NVSDK_NGX_Logging_Level;
+-
+-// A logging callback provided by the app to allow piping log lines back to the app.
+-// Please take careful note of the signature and calling convention.
+-// The callback must be able to be called from any thread.
+-// It must also be fully thread-safe and any number of threads may call into it concurrently. 
+-// It must fully process message by the time it returns, and there is no guarantee that
+-// message will still be valid or allocated after it returns.
+-// message will be a null-terminated string and may contain multibyte characters.
+-#if defined(__GNUC__) || defined(__clang__)
+-typedef void NVSDK_CONV(*NVSDK_NGX_AppLogCallback)(const char* message, NVSDK_NGX_Logging_Level loggingLevel, NVSDK_NGX_Feature sourceComponent);
+-#else
+-typedef void(NVSDK_CONV* NVSDK_NGX_AppLogCallback)(const char* message, NVSDK_NGX_Logging_Level loggingLevel, NVSDK_NGX_Feature sourceComponent);
+-#endif
+-
+-typedef struct NGSDK_NGX_LoggingInfo
+-{
+-    // Fields below were introduced in SDK version 0x0000014
+-
+-    // App-provided logging callback
+-    NVSDK_NGX_AppLogCallback LoggingCallback;
+-
+-    // The minimum logging level to use. If this is higher
+-    // than the logging level otherwise configured, this will override
+-    // that logging level. Otherwise, that logging level will be used.
+-    NVSDK_NGX_Logging_Level MinimumLoggingLevel;
+-
+-    // Whether or not to disable writing log lines to sinks other than the app log callback. This
+-    // may be useful if the app provides a logging callback. LoggingCallback must be non-null and point
+-    // to a valid logging callback if this is set to true.
+-    bool DisableOtherLoggingSinks;
+-
+-} NGSDK_NGX_LoggingInfo;
+-
+ typedef struct NVSDK_NGX_FeatureCommonInfo
+ {
+     // List of all paths in descending order of search sequence to locate a feature dll in, other than the default path - application folder.
+     NVSDK_NGX_PathListInfo PathListInfo;
+     // Used internally by NGX
+     NVSDK_NGX_FeatureCommonInfo_Internal* InternalData; // Introduced in SDK version 0x0000013
+-
+-    // Fields below were introduced in SDK version 0x0000014
+-
+-    NGSDK_NGX_LoggingInfo LoggingInfo;
+ } NVSDK_NGX_FeatureCommonInfo;
+ 
+ typedef enum NVSDK_NGX_Resource_VK_Type
+diff --git a/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx_helpers.h b/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx_helpers.h
+index df82d331810..955f8f364ba 100644
+--- a/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx_helpers.h
++++ b/Engine/Source/ThirdParty/NVIDIA/NGX/include/nvsdk_ngx_helpers.h
+@@ -114,14 +114,6 @@ typedef struct NVSDK_NGX_D3D11_Feature_Eval_Params
+     float       InSharpness;
+ } NVSDK_NGX_D3D11_Feature_Eval_Params;
+ 
+-typedef struct NVSDK_NGX_CUDA_Feature_Eval_Params
+-{
+-    CUtexObject* pInColor;
+-    CUtexObject* pInOutput;
+-    /*** OPTIONAL for DLSS ***/
+-    float       InSharpness;
+-} NVSDK_NGX_CUDA_Feature_Eval_Params;
+-
+ typedef struct NVSDK_NGX_D3D11_GBuffer
+ {
+     ID3D11Resource* pInAttrib[NVSDK_NGX_GBUFFERTYPE_NUM];
+@@ -175,17 +167,6 @@ typedef struct NVSDK_NGX_D3D11_DLISP_Eval_Params
+     float                           InDenoise;
+ } NVSDK_NGX_D3D11_DLISP_Eval_Params;
+ 
+-typedef struct NVSDK_NGX_CUDA_DLISP_Eval_Params
+-{
+-    NVSDK_NGX_CUDA_Feature_Eval_Params Feature;
+-    /*** OPTIONAL ***/
+-    unsigned int                    InRectX;
+-    unsigned int                    InRectY;
+-    unsigned int                    InRectW;
+-    unsigned int                    InRectH;
+-    float                           InDenoise;
+-} NVSDK_NGX_CUDA_DLISP_Eval_Params;
+-
+ static inline NVSDK_NGX_Result NGX_D3D11_CREATE_DLSS_EXT(
+     ID3D11DeviceContext *pInCtx,
+     NVSDK_NGX_Handle **ppOutHandle,
+@@ -283,23 +264,11 @@ static inline NVSDK_NGX_Result NGX_D3D11_CREATE_DLISP_EXT(
+     NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_Height, pDlispCreateParams->InHeight);
+     NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_OutWidth, pDlispCreateParams->InTargetWidth);
+     NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_OutHeight, pDlispCreateParams->InTargetHeight);
++    NVSDK_NGX_Parameter_SetI(pInParams, NVSDK_NGX_Parameter_PerfQualityValue, pDlispCreateParams->InPerfQualityValue);
+ 
+     return NVSDK_NGX_D3D11_CreateFeature(pInCtx, NVSDK_NGX_Feature_ImageSignalProcessing, pInParams, ppOutHandle);
+ }
+ 
+-static inline NVSDK_NGX_Result NGX_CUDA_CREATE_DLISP_EXT(
+-    NVSDK_NGX_Handle** ppOutHandle,
+-    NVSDK_NGX_Parameter* pInParams,
+-    NVSDK_NGX_Feature_Create_Params* pDlispCreateParams)
+-{
+-    NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_Width, pDlispCreateParams->InWidth);
+-    NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_Height, pDlispCreateParams->InHeight);
+-    NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_OutWidth, pDlispCreateParams->InTargetWidth);
+-    NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_OutHeight, pDlispCreateParams->InTargetHeight);
+-
+-    return NVSDK_NGX_CUDA_CreateFeature(NVSDK_NGX_Feature_ImageSignalProcessing, pInParams, ppOutHandle);
+-}
+-
+ static inline NVSDK_NGX_Result NGX_D3D11_EVALUATE_DLISP_EXT(
+     ID3D11DeviceContext *pInCtx,
+     NVSDK_NGX_Handle *pInHandle,
+@@ -327,31 +296,6 @@ static inline NVSDK_NGX_Result NGX_D3D11_EVALUATE_DLISP_EXT(
+     return NVSDK_NGX_D3D11_EvaluateFeature_C(pInCtx, pInHandle, pInParams, NULL);
+ }
+ 
+-static inline NVSDK_NGX_Result NGX_CUDA_EVALUATE_DLISP_EXT(
+-    NVSDK_NGX_Handle *pInHandle,
+-    NVSDK_NGX_Parameter *pInParams,
+-    NVSDK_NGX_CUDA_DLISP_Eval_Params *pDlispEvalParams)
+-{
+-    if (pDlispEvalParams->Feature.InSharpness < 0.0f || pDlispEvalParams->Feature.InSharpness > 1.0f || pDlispEvalParams->InDenoise < 0.0f || pDlispEvalParams->InDenoise > 1.0f)
+-    {
+-        return NVSDK_NGX_Result_FAIL_InvalidParameter;
+-    }
+-    NVSDK_NGX_Parameter_SetVoidPointer(pInParams, NVSDK_NGX_Parameter_Color, pDlispEvalParams->Feature.pInColor);
+-    NVSDK_NGX_Parameter_SetVoidPointer(pInParams, NVSDK_NGX_Parameter_Output, pDlispEvalParams->Feature.pInOutput);
+-    // Both sharpness and denoise in range [0.0f,1.0f]
+-    NVSDK_NGX_Parameter_SetF(pInParams, NVSDK_NGX_Parameter_Sharpness, pDlispEvalParams->Feature.InSharpness);
+-    NVSDK_NGX_Parameter_SetF(pInParams, NVSDK_NGX_Parameter_Denoise, pDlispEvalParams->InDenoise);
+-    // If input is atlas - use RECT to upscale only the required area
+-    if (pDlispEvalParams->InRectW)
+-    {
+-        NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_Rect_X, pDlispEvalParams->InRectX);
+-        NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_Rect_Y, pDlispEvalParams->InRectY);
+-        NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_Rect_W, pDlispEvalParams->InRectW);
+-        NVSDK_NGX_Parameter_SetUI(pInParams, NVSDK_NGX_Parameter_Rect_H, pDlispEvalParams->InRectH);
+-    }
+-
+-    return NVSDK_NGX_CUDA_EvaluateFeature_C(pInHandle, pInParams, NULL);
+-}
+ 
+ static inline NVSDK_NGX_Result NGX_D3D11_CREATE_DLRESOLVE_EXT(
+     ID3D11DeviceContext *pInCtx,
+@@ -686,30 +630,17 @@ static inline NVSDK_NGX_Result NGX_D3D11_CREATE_DLISP(
+     unsigned int InWidth,
+     unsigned int InHeight,
+     unsigned int InTargetWidth,
+-    unsigned int InTargetHeight)
++    unsigned int InTargetHeight,
++    NVSDK_NGX_PerfQuality_Value InPerfQualityValue)
+ {
+     NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_Width, InWidth);
+     NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_Height, InHeight);
+     NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_OutWidth, InTargetWidth);
+     NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_OutHeight, InTargetHeight);
++    NVSDK_NGX_Parameter_SetI(InParams, NVSDK_NGX_Parameter_PerfQualityValue, InPerfQualityValue);
+     return NVSDK_NGX_D3D11_CreateFeature(InCtx, NVSDK_NGX_Feature_ImageSignalProcessing, InParams, OutHandle);
+ }
+ 
+-static inline NVSDK_NGX_Result NGX_CUDA_CREATE_DLISP(
+-    NVSDK_NGX_Handle **OutHandle,
+-    NVSDK_NGX_Parameter *InParams,
+-    unsigned int InWidth,
+-    unsigned int InHeight,
+-    unsigned int InTargetWidth,
+-    unsigned int InTargetHeight)
+-{
+-    NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_Width, InWidth);
+-    NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_Height, InHeight);
+-    NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_OutWidth, InTargetWidth);
+-    NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_OutHeight, InTargetHeight);
+-    return NVSDK_NGX_CUDA_CreateFeature(NVSDK_NGX_Feature_ImageSignalProcessing, InParams, OutHandle);
+-}
+-
+ static inline NVSDK_NGX_Result NGX_D3D11_EVALUATE_DLISP(
+     NVSDK_NGX_Handle *InHandle,
+     NVSDK_NGX_Parameter *InParams,
+@@ -846,6 +777,7 @@ static inline NVSDK_NGX_Result NGX_D3D12_CREATE_DLISP(
+     unsigned int InHeight,
+     unsigned int InTargetWidth,
+     unsigned int InTargetHeight,
++    NVSDK_NGX_PerfQuality_Value InPerfQualityValue,
+     unsigned int InCreationNodeMask,
+     unsigned int InVisibilityNodeMask)
+ {
+@@ -855,6 +787,7 @@ static inline NVSDK_NGX_Result NGX_D3D12_CREATE_DLISP(
+     NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_Height, InHeight);
+     NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_OutWidth, InTargetWidth);
+     NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_OutHeight, InTargetHeight);
++    NVSDK_NGX_Parameter_SetI(InParams, NVSDK_NGX_Parameter_PerfQualityValue, InPerfQualityValue);
+     return NVSDK_NGX_D3D12_CreateFeature(InCmdList, NVSDK_NGX_Feature_ImageSignalProcessing, InParams, OutHandle);
+ }
+ 
+@@ -891,37 +824,6 @@ static inline NVSDK_NGX_Result NGX_D3D12_EVALUATE_DLISP(
+     return NVSDK_NGX_D3D12_EvaluateFeature_C(InCmdList, InHandle, InParams, NULL);
+ }
+ 
+-static inline NVSDK_NGX_Result NGX_CUDA_EVALUATE_DLISP(
+-    NVSDK_NGX_Handle* InHandle,
+-    NVSDK_NGX_Parameter* InParams,
+-    void* InColor,
+-    void* InOutput,
+-    float InSharpness,
+-    float InDenoise,
+-    unsigned int InRectX,
+-    unsigned int InRectY,
+-    unsigned int InRectW,
+-    unsigned int InRectH)
+-{
+-    if (InSharpness < 0.0f || InSharpness > 1.0f || InDenoise < 0.0f || InDenoise > 1.0f)
+-    {
+-        return NVSDK_NGX_Result_FAIL_InvalidParameter;
+-    }
+-    NVSDK_NGX_Parameter_SetVoidPointer(InParams, NVSDK_NGX_Parameter_Color, InColor);
+-    NVSDK_NGX_Parameter_SetVoidPointer(InParams, NVSDK_NGX_Parameter_Output, InOutput);
+-    // Both sharpness and denoise in range [0.0f,1.0f]
+-    NVSDK_NGX_Parameter_SetF(InParams, NVSDK_NGX_Parameter_Sharpness, InSharpness);
+-    NVSDK_NGX_Parameter_SetF(InParams, NVSDK_NGX_Parameter_Denoise, InDenoise);
+-    // If input is atlas - use RECT to upscale only the required area
+-    if (InRectW)
+-    {
+-        NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_Rect_X, InRectX);
+-        NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_Rect_Y, InRectY);
+-        NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_Rect_W, InRectW);
+-        NVSDK_NGX_Parameter_SetUI(InParams, NVSDK_NGX_Parameter_Rect_H, InRectH);
+-    }
+-    return NVSDK_NGX_CUDA_EvaluateFeature_C(InHandle, InParams, NULL);
+-}
+ 
+ static inline NVSDK_NGX_Result NGX_D3D12_CREATE_DLRESOLVE(
+     NVSDK_NGX_Handle **OutHandle,
+diff --git a/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_d.lib b/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_d.lib
+index 7664c796b4c..34d83253994 100644
+Binary files a/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_d.lib and b/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_d.lib differ
+diff --git a/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_d_dbg.lib b/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_d_dbg.lib
+index 67065fc7642..3f2a32d9ce8 100644
+Binary files a/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_d_dbg.lib and b/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_d_dbg.lib differ
+diff --git a/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_s.lib b/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_s.lib
+index 905e89e9258..d33195e7dbe 100644
+Binary files a/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_s.lib and b/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_s.lib differ
+diff --git a/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_s_dbg.lib b/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_s_dbg.lib
+index bd771fca121..1bb7c6e5e5c 100644
+Binary files a/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_s_dbg.lib and b/Engine/Source/ThirdParty/NVIDIA/NGX/lib/nvsdk_ngx_s_dbg.lib differ
