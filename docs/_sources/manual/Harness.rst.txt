@@ -1,5 +1,3 @@
-.. _Harness:
-
 .. |reg| unicode:: U+000AE .. REGISTERED SIGN
    :ltrim:
    
@@ -9,6 +7,8 @@
 .. |br| raw:: html
 
    <br/>
+
+.. _Harness:
 
 ===============
 Test Harness

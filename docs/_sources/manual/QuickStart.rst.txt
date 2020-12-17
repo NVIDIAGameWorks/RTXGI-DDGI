@@ -1,4 +1,4 @@
-.. _QUICKSTART:
+
 
 .. |reg| unicode:: U+000AE .. REGISTERED SIGN
    :ltrim:
@@ -9,6 +9,8 @@
 .. |cmake_image-1| image:: ../images/cmake-1.jpg
 .. |cmake_image-2| image:: ../images/cmake-2.jpg
 .. |testharness-vs-cmdline| image:: ../images/testharness-vs-cmdline.jpg
+
+.. _QUICKSTART:
 
 ============
 Quick Start

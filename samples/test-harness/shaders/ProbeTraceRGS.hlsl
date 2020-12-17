@@ -165,15 +165,21 @@ void RayGen()
     }
 #endif
 
+    // Perfectly diffuse reflectors don't exist in the real world. Limit the BRDF
+    // albedo to a maximum value to account for the energy loss at each bounce.
+    float maxAlbedo = 0.9f;
+
     // Compute final color
-    result = float4(diffuse + ((payload.albedo / PI) * irradiance), payload.hitT);
+    result = float4(diffuse + ((min(payload.albedo, maxAlbedo) / PI) * irradiance), payload.hitT);
 
 #if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
     // Use R32G32B32A32_FLOAT format. Store color components and hit distance as 32-bit float values.
     DDGIProbeRTRadiance[DispatchIndex.xy] = result;
 #else
     // Use R32G32_FLOAT format (don't use R32G32_UINT since hit distance needs to be negative sometimes).
-    // Pack color in R32 and store hit distance in G32.
+    // Pack color as R10G10B10 in R32 and store hit distance in G32.
+    static const float c_threshold = 1.f / 255.f;
+    if (RTXGIMaxComponent(result.rgb) <= c_threshold) result.rgb = float3(0.f, 0.f, 0.f);
     DDGIProbeRTRadiance[DispatchIndex.xy] = float4(asfloat(RTXGIFloat3ToUint(result.rgb)), payload.hitT, 0.f, 0.f);
 #endif
 }

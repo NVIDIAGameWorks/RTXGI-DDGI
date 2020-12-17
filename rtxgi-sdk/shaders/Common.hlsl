@@ -53,12 +53,12 @@ uint RTXGIFloatToUint(float v, float scale)
 
 /**
 * Pack a float3 into a 32-bit unsigned integer.
-* Red and green channels use 11 bits, the blue channel uses 10 bits.
+* All channels use 10 bits and 2 bits are unused.
 * Compliment of RTXGIUintToFloat3().
 */
 uint RTXGIFloat3ToUint(float3 input)
 {
-    return (RTXGIFloatToUint(input.r, 2047.f)) | (RTXGIFloatToUint(input.g, 2047) << 11) | (RTXGIFloatToUint(input.b, 1023) << 22);
+    return (RTXGIFloatToUint(input.r, 1023.f)) | (RTXGIFloatToUint(input.g, 1023.f) << 10) | (RTXGIFloatToUint(input.b, 1023.f) << 20);
 }
 
 /**
@@ -68,9 +68,9 @@ uint RTXGIFloat3ToUint(float3 input)
 float3 RTXGIUintToFloat3(uint packed)
 {
     float3 unpacked;
-    unpacked.x = (float)(packed & 0x000007FF) / 2047.f;
-    unpacked.y = (float)((packed >> 11) & 0x000007FF) / 2047.f;
-    unpacked.z = (float)((packed >> 22) & 0x000003FF) / 1023.f;
+    unpacked.x = (float)(packed & 0x000003FF) / 1023.f;
+    unpacked.y = (float)((packed >> 10) & 0x000003FF) / 1023.f;
+    unpacked.z = (float)((packed >> 20) & 0x000003FF) / 1023.f;
     return unpacked;
 }
 

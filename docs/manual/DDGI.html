@@ -1,7 +1,8 @@
 
 
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
   
@@ -11,10 +12,6 @@
   
 
   
-  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
-
-  
   
     <link rel="shortcut icon" href="../_static/favicon.ico"/>
   
@@ -22,9 +19,7 @@
   
 
   
-  <!--[if lt IE 9]>
-    <script src="../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
   
     
       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
@@ -36,6 +31,10 @@
     <script type="text/javascript" src="../_static/js/theme.js"></script>
 
     
+
+  
+  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Unreal Engine 4 Plugin" href="UE4Plugin.html" />
@@ -53,7 +52,7 @@
           
 
           
-            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> RTXGI SDK 1.1
+            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.1
           
 
           
@@ -79,7 +78,6 @@
           
         </div>
 
-        
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
             
@@ -135,7 +133,6 @@
             
           
         </div>
-        
       </div>
     </nav>
 
@@ -174,7 +171,7 @@
 
   <ul class="wy-breadcrumbs">
     
-      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li><a href="../index.html">Docs</a> &raquo;</li>
         
           <li><a href="Index.html">User’s Guide</a> &raquo;</li>
         
@@ -195,10 +192,10 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <span class="target" id="ddgi"></span><div class="section" id="dynamic-diffuse-global-illumination">
-<h1>Dynamic Diffuse Global Illumination<a class="headerlink" href="#dynamic-diffuse-global-illumination" title="Permalink to this headline">¶</a></h1>
+  <div class="section" id="dynamic-diffuse-global-illumination">
+<span id="ddgi"></span><h1>Dynamic Diffuse Global Illumination<a class="headerlink" href="#dynamic-diffuse-global-illumination" title="Permalink to this headline">¶</a></h1>
 <p>Dynamic Diffuse Global Illumination (DDGI) is a global lighting algorithm that extends the traditional pre-computed irradiance probes approach. Lighting techniques built on traditional irradiance probes are commonly used today in real-time rendering (see popular commercial products and engines such as <a class="reference external" href="https://www.siliconstudio.co.jp/middleware/enlighten/en/">Enlighten</a>, <a class="reference external" href="https://unity3d.com/learn/tutorials/topics/graphics/probe-lighting">Unity</a>, and <a class="reference external" href="https://docs.unrealengine.com/en-us/Engine/Rendering/LightingAndShadows/IndirectLightingCache">Unreal Engine</a>); however, these irradiance probe solutions are unable to resolve the visibility of dynamic scene elements at runtime. The DDGI algorithm removes this restriction by employing GPU ray tracing and a fast probe update scheme to maintain per-probe irradiance <em>and</em> distance data at runtime for static <em>and</em> dynamic objects.</p>
-<p>Similar to traditional irradiance probes, DDGI does not solve the complete global illumination problem, and is best used for the diffuse irradiance component of the full lighting equation. As a result of the underlying probe based data structure, the computed diffuse irradiance is inherently low frequency and can not capture fine high frequency occlusion details. For this reason, DDGI combines effectively with complimentary rendering techniques such as Ray Traced Ambient Occlusion (RTAO). To demonstrate this, RTAO is implemented and combined with DDGI in the Test Harness sample application. Head over to the <span class="xref std std-ref">Harness</span> section to learn more.</p>
+<p>Similar to traditional irradiance probes, DDGI does not solve the complete global illumination problem, and is best used for the diffuse irradiance component of the full lighting equation. As a result of the underlying probe based data structure, the computed diffuse irradiance is inherently low frequency and can not capture fine high frequency occlusion details. For this reason, DDGI combines effectively with complimentary rendering techniques such as Ray Traced Ambient Occlusion (RTAO). To demonstrate this, RTAO is implemented and combined with DDGI in the Test Harness sample application. Head over to the <a class="reference internal" href="Harness.html#harness"><span class="std std-ref">Test Harness</span></a> section to learn more.</p>
 <p>The remainder of this documentation focuses on the implementation of DDGI provided in this SDK. More information about Dynamic Diffuse Global Illumination can be found in the <a class="reference external" href="http://jcgt.org/published/0008/02/01/">academic publication</a> and <a class="reference external" href="https://www.gdcvault.com/play/1026182/">NVIDIA’s GDC 2019 “Dynamic Diffuse Global Illumination with Ray Traced Irradiance Fields”</a> talk.</p>
 <div class="section" id="usage-overview">
 <span id="ddgi-overview"></span><h2>Usage Overview<a class="headerlink" href="#usage-overview" title="Permalink to this headline">¶</a></h2>
@@ -322,7 +319,7 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
 </table>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Some of these configuration options are only used in the <span class="xref std std-ref">Harness</span>, but are provided in the SDK for convenience.</p>
+<p>Some of these configuration options are only used in the <a class="reference internal" href="Harness.html#harness"><span class="std std-ref">Test Harness</span></a>, but are provided in the SDK for convenience.</p>
 </div>
 </div>
 <div class="section" id="shaders">
@@ -732,7 +729,7 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
 <p>Assuming the set of desired parameters are available, the volume creation process begins by mapping each parameter into the <code class="docutils literal notranslate"><span class="pre">DDGIVolumeDesc</span></code> struct (see <a class="reference internal" href="#describing-a-volume">Describing a Volume</a> for details). Once the volume descriptor has the appropriate parameters, the required volume resources are set in a <code class="docutils literal notranslate"><span class="pre">DDGIVolumeResources</span></code> struct (see <a class="reference internal" href="#resource-management">Resource Management</a> for details). After the parameter descriptor and resource descriptor are set up, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is created using the constructor after which the <code class="docutils literal notranslate"><span class="pre">DDGIVolume::Create(...)</span></code> is called to finish creating the volume. See the <code class="docutils literal notranslate"><span class="pre">Harness::CreateVolume(...)</span></code> function in <code class="docutils literal notranslate"><span class="pre">samples/test-harness/src/harness/Harness.cpp</span></code> for an example.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The <span class="xref std std-ref">Harness</span> provides an example implementation of how to use one or more <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> to add global illumination to a scene.</p>
+<p>The <a class="reference internal" href="Harness.html#harness"><span class="std std-ref">Test Harness</span></a> provides an example implementation of how to use one or more <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> to add global illumination to a scene.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -1001,19 +998,11 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
 
   <div role="contentinfo">
     <p>
-        
         &copy; Copyright 2019-2020, NVIDIA
 
     </p>
   </div>
-    
-    
-    
-    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
-    
-    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
-    
-    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -1024,6 +1013,7 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
 
   </div>
   
+
 
   <script type="text/javascript">
       jQuery(function () {

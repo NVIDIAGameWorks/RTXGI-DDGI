@@ -1,7 +1,8 @@
 
 
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
   
@@ -11,10 +12,6 @@
   
 
   
-  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
-
-  
   
     <link rel="shortcut icon" href="../_static/favicon.ico"/>
   
@@ -22,9 +19,7 @@
   
 
   
-  <!--[if lt IE 9]>
-    <script src="../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
   
     
       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
@@ -36,6 +31,10 @@
     <script type="text/javascript" src="../_static/js/theme.js"></script>
 
     
+
+  
+  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="prev" title="Dynamic Diffuse Global Illumination" href="DDGI.html" /> 
@@ -52,7 +51,7 @@
           
 
           
-            <a href="../index.html" class="icon icon-home" alt="Documentation Home"> RTXGI SDK 1.1
+            <a href="../index.html" class="icon icon-home"> RTXGI SDK 1.1
           
 
           
@@ -78,7 +77,6 @@
           
         </div>
 
-        
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
             
@@ -112,7 +110,6 @@
             
           
         </div>
-        
       </div>
     </nav>
 
@@ -151,7 +148,7 @@
 
   <ul class="wy-breadcrumbs">
     
-      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li><a href="../index.html">Docs</a> &raquo;</li>
         
           <li><a href="Index.html">User’s Guide</a> &raquo;</li>
         
@@ -172,21 +169,21 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <span class="target" id="ue4plugin"></span><div class="section" id="unreal-engine-4-plugin">
-<h1>Unreal Engine 4 Plugin<a class="headerlink" href="#unreal-engine-4-plugin" title="Permalink to this headline">¶</a></h1>
+  <div class="section" id="unreal-engine-4-plugin">
+<span id="ue4plugin"></span><h1>Unreal Engine 4 Plugin<a class="headerlink" href="#unreal-engine-4-plugin" title="Permalink to this headline">¶</a></h1>
 <p>To bring the advantages of RTXGI to as many developers as possible, all RTXGI 1.1 features are now available in Unreal Engine 4 through the RTXGI UE4 plugin. To use the RTXGI UE4 plugin, you’ll first need to meet the following software and hardware requirements:</p>
 <b>Software:</b> <br><ul class="simple">
 <li><p>Windows 10 v1809 or higher</p></li>
 <li><p>Visual Studio 2017 or 2019</p></li>
 <li><p>Windows SDK version 10.0.17763 or higher (can be installed using the Visual Studio Installer)</p></li>
 <li><p>The latest drivers for your GPU. NVIDIA drivers <a class="reference external" href="http://www.nvidia.com/drivers">are available here</a></p></li>
-<li><p>Unreal Engine 4.25.3 or 4.25.4 source code, available for free from <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Epic Games</a> or from the <a class="reference external" href="https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.25.3">NVIDIA NvRTX branch</a> of Unreal Engine.</p></li>
+<li><p>Unreal Engine version 4.26.0, 4.25.4, or 4.25.3 source code, available for free from <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Epic Games</a> or from the <a class="reference external" href="https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.26">NVIDIA NvRTX branch</a> of Unreal Engine.</p></li>
 </ul>
 <b>Hardware:</b> <br><ul>
 <li><p>Any DXR enabled GPU. NVIDIA DXR enabled GPUs:</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>RTX 3090, 3080, 3070</p></li>
+<li><p>RTX 3090, 3080, 3070, 3060 Ti</p></li>
 <li><p>RTX 2080 Ti, 2080 SUPER, 2080, 2070 SUPER, 2070, 2060 SUPER, 2060</p></li>
 <li><p>GTX 1660 Ti, 1660 SUPER, 1660</p></li>
 <li><p>GTX 1080 Ti, 1080, 1070, 1060 with at least 6GB of memory</p></li>
@@ -200,7 +197,7 @@
 </div>
 <div class="section" id="plugin-contents">
 <h2>Plugin Contents<a class="headerlink" href="#plugin-contents" title="Permalink to this headline">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">RTXGI-UE4.25.3.patch</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI-UE4.25.4.patch</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI-NvRTX4.25.3.patch</span></code> and <code class="docutils literal notranslate"><span class="pre">RTXGI-NvRTX4.25.4.patch</span></code> are patch files to be applied to the appropriate engine branch.</p>
+<p><code class="docutils literal notranslate"><span class="pre">RTXGI-UE4.26.0.patch</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI-UE4.25.4.patch</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI-UE4.25.3.patch</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI-NvRTX4.26.0.patch</span></code>, <code class="docutils literal notranslate"><span class="pre">RTXGI-NvRTX4.25.4.patch</span></code>, and <code class="docutils literal notranslate"><span class="pre">RTXGI-NvRTX4.25.3.patch</span></code> are patch files to be applied to the appropriate engine branch.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Patch files are available in the RTXGI SDK Github repository under the <strong>ue4-plugin</strong> directory.</p>
@@ -208,36 +205,38 @@
 </div>
 <div class="section" id="getting-started">
 <h2>Getting Started<a class="headerlink" href="#getting-started" title="Permalink to this headline">¶</a></h2>
-<p>Minor engine changes are required for the RTXGI plugin to work in UE4.25. This distribution of the RTXGI UE4 plugin is designed to be overlaid on top of Epic’s Unreal Engine or <a class="reference external" href="https://docs.nvidia.com/rtx-dev-ue4/intro-relnotes/index.html">NVIDIA’s NvRTX</a>  4.25.3 or 4.25.4 source code.</p>
+<p>Minor engine changes are required for the RTXGI plugin to work with Unreal Engine. This distribution of the RTXGI UE4 plugin is designed to be overlaid on top of Epic’s Unreal Engine or <a class="reference external" href="https://docs.nvidia.com/rtx-dev-ue4/intro-relnotes/index.html">NVIDIA’s NvRTX</a> source code.</p>
 <p><strong>Plugin Installation:</strong> <br/></p>
 <blockquote>
 <div><ol class="arabic">
-<li><p>Clone Unreal Engine 4.25.3 or 4.25.4 from Epic Games <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Unreal Engine GitHub</a>.</p>
+<li><p>Clone Unreal Engine 4.26.0, 4.25.4, or 4.25.3 from Epic Games <a class="reference external" href="https://www.unrealengine.com/en-US/ue4-on-github">Unreal Engine GitHub</a>.</p>
 <ol class="arabic simple">
-<li><p>Select <strong>NvRTX 4.25.3</strong> or <strong>NvRTX 4.25.4</strong> if using the NVIDIA NvRTX UE4.25 branch.</p></li>
+<li><p>Clone <strong>NvRTX 4.26.0</strong>, <strong>NvRTX 4.25.4</strong>, or <strong>NvRTX 4.25.3</strong> if using the NVIDIA NvRTX UE4 branch.</p></li>
 </ol>
 </li>
 <li><p>Download the appropriate patch file from the <strong>ue4-plugin</strong> directory of the RTXGI GitHub repository. Select the patch that matches the engine branch you’ve chosen.</p></li>
-<li><p>Apply the necessary engine changes and RTXGI plugin:</p>
+<li><p>Instasll the RTXGI plugin:</p>
 <blockquote>
 <div><ul>
 <li><p>Apply the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file to install the plugin and necessary engine changes.</p>
 <blockquote>
 <div><ul>
 <li><p>Copy the provided <code class="docutils literal notranslate"><span class="pre">.patch</span></code> file in the root directory of the cloned Unreal Engine source code.</p></li>
-<li><p>Open a command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">RTXGI-UE4.25.x.patch</span></code> and hit enter (replace <code class="docutils literal notranslate"><span class="pre">x</span></code> with the minor engine version number).</p>
+<li><p>Open a command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">RTXGI-UE4.xx.y.patch</span></code>, and hit enter</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>If you are applying a patch file for NvRTX, use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">RTXGI-NvRTX4.25.x.patch</span></code> instead.</p></li>
-<li><p>This checks if the chosen patch can be applied to the respective engine build.</p></li>
+<li><p>Replace <code class="docutils literal notranslate"><span class="pre">xx</span></code> with the major engine version number (e.g. <code class="docutils literal notranslate"><span class="pre">26</span></code>), and <code class="docutils literal notranslate"><span class="pre">y</span></code> with the minor engine version number (e.g. <code class="docutils literal notranslate"><span class="pre">0</span></code>).</p></li>
+<li><p>If you are applying a patch file for NvRTX, use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">RTXGI-NvRTX4.xx.y.patch</span></code> instead.</p></li>
+<li><p>This checks if the chosen patch can be applied to the repository.</p></li>
 </ul>
 </div></blockquote>
 </li>
 <li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns any errors, follow the prompt and resolve conflicts manually.</p></li>
-<li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns nothing, or only warnings, everything is correct. Continue to the next step.</p></li>
-<li><p>In the same command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">RTXGI-UE4.25.x.patch</span></code> in the root directory and hit enter. (again, replace <code class="docutils literal notranslate"><span class="pre">x</span></code> with the minor engine version number).</p>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">--check</span> <span class="pre">...</span></code> returns nothing (or only warnings) continue to the next step.</p></li>
+<li><p>In the same command prompt, type <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">RTXGI-UE4.xx.y.patch</span></code> and hit enter.</p>
 <ul class="simple">
-<li><p>If you are applying a patch file for NvRTX, use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">RTXGI-NvRTX4.25.x.patch</span></code> instead.</p></li>
+<li><p>Again, replace <code class="docutils literal notranslate"><span class="pre">xx</span></code> with the major engine version number and <code class="docutils literal notranslate"><span class="pre">y</span></code> with the minor engine version number.</p></li>
+<li><p>If you are applying a patch file for NvRTX, use <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">apply</span> <span class="pre">RTXGI-NvRTX4.xx.y.patch</span></code> instead.</p></li>
 </ul>
 </li>
 </ul>
@@ -246,21 +245,21 @@
 </ul>
 <blockquote>
 <div><ul>
-<li><p>After applying the patch, the engine must be built to include engine code changes needed by the plugin.</p>
+<li><p>After applying the patch, the engine must be (re)built.</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>Run GenerateProjectFiles.bat to regenerate the project files.</p></li>
-<li><p>Build the engine.</p></li>
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">GenerateProjectFiles.bat</span></code> to regenerate the project files.</p></li>
+<li><p>Open <code class="docutils literal notranslate"><span class="pre">UE4.sln</span></code> and build the engine.</p></li>
 </ul>
 </div></blockquote>
 </li>
-<li><p>All necessary patches have been applied! Proceed to the next step.</p></li>
+<li><p>The RTXGI plugin is installed and built! Proceed to the next step.</p></li>
 </ul>
 </div></blockquote>
 </div></blockquote>
 </li>
 <li><p>Run the UE4 editor in DirectX 12 mode by adding <code class="docutils literal notranslate"><span class="pre">-dx12</span></code> to the command line (DirectX12 is required for ray tracing).</p></li>
-<li><p>Enable the RTXGI plugin in the Editor.</p>
+<li><p>Enable the RTXGI plugin in the Editor:</p>
 <ol class="arabic simple">
 <li><p>Select <code class="docutils literal notranslate"><span class="pre">Edit-&gt;Plugins-&gt;Lighting-&gt;NVIDIA</span> <span class="pre">RTXGI</span> <span class="pre">Plugin</span></code>.</p></li>
 <li><p>Restart the editor.</p></li>
@@ -349,7 +348,7 @@ The RTXGI plugin has several settings in UE4’s project settings dialog.</p>
 <p id="id2">RTXGI adds a high performance option to compute dynamic global illumination in real-time in UE4. As implied by the name, RTXGI requires ray tracing to be enabled and the plugin to be active. If ray tracing is not available, the plugin will load the probe textures saved as part of the level from the disk upon load of level.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>without DirectX Raytracing support available from the graphics hardware and operating system, <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> probes operate in a static mode, where the probes do not update at runtime.</p>
+<p>When DirectX Raytracing is not available, <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> probes operate in a static mode where the probes do not update at runtime.</p>
 </div>
 <div class="section" id="using-rtxgi">
 <h3>Using RTXGI<a class="headerlink" href="#using-rtxgi" title="Permalink to this headline">¶</a></h3>
@@ -427,7 +426,7 @@ The RTXGI plugin has several settings in UE4’s project settings dialog.</p>
 <div class="section" id="tips-and-tricks">
 <h3>Tips and Tricks<a class="headerlink" href="#tips-and-tricks" title="Permalink to this headline">¶</a></h3>
 <div class="section" id="sparse-probe-layouts-recommended">
-<h4>Sparse probe layouts recommended<a class="headerlink" href="#sparse-probe-layouts-recommended" title="Permalink to this headline">¶</a></h4>
+<h4>Sparse Probe Layouts Recommended<a class="headerlink" href="#sparse-probe-layouts-recommended" title="Permalink to this headline">¶</a></h4>
 <p>Relatively sparse probe grids are good practice for both high performance and quality results. As a starting point, we recommend setting probes about 2-3 meters apart from each other in a typical human-scale indoor scene. In large outdoor scenes, you can go much sparser and still get good results!</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -452,7 +451,7 @@ The RTXGI plugin has several settings in UE4’s project settings dialog.</p>
 </table>
 </div>
 <div class="section" id="emissive-surfaces-are-light-sources-with-rtxgi">
-<h4>Emissive surfaces are light sources with RTXGI<a class="headerlink" href="#emissive-surfaces-are-light-sources-with-rtxgi" title="Permalink to this headline">¶</a></h4>
+<h4>Emissive Surfaces are Light Sources with RTXGI<a class="headerlink" href="#emissive-surfaces-are-light-sources-with-rtxgi" title="Permalink to this headline">¶</a></h4>
 <p>In this example of the NVIDIA Attic scene, there are large emissive meshes outside the windows to generate extra indirect light.</p>
 <div class="figure align-center" id="id5">
 <a class="reference internal image-reference" href="../_images/emissive-surfaces.png"><img alt="../_images/emissive-surfaces.png" src="../_images/emissive-surfaces.png" style="width: 1205.0px; height: 744.0px;" /></a>
@@ -532,19 +531,11 @@ Think about your surfaces and how they relate to global lighting. If your goal i
 
   <div role="contentinfo">
     <p>
-        
         &copy; Copyright 2019-2020, NVIDIA
 
     </p>
   </div>
-    
-    
-    
-    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
-    
-    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
-    
-    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -555,6 +546,7 @@ Think about your surfaces and how they relate to global lighting. If your goal i
 
   </div>
   
+
 
   <script type="text/javascript">
       jQuery(function () {

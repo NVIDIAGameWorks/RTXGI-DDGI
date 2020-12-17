@@ -39,7 +39,7 @@ void CHS(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttribute
 
     // Geometric normal
     payload.normal = v.normal;
-    payload.normal = normalize(mul(ObjectToWorld3x4(), float4(payload.normal, 1.f)).xyz);
+    payload.normal = normalize(mul(ObjectToWorld3x4(), float4(payload.normal, 0.f)).xyz);
     payload.shadingNormal = payload.normal;
 
     // Albedo and Opacity
@@ -56,7 +56,7 @@ void CHS(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttribute
         float3x3 TBN = { v.tangent, v.bitangent, payload.normal };
         payload.shadingNormal = Textures[normalTexIdx].SampleLevel(BilinearSampler, v.uv0, 0).xyz;
         payload.shadingNormal = (payload.shadingNormal * 2.f) - 1.f;                                                // Transform to [-1, 1]
-        payload.shadingNormal = normalize(mul(ObjectToWorld3x4(), float4(mul(payload.shadingNormal, TBN), 1.f)));   // Transform tangent space normal to world space
+        payload.shadingNormal = normalize(mul(ObjectToWorld3x4(), float4(mul(payload.shadingNormal, TBN), 0.f)));   // Transform tangent space normal to world space
     }
 
     // Roughness and Metallic

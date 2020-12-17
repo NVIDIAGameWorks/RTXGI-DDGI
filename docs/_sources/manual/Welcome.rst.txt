@@ -1,7 +1,7 @@
-.. _WELCOME:
-
 .. |reg| unicode:: U+000AE .. REGISTERED SIGN
    :ltrim:
+
+.. _WELCOME:
 
 =========
 Welcome
@@ -40,4 +40,4 @@ the **rtxgi-sdk** directory of the RTXGI SDK distribution contains the core of t
 in addition to the core SDK source code, full source code samples are also provided in the RTXGI SDK distribution in the **samples** directory. The first sample available is the Test Harness sample application. The Test Harness serves as an example of how a host application is expected to integrate the SDK, manage resources, and interact with the public API. To get jump started, check out the :ref:`QUICKSTART` page. To learn more about the Test Harness application, head over to the :ref:`Harness` page.
 
 **Unreal Engine 4 Plugin:**
-the **ue4-plugin** directory of the RTXGI SDK distribution contains zip archives of the Unreal Engine 4 RTXGI plugin for the supported versions of the Unreal Engine. To learn more about the UE4 RTXGI plugin, head over to the :ref:`UE4Plugin` page.
+the **ue4-plugin** directory of the RTXGI SDK distribution contains patch files used to install the RTXGI plugin for the supported versions of the Unreal Engine. To learn more about the UE4 RTXGI plugin, head over to the :ref:`UE4Plugin` page.

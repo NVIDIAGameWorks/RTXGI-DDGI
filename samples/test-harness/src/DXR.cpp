@@ -1234,7 +1234,6 @@ void Cleanup(DXRGlobal &dxr)
     dxr.pathTraceRGS.Release();
     dxr.miss.Release();
     dxr.hit.Release();
-    dxr.visUpdateTLASCS->Release();
 
     // Release root signatures and PSOs
     RTXGI_SAFE_RELEASE(dxr.globalRootSig);

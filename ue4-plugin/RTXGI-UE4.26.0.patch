@@ -1,44 +1,42 @@
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/RTXGI.uplugin b/Engine/Plugins/Runtime/Nvidia/RTXGI/RTXGI.uplugin
 new file mode 100644
-index 00000000000..df851f14812
+index 00000000000..f820b0beeb7
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/RTXGI.uplugin
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,27 @@
 +{
-+	"FileVersion" : 3,
-+	"Version" : 0,
-+	"VersionName" : "0.0",
-+	"FriendlyName" : "NVIDIA RTXGI Plugin",
-+	"Description" : "Plugin to support dynamic Global Illumination",
-+	"Category" : "Lighting",
-+	"CreatedBy" : "Epic Games, Inc.",
-+	"CreatedByURL" : "http://epicgames.com",
-+	"DocsURL" : "",
-+	"MarketplaceURL" : "",
-+	"SupportURL" : "",
-+	"EnabledByDefault" : false,
-+	"CanContainContent" : true,
-+	"IsBetaVersion" : true,
-+	"Installed" : false,
-+	"Modules" :
-+	[
++	"FileVersion": 3,
++	"Version": 1,
++	"VersionName": "1.1.23",
++	"FriendlyName": "NVIDIA RTXGI Plugin",
++	"Description": "Dynamic Real-Time Ray Traced Global Illumination",
++	"Category": "Lighting",
++	"CreatedBy": "NVIDIA Corporation",
++	"CreatedByURL": "https://developer.nvidia.com/rtxgi",
++	"DocsURL": "https://developer.nvidia.com/rtxgi",
++	"MarketplaceURL": "",
++	"SupportURL": "https://developer.nvidia.com/rtxgi",
++	"EnabledByDefault": false,
++	"CanContainContent": true,
++	"IsBetaVersion": false,
++	"Installed": false,
++	"Modules": [
 +		{
-+			"Name" : "RTXGI",
-+			"Type" : "Runtime",
-+			"LoadingPhase" : "PostConfigInit",
-+			"WhitelistPlatforms" :
-+			[
-+				"Win64",				
++			"Name": "RTXGI",
++			"Type": "Runtime",
++			"LoadingPhase": "PostConfigInit",
++			"WhitelistPlatforms": [
++				"Win64"
 +			]
 +		}
 +	]
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf
 new file mode 100644
-index 00000000000..3d594e7bc08
+index 00000000000..1df0119a68d
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf
-@@ -0,0 +1,217 @@
+@@ -0,0 +1,223 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -93,6 +91,7 @@ index 00000000000..3d594e7bc08
 +	Texture2D<float4> DDGIVolume_##x##_ProbeIrradiance; \
 +	Texture2D<float4> DDGIVolume_##x##_ProbeDistance; \
 +	RWTexture2D<float4> DDGIVolume_##x##_ProbeOffsets; \
++	Texture2D<uint> DDGIVolume_##x##_ProbeStates; \
 +	float3 DDGIVolume_##x##_Position; \
 +	float3 DDGIVolume_##x##_Radius; \
 +	float3 DDGIVolume_##x##_ProbeGridSpacing; \
@@ -104,8 +103,10 @@ index 00000000000..3d594e7bc08
 +	float  DDGIVolume_##x##_NormalBias; \
 +	float  DDGIVolume_##x##_ViewBias; \
 +	float  DDGIVolume_##x##_BlendDistance; \
++	float  DDGIVolume_##x##_BlendDistanceBlack; \
 +	float  DDGIVolume_##x##_ApplyLighting; \
-+	int3   DDGIVolume_##x##_ProbeScrollOffsets;
++	int3   DDGIVolume_##x##_ProbeScrollOffsets; \
++	float  DDGIVolume_##x##_IrradianceScalar;
 +VOLUME_LIST
 +#undef VOLUME_ENTRY
 +
@@ -125,8 +126,8 @@ index 00000000000..3d594e7bc08
 +	OutScreenVector = mul(float4(OutPosition.xy, 1, 0), ScreenToTranslatedWorld).xyz;
 +}
 +
-+bool ApplyVolumeLightingContribution(out float4 lightWeight, in Texture2D<float4> ProbeIrradiance, in Texture2D<float4> ProbeDistance, in RWTexture2D<float4> ProbeOffsets, in float3 WorldPosition, in float3 Normal, in float3 CameraDirection,
-+uint pixelLightingMask, in uint volumeLightingChannelMask, in float3 volumeRadius, in DDGIVolumeDescGPU DDGIVolume, in float3 albedo, in float BlendDistance, in float ApplyLighting)
++bool ApplyVolumeLightingContribution(out float4 lightWeight, in Texture2D<float4> ProbeIrradiance, in Texture2D<float4> ProbeDistance, in RWTexture2D<float4> ProbeOffsets, in Texture2D<uint> ProbeStates, in float3 WorldPosition, in float3 Normal, in float3 CameraDirection,
++uint pixelLightingMask, in uint volumeLightingChannelMask, in float3 volumeRadius, in DDGIVolumeDescGPU DDGIVolume, in float3 albedo, in float BlendDistance, in float BlendDistanceBlack, in float ApplyLighting, in float IrradianceScalar)
 +{
 +	lightWeight = float4(0.0f, 0.0f, 0.0f, 0.0f);
 +
@@ -146,14 +147,13 @@ index 00000000000..3d594e7bc08
 +	{
 +		resources.probeIrradianceSRV = ProbeIrradiance;
 +		resources.probeDistanceSRV = ProbeDistance;
-+		resources.trilinearSampler = LinearClampSampler;
++		resources.bilinearSampler = LinearClampSampler;
 +#if RTXGI_DDGI_PROBE_RELOCATION
 +		resources.probeOffsets = ProbeOffsets;
 +#endif
-+// It doesn't actually need this, so not passing it through
-+//#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-+		//resources.probeStates = ProbeStates;
-+//#endif
++#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
++		resources.probeStates = ProbeStates;
++#endif
 +	}
 +
 +    // Get irradiance from the DDGIVolume
@@ -168,7 +168,7 @@ index 00000000000..3d594e7bc08
 +			resources
 +		);
 +
-+		lightWeight.rgb = irradiance * albedo;
++		lightWeight.rgb = irradiance * (albedo / RTXGI_PI) / IrradianceScalar;
 +	}
 +	else
 +	{
@@ -176,7 +176,11 @@ index 00000000000..3d594e7bc08
 +	}
 +
 +	float3 edgeDist = (volumeRadius - abs(relPos));
-+	lightWeight.a = (BlendDistance == 0.0f) ? 1.0f : clamp(min(edgeDist.x, min(edgeDist.y, edgeDist.z)) / BlendDistance, 0.0f, 1.0f);
++	float edgeMinDist = min(edgeDist.x, min(edgeDist.y, edgeDist.z));
++	if (BlendDistance == 0.0f)
++		lightWeight.a = (edgeMinDist < BlendDistanceBlack) ? 0.0f : 1.0f;
++	else
++		lightWeight.a = clamp((edgeMinDist - BlendDistanceBlack) / BlendDistance, 0.0f, 1.0f);
 +	return true;
 +}
 +
@@ -228,8 +232,8 @@ index 00000000000..3d594e7bc08
 +	float4 secondaryLightWeight = float4(0.0f, 0.0f, 0.0f, 0.0f);
 +	float4 lightWeight = float4(0.0f, 0.0f, 0.0f, 0.0f);
 +	#define VOLUME_ENTRY(x) \
-+	if (x < NumVolumes && primaryLightWeight.a < 1.0f && secondaryLightWeight.a == 0.0f && ApplyVolumeLightingContribution(lightWeight, DDGIVolume_##x##_ProbeIrradiance, DDGIVolume_##x##_ProbeDistance, DDGIVolume_##x##_ProbeOffsets, WorldPosition, Normal, CameraDirection, pixelLightingMask, \
-+		uint(DDGIVolume_##x##_LightingChannelMask), DDGIVolume_##x##_Radius, DDGIVolume_##x, albedo, DDGIVolume_##x##_BlendDistance, DDGIVolume_##x##_ApplyLighting)) \
++	if (x < NumVolumes && primaryLightWeight.a < 1.0f && secondaryLightWeight.a == 0.0f && ApplyVolumeLightingContribution(lightWeight, DDGIVolume_##x##_ProbeIrradiance, DDGIVolume_##x##_ProbeDistance, DDGIVolume_##x##_ProbeOffsets, DDGIVolume_##x##_ProbeStates, WorldPosition, Normal, CameraDirection, pixelLightingMask, \
++		uint(DDGIVolume_##x##_LightingChannelMask), DDGIVolume_##x##_Radius, DDGIVolume_##x, albedo, DDGIVolume_##x##_BlendDistance, DDGIVolume_##x##_BlendDistanceBlack, DDGIVolume_##x##_ApplyLighting, DDGIVolume_##x##_IrradianceScalar)) \
 +		{ \
 +			if (primaryLightWeight.a == 0.0f) \
 +				primaryLightWeight = lightWeight; \
@@ -258,10 +262,10 @@ index 00000000000..3d594e7bc08
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf
 new file mode 100644
-index 00000000000..98938ad98c7
+index 00000000000..e3f61a22501
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf
-@@ -0,0 +1,286 @@
+@@ -0,0 +1,312 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -272,8 +276,7 @@ index 00000000000..98938ad98c7
 +* license agreement from NVIDIA CORPORATION is strictly prohibited.
 +*/
 +
-+#define OcclusionCullDirection 0
-+
++#include "/Engine/Private/HairStrands/HairStrandsVoxelPageCommonStruct.ush"
 +#include "/Engine/Private/Common.ush"
 +
 +struct DDGIVolumeDescGPU
@@ -303,12 +306,12 @@ index 00000000000..98938ad98c7
 +#define LTCMatSampler				RaytracingLightsDataPacked.LTCMatSampler
 +#define LTCAmpTexture				RaytracingLightsDataPacked.LTCAmpTexture
 +#define LTCAmpSampler				RaytracingLightsDataPacked.LTCAmpSampler
-+#define PreIntegratedGF				ReflectionStruct.PreIntegratedGF			
-+#define PreIntegratedGFSampler		ReflectionStruct.PreIntegratedGFSampler	
++#define PreIntegratedGF				ReflectionStruct.PreIntegratedGF
++#define PreIntegratedGFSampler		ReflectionStruct.PreIntegratedGFSampler
 +
 +#include "/Engine/Private/DeferredLightingCommon.ush"
 +#include "/Engine/Private/DeferredShadingCommon.ush"
-+#include "/Engine/Private/PathTracing/Utilities/PathTracingRandomSequence.ush" 
++#include "/Engine/Private/PathTracing/Utilities/PathTracingRandomSequence.ush"
 +#include "/Engine/Private/SceneTextureParameters.ush"
 +#include "/Engine/Private/RayTracing/RayTracingCommon.ush"
 +#include "/Engine/Private/RayTracing/RayTracingDeferredShadingCommon.ush"
@@ -335,7 +338,7 @@ index 00000000000..98938ad98c7
 +Texture2D<float4>   DDGIVolume_ProbeIrradiance;
 +Texture2D<float4>   DDGIVolume_ProbeDistance;
 +RWTexture2D<float4> DDGIVolume_ProbeOffsets;
-+RWTexture2D<uint>   DDGIVolume_ProbeStates;
++Texture2D<uint>     DDGIVolume_ProbeStates;
 +float3              DDGIVolume_Origin;
 +float3              DDGIVolume_ProbeGridSpacing;
 +float               DDGIVolume_ProbeMaxRayDistance;
@@ -350,6 +353,10 @@ index 00000000000..98938ad98c7
 +float               DDGIVolume_ViewBias;
 +SamplerState        DDGIVolume_LinearClampSampler;
 +int3                DDGIVolume_ProbeScrollOffsets;
++float               DDGIVolume_IrradianceScalar;
++int                 DDGIVolume_ProbeIndexStart;
++int                 DDGIVolume_ProbeIndexCount;
++float               DDGIVolume_EmissiveMultiplier;
 +
 +float3              Sky_Color;
 +TextureCube<float4> Sky_Texture;
@@ -364,10 +371,26 @@ index 00000000000..98938ad98c7
 +
 +void WriteRadianceOutput(uint2 DispatchIndex, float4 value)
 +{
++#if !RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
++	static const float c_threshold = 1.f / 255.f;
++	if (RTXGIMaxComponent(value.rgb) <= c_threshold) value.rgb = float3(0.f, 0.f, 0.f);
++#endif
++
++	// Radiance / irradiance is multipled by this when stored, but divided by this when recalled.
++	// This feature is to avoid clipping when using the 10 bit texture format.
++	value.rgb *= DDGIVolume_IrradianceScalar;
++
 +#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
++	// Use R32G32B32A32_FLOAT format. Store color components and hit distance as 32-bit float values.
 +	RadianceOutput[DispatchIndex.xy] = value;
 +#else
-+	RadianceOutput[DispatchIndex.xy] = float4(asfloat(RTXGIFloat3ToUint(value.xyz)), value.w, 0.f, 0.f);
++	// Use R32G32_FLOAT format (don't use R32G32_UINT since hit distance needs to be negative sometimes).
++	// Pack color as R10G10B10 in R32 and store hit distance in G32.
++	RadianceOutput[DispatchIndex.xy] = float4(asfloat(RTXGIFloat3ToUint(clamp(value.rgb, 0.0f, 1.0f))), value.w, 0.f, 0.f);
++#endif
++
++#if DDGIVolumeUpdateDebug != 0
++	DebugOutput[DispatchIndex.xy] = value;
 +#endif
 +}
 +
@@ -375,7 +398,7 @@ index 00000000000..98938ad98c7
 +{
 +	DDGIVolumeDescGPU DDGIVolume;
 +	DDGIVolume.origin = DDGIVolume_Origin;
-+	DDGIVolume.numRaysPerProbe = DDGIVolume_NumRaysPerProbe;	
++	DDGIVolume.numRaysPerProbe = DDGIVolume_NumRaysPerProbe;
 +	DDGIVolume.probeGridSpacing = DDGIVolume_ProbeGridSpacing;
 +	DDGIVolume.probeMaxRayDistance = DDGIVolume_ProbeMaxRayDistance;
 +	DDGIVolume.probeGridCounts = DDGIVolume_ProbeGridCounts;
@@ -395,6 +418,15 @@ index 00000000000..98938ad98c7
 +    int rayIndex = DispatchIndex.x;                    // index of ray within a probe
 +    int probeIndex = DispatchIndex.y;                  // index of current probe
 +
++	// Handle round robin updating.
++	// If this probe is outside of the window for updating, bail out.
++	{
++		int numProbes = DDGIVolume_ProbeGridCounts.x * DDGIVolume_ProbeGridCounts.y * DDGIVolume_ProbeGridCounts.z;
++		int probeRRIndex = (probeIndex < DDGIVolume_ProbeIndexStart) ? probeIndex + numProbes : probeIndex;
++		if (probeRRIndex >= DDGIVolume_ProbeIndexStart + DDGIVolume_ProbeIndexCount)
++			return;
++	}
++
 +#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
 +#if RTXGI_DDGI_PROBE_SCROLL
 +    int storageProbeIndex = DDGIGetProbeIndexOffset(probeIndex, DDGIVolume.probeGridCounts, DDGIVolume.probeScrollOffsets);
@@ -402,8 +434,8 @@ index 00000000000..98938ad98c7
 +    int storageProbeIndex = probeIndex;
 +#endif
 +    int2 texelPosition = DDGIGetProbeTexelPosition(storageProbeIndex, DDGIVolume.probeGridCounts);
-+    int  probeState = DDGIVolume_ProbeStates[texelPosition];
-+    if (probeState == PROBE_STATE_INACTIVE && rayIndex >= NUM_FIXED_TEST_RAYS)
++    int  probeState = DDGIVolume_ProbeStates.Load(int3(texelPosition, 0));
++    if (probeState == PROBE_STATE_INACTIVE && rayIndex >= RTXGI_DDGI_NUM_FIXED_RAYS)
 +    {
 +       // if the probe is inactive, do not shoot rays, unless it is one of the fixed rays that could potentially reactivate the probe
 +       return;
@@ -432,9 +464,15 @@ index 00000000000..98938ad98c7
 +	const int ReflectedShadowsType = 1; // = hard shadows.  make configurable?
 +	const uint RefractionRayFlags = 0;
 +	const uint RefractionInstanceInclusionMask = RAY_TRACING_MASK_ALL;
++
++	#if DDGI_SKYLIGHT
++	const bool bRefractionEnableSkyLightContribution = true;
++	#else
++	const bool bRefractionEnableSkyLightContribution = false;
++	#endif
++
 +	const bool bRefractionRayTraceSkyLightContribution = false;
 +	const bool bRefractionDecoupleSampleGeneration = true;
-+	const bool bRefractionEnableSkyLightContribution = true;
 +	const bool ShouldDoDirectLighting = true;
 +	const bool ShouldDoEmissiveAndIndirectLighting = true;
 +	float3 PathVertexRadiance = float3(0, 0, 0);
@@ -464,20 +502,17 @@ index 00000000000..98938ad98c7
 +		bRefractionEnableSkyLightContribution,
 +		PathVertexRadiance);
 +
++	// Adjust emissive contribution if we should
++	PathVertexRadiance += Payload.Radiance * (DDGIVolume_EmissiveMultiplier - 1.0f);
++
 +	result = float4(PathVertexRadiance.xyz, Payload.HitT);
 +
 +	// Ray miss. Set hit distance to a large value and exit early.
 +	if (Payload.IsMiss())
 +	{
 +		result.rgb += GetEnvironmentalRadiance(Ray.Direction);
-+
 +		result.w = 1e27f;
 +		WriteRadianceOutput(DispatchIndex.xy, result);
-+
-+		#if DDGIVolumeUpdateDebug != 0
-+		DebugOutput[DispatchIndex.xy] = result;
-+		#endif
-+
 +		return;
 +	}
 +
@@ -487,11 +522,6 @@ index 00000000000..98938ad98c7
 +        // Shorten the hit distance on a backface hit by 80%
 +        // Make distance negative to encode backface for the probe position preprocess.
 +        WriteRadianceOutput(DispatchIndex.xy, float4(0.0f, 0.0f, 0.0f, -Payload.HitT * 0.2f));
-+
-+		#if DDGIVolumeUpdateDebug != 0
-+		DebugOutput[DispatchIndex.xy] = float4(0.f, 0.f, 0.f, -Payload.HitT * 0.2f);
-+		#endif
-+
 +		return;
 +	}
 +
@@ -513,7 +543,7 @@ index 00000000000..98938ad98c7
 +		{
 +			resources.probeIrradianceSRV = DDGIVolume_ProbeIrradiance;
 +			resources.probeDistanceSRV = DDGIVolume_ProbeDistance;
-+			resources.trilinearSampler = DDGIVolume_LinearClampSampler;
++			resources.bilinearSampler = DDGIVolume_LinearClampSampler;
 +#if RTXGI_DDGI_PROBE_RELOCATION
 +			resources.probeOffsets = DDGIVolume_ProbeOffsets;
 +#endif
@@ -533,7 +563,12 @@ index 00000000000..98938ad98c7
 +			resources
 +		);
 +
-+		probeLighting = irradiance * albedo / 3.14159265359f;
++		// Perfectly diffuse reflectors don't exist in the real world. Limit the BRDF
++		// albedo to a maximum value to account for the energy loss at each bounce.
++		float maxAlbedo = 0.9f;
++
++		probeLighting = irradiance * (min(albedo, maxAlbedo) / RTXGI_PI);
++		probeLighting /= DDGIVolume_IrradianceScalar;
 +
 +		// don't apply volume lighting outside the volume
 +		float3 relPos = abs(surfacePosWS - DDGIVolume_Origin);
@@ -542,18 +577,13 @@ index 00000000000..98938ad98c7
 +	}
 +
 +	WriteRadianceOutput(DispatchIndex.xy, float4(PathVertexRadiance.xyz + probeLighting, Payload.HitT));
-+
-+	#if DDGIVolumeUpdateDebug != 0
-+	DebugOutput[DispatchIndex.xy] = float4(PathVertexRadiance.xyz + probeLighting, Payload.HitT);
-+	#endif
 +}
-+
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeViewRGS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeViewRGS.usf
 new file mode 100644
-index 00000000000..ce2105e973e
+index 00000000000..b9036fce058
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeViewRGS.usf
-@@ -0,0 +1,176 @@
+@@ -0,0 +1,177 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -574,6 +604,7 @@ index 00000000000..ce2105e973e
 +then "vis DDGIProbeVis" to see the texture
 +*/
 +
++#include "/Engine/Private/HairStrands/HairStrandsVoxelPageCommonStruct.ush"
 +#include "/Engine/Private/Common.ush"
 +
 +// needed by DeferredLightingCommon included indirectly
@@ -587,12 +618,12 @@ index 00000000000..ce2105e973e
 +#define LTCMatSampler				RaytracingLightsDataPacked.LTCMatSampler
 +#define LTCAmpTexture				RaytracingLightsDataPacked.LTCAmpTexture
 +#define LTCAmpSampler				RaytracingLightsDataPacked.LTCAmpSampler
-+#define PreIntegratedGF				ReflectionStruct.PreIntegratedGF			
-+#define PreIntegratedGFSampler		ReflectionStruct.PreIntegratedGFSampler	
++#define PreIntegratedGF				ReflectionStruct.PreIntegratedGF
++#define PreIntegratedGFSampler		ReflectionStruct.PreIntegratedGFSampler
 +
 +#include "/Engine/Private/DeferredLightingCommon.ush"
 +#include "/Engine/Private/DeferredShadingCommon.ush"
-+#include "/Engine/Private/PathTracing/Utilities/PathTracingRandomSequence.ush" 
++#include "/Engine/Private/PathTracing/Utilities/PathTracingRandomSequence.ush"
 +#include "/Engine/Private/SceneTextureParameters.ush"
 +#include "/Engine/Private/RayTracing/RayTracingCommon.ush"
 +#include "/Engine/Private/RayTracing/RayTracingDeferredShadingCommon.ush"
@@ -670,7 +701,7 @@ index 00000000000..ce2105e973e
 +
 +	FMaterialClosestHitPayload Payload;
 +	Payload.SetEnableSkyLightContribution();
-+	
++
 +	Payload = TraceRayAndAccumulateResults(
 +		Ray,
 +		TLAS,
@@ -732,10 +763,10 @@ index 00000000000..ce2105e973e
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush
 new file mode 100644
-index 00000000000..32ea123563c
+index 00000000000..e359719cfcf
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,77 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -749,13 +780,8 @@ index 00000000000..32ea123563c
 +#ifndef RTXGI_COMMON_HLSL
 +#define RTXGI_COMMON_HLSL
 +
-+#include "DDGIVolumeDefines.ush"
-+
-+// Number of fixed rays that should be used for probe relocation and classification
-+// these rays will intentionally not vary in between frames for more temporally stable results
-+#define NUM_FIXED_TEST_RAYS 32
-+
-+const static float RTXGI_PI = 3.1415926535897932f;
++static const float RTXGI_PI = 3.1415926535897932f;
++static const float RTXGI_2PI = 6.2831853071795864f;
 +
 +//------------------------------------------------------------------------
 +// Math Helpers
@@ -796,12 +822,12 @@ index 00000000000..32ea123563c
 +
 +/**
 +* Pack a float3 into a 32-bit unsigned integer.
-+* Red and green channels use 11 bits, the blue channel uses 10 bits.
++* All channels use 10 bits and 2 bits are unused.
 +* Compliment of RTXGIUintToFloat3().
 +*/
 +uint RTXGIFloat3ToUint(float3 input)
 +{
-+    return (RTXGIFloatToUint(input.r, 2047.f)) | (RTXGIFloatToUint(input.g, 2047) << 11) | (RTXGIFloatToUint(input.b, 1023) << 22);
++    return (RTXGIFloatToUint(input.r, 1023.f)) | (RTXGIFloatToUint(input.g, 1023.f) << 10) | (RTXGIFloatToUint(input.b, 1023.f) << 20);
 +}
 +
 +/**
@@ -811,19 +837,19 @@ index 00000000000..32ea123563c
 +float3 RTXGIUintToFloat3(uint packed)
 +{
 +    float3 unpacked;
-+    unpacked.x = (float)(packed & 0x000007FF) / 2047.f;
-+    unpacked.y = (float)((packed >> 11) & 0x000007FF) / 2047.f;
-+    unpacked.z = (float)((packed >> 22) & 0x000003FF) / 1023.f;
++    unpacked.x = (float)(packed & 0x000003FF) / 1023.f;
++    unpacked.y = (float)((packed >> 10) & 0x000003FF) / 1023.f;
++    unpacked.z = (float)((packed >> 20) & 0x000003FF) / 1023.f;
 +    return unpacked;
 +}
 +
 +#endif /* RTXGI_COMMON_HLSL */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDefines.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDefines.ush
 new file mode 100644
-index 00000000000..1133ba77eb9
+index 00000000000..a9044f93d76
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDefines.ush
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,96 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -848,11 +874,15 @@ index 00000000000..1133ba77eb9
 +#ifndef RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
 +#define RTXGI_DDGI_DEBUG_FORMAT_RADIANCE 0
 +#endif
-+*/
 +
 +#ifndef RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE
 +#define RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE 0
 +#endif
++
++#ifndef RTXGI_DDGI_DEBUG_FORMAT_DISTANCE
++#define RTXGI_DDGI_DEBUG_FORMAT_DISTANCE 0
++#endif
++*/
 +
 +#ifndef RTXGI_DDGI_DEBUG_FORMAT_OFFSETS
 +#define RTXGI_DDGI_DEBUG_FORMAT_OFFSETS 0
@@ -876,15 +906,6 @@ index 00000000000..1133ba77eb9
 +#define RTXGI_DDGI_DEBUG_BORDER_COPY_INDEXING 0
 +#endif
 +
-+// --- Probe Movement --------------------------------
-+
-+// a per volume setting, so a shader permutation
-+/*
-+#ifndef RTXGI_DDGI_PROBE_SCROLL
-+#define RTXGI_DDGI_PROBE_SCROLL 0
-+#endif
-+*/
-+
 +// --- Indirect Lighting -----------------------------
 +
 +#ifndef RTXGI_DDGI_COMPUTE_IRRADIANCE
@@ -895,7 +916,7 @@ index 00000000000..1133ba77eb9
 +#define RTXGI_DDGI_COMPUTE_IRRADIANCE_RECURSIVE 1
 +#endif
 +
-+// --- Early Access Features -------------------------
++// --- Probe Relocation -------------------------
 +
 +// a per volume setting, so a shader permutation
 +/*
@@ -904,6 +925,8 @@ index 00000000000..1133ba77eb9
 +#endif
 +*/
 +
++// --- Probe Classification -------------------------
++
 +// always on, but defined to be 1 in code
 +/*
 +#ifndef RTXGI_DDGI_PROBE_STATE_CLASSIFIER
@@ -911,81 +934,24 @@ index 00000000000..1133ba77eb9
 +#endif
 +*/
 +
++// --- Probe Movement (Early Access) --------------------------------
++
++// a per volume setting, so a shader permutation
++/*
++#ifndef RTXGI_DDGI_PROBE_SCROLL
++#define RTXGI_DDGI_PROBE_SCROLL 1
++#endif
++*/
++
 +// ---------------------------------------------------
 +
 +#endif /* RTXGI_DDGI_VOLUME_DEFINES_H */
-diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDescGPU.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDescGPU.ush
-new file mode 100644
-index 00000000000..a64350dd7cb
---- /dev/null
-+++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDescGPU.ush
-@@ -0,0 +1,60 @@
-+/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
-+*
-+* NVIDIA CORPORATION and its licensors retain all intellectual property
-+* and proprietary rights in and to this software, related documentation
-+* and any modifications thereto.  Any use, reproduction, disclosure or
-+* distribution of this software and related documentation without an express
-+* license agreement from NVIDIA CORPORATION is strictly prohibited.
-+*/
-+
-+#ifndef RTXGI_DDGI_VOLUME_DESC_GPU_H
-+#define RTXGI_DDGI_VOLUME_DESC_GPU_H
-+
-+/**
-+ * DDGIVolumeDescGPU
-+ * The condensed DDGIVolume descriptor for use on the GPU.
-+ */
-+struct DDGIVolumeDescGPU_TempRename
-+{
-+    float3      origin;
-+    int         numRaysPerProbe;
-+    float3      probeGridSpacing;
-+    float       probeMaxRayDistance;
-+    int3        probeGridCounts;
-+    float       probeDistanceExponent;
-+    float       probeHysteresis;
-+    float       probeChangeThreshold;
-+    float       probeBrightnessThreshold;
-+    float       probeIrradianceEncodingGamma;
-+    float       probeInverseIrradianceEncodingGamma;
-+    int         probeNumIrradianceTexels;
-+    int         probeNumDistanceTexels;
-+    float       normalBias;
-+    float       viewBias;
-+    float3      probeVariablePad0;
-+    float4x4    probeRayRotationTransform;      // 160B
-+
-+#if RTXGI_DDGI_PROBE_SCROLL
-+    int         volumeMovementType;             // 0: default, 1: scrolling
-+    int3        probeScrollOffsets;             // 176B
-+#else
-+    float4      probeVariablePad1;              // 176B
-+#endif
-+
-+#if !RTXGI_DDGI_PROBE_RELOCATION && !RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-+    float4      padding[5];                     // 176B + 80B = 256B
-+#elif !RTXGI_DDGI_PROBE_RELOCATION && RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-+    float       probeBackfaceThreshold;         // 180B
-+    float3      padding;                        // 192B
-+    float4      padding1[4];                    // 192B + 64B = 256B
-+#elif RTXGI_DDGI_PROBE_RELOCATION /* && (RTXGI_DDGI_PROBE_STATE_CLASSIFIER || !RTXGI_DDGI_PROBE_STATE_CLASSIFIER) */
-+    float       probeBackfaceThreshold;         // 180B
-+    float       probeMinFrontfaceDistance;      // 184B
-+    float2      padding;                        // 192B
-+    float4      padding1[4];                    // 192B + 64B = 256B
-+#endif
-+
-+};
-+
-+#endif /* RTXGI_DDGI_VOLUME_DESC_GPU_H */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush
 new file mode 100644
-index 00000000000..2be444d525d
+index 00000000000..a8c3ad04090
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush
-@@ -0,0 +1,202 @@
+@@ -0,0 +1,226 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -999,18 +965,21 @@ index 00000000000..2be444d525d
 +#ifndef RTXGI_DDGI_IRRADIANCE_HLSL
 +#define RTXGI_DDGI_IRRADIANCE_HLSL
 +
++// These are turned on/off together in the plugin settings. Turned on if the lighting values are too large to be stored (like in extended radiance mode)
++#define RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
++
 +#include "ProbeCommon.ush"
 +
 +struct DDGIVolumeResources
 +{
 +    Texture2D<float4> probeIrradianceSRV;
 +    Texture2D<float4> probeDistanceSRV;
-+    SamplerState trilinearSampler;
++    SamplerState bilinearSampler;
 +#if RTXGI_DDGI_PROBE_RELOCATION
 +    RWTexture2D<float4> probeOffsets;
 +#endif
 +#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-+    RWTexture2D<uint> probeStates;
++    Texture2D<uint> probeStates;
 +#endif
 +};
 +
@@ -1024,14 +993,14 @@ index 00000000000..2be444d525d
 +}
 +
 +/**
-+* Computes a blending weight for the given volume for blending between multiple volumes. 
++* Computes a blending weight for the given volume for blending between multiple volumes.
 +* Return value of 1.0 means full contribution from this volume while 0.0 means no contribution.
-+*/ 
++*/
 +float DDGIGetVolumeBlendWeight(float3 worldPosition, DDGIVolumeDescGPU volume)
 +{
 +    // Start fully weighted
 +    float volumeBlendWeight = 1.f;
-+    
++
 +    // Shift from [-n/2, n/2] to [0, n]
 +    float3 position = (worldPosition - volume.origin) + (volume.probeGridSpacing * (volume.probeGridCounts - 1)) * 0.5f;
 +    float3 probeCoords = (position / volume.probeGridSpacing);
@@ -1053,7 +1022,7 @@ index 00000000000..2be444d525d
 +/**
 +* Samples irradiance from the given volume's probes using information about the surface, sampling direction, and volume.
 +*/
-+float3 DDGIGetVolumeIrradiance( 
++float3 DDGIGetVolumeIrradiance(
 +    float3 worldPosition,
 +    float3 surfaceBias,
 +    float3 direction,
@@ -1065,7 +1034,7 @@ index 00000000000..2be444d525d
 +
 +    // Bias the world space position
 +    float3 biasedWorldPosition = (worldPosition + surfaceBias);
-+    
++
 +    // Get the 3D grid coordinates of the base probe (near the biased world position)
 +    int3   baseProbeCoords = DDGIGetBaseProbeGridCoords(biasedWorldPosition, volume.origin, volume.probeGridCounts, volume.probeGridSpacing);
 +
@@ -1100,6 +1069,21 @@ index 00000000000..2be444d525d
 +        // Get the adjacent probe's index (used for texture lookups)
 +        int adjacentProbeIndex = DDGIGetProbeIndex(adjacentProbeCoords, volume.probeGridCounts);
 +
++#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
++        {
++            #if RTXGI_DDGI_PROBE_SCROLL
++                int probeIndex = DDGIGetProbeIndexOffset(adjacentProbeIndex, volume.probeGridCounts, volume.probeScrollOffsets);
++            #else
++                int probeIndex = adjacentProbeIndex;
++            #endif
++
++            // If the probe is marked as inactive, don't allow it to contribute to indirect lighting
++            int2 texelPosition = DDGIGetProbeTexelPosition(probeIndex, volume.probeGridCounts);
++            int  probeState = resources.probeStates.Load(int3(texelPosition, 0));
++            if(probeState == PROBE_STATE_INACTIVE) continue;
++        }
++#endif
++
 +        // Compute the distance and direction from the (biased and non-biased) shading point and the adjacent probe
 +        float3 worldPosToAdjProbe = normalize(adjacentProbeWorldPosition - worldPosition);
 +        float3 biasedPosToAdjProbe = normalize(adjacentProbeWorldPosition - biasedWorldPosition);
@@ -1115,7 +1099,7 @@ index 00000000000..2be444d525d
 +        // A naive soft backface weight would ignore a probe when
 +        // it is behind the surface. That's good for walls, but for
 +        // small details inside of a room, the normals on the details
-+        // might rule out all of the probes that have mutual visibility 
++        // might rule out all of the probes that have mutual visibility
 +        // to the point. We instead use a "wrap shading" test. The small
 +        // offset at the end reduces the "going to zero" impact.
 +        float wrapShading = (dot(worldPosToAdjProbe, direction) + 1.f) * 0.5f;
@@ -1128,7 +1112,7 @@ index 00000000000..2be444d525d
 +#else
 +        float2 probeTextureCoords = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeGridCounts, volume.probeNumDistanceTexels);
 +#endif
-+        float2 filteredDistance = resources.probeDistanceSRV.SampleLevel(resources.trilinearSampler, probeTextureCoords, 0).rg;
++        float2 filteredDistance = 2.f * resources.probeDistanceSRV.SampleLevel(resources.bilinearSampler, probeTextureCoords, 0).rg;
 +
 +        float meanDistanceToSurface = filteredDistance.x;
 +        float variance = abs((filteredDistance.x * filteredDistance.x) - filteredDistance.y);
@@ -1139,7 +1123,7 @@ index 00000000000..2be444d525d
 +            // v must be greater than 0, which is guaranteed by the if condition above.
 +            float v = biasedPosToAdjProbeDist - meanDistanceToSurface;
 +            chebyshevWeight = variance / (variance + (v * v));
-+        
++
 +            // Increase the contrast in the weight
 +            chebyshevWeight = max((chebyshevWeight * chebyshevWeight * chebyshevWeight), 0.f);
 +        }
@@ -1169,9 +1153,9 @@ index 00000000000..2be444d525d
 +#else
 +        probeTextureCoords = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeGridCounts, volume.probeNumIrradianceTexels);
 +#endif
-+        float3 probeIrradiance = resources.probeIrradianceSRV.SampleLevel(resources.trilinearSampler, probeTextureCoords, 0).rgb;
++        float3 probeIrradiance = resources.probeIrradianceSRV.SampleLevel(resources.bilinearSampler, probeTextureCoords, 0).rgb;
 +
-+        // Decode the tone curve, but leave a gamma = 2 curve to approximate sRGB blending for the trilinear
++        // Decode the tone curve, but leave a gamma = 2 curve to approximate sRGB blending
 +        float3 exponent = volume.probeIrradianceEncodingGamma * 0.5f;
 +        probeIrradiance = pow(probeIrradiance, exponent);
 +
@@ -1180,9 +1164,15 @@ index 00000000000..2be444d525d
 +        accumulatedWeights += weight;
 +    }
 +
++    if(accumulatedWeights == 0.f) return float3(0.f, 0.f, 0.f);
++
 +    irradiance *= (1.f / accumulatedWeights);   // Normalize by the accumulated weights
 +    irradiance *= irradiance;                   // Go back to linear irradiance
-+    irradiance *= (0.5f * RTXGI_PI);            // Factored out of the probes
++    irradiance *= RTXGI_2PI;                    // Multiply by the area of the integration domain (hemisphere) to complete the Monte Carlo Estimator equation
++
++#if !RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE
++    irradiance *= 1.0989f;                      // Adjust for energy loss due to reduced precision in the R10G10B10A2 irradiance texture format
++#endif
 +
 +    return irradiance;
 +}
@@ -1190,10 +1180,10 @@ index 00000000000..2be444d525d
 +#endif /* RTXGI_DDGI_IRRADIANCE_HLSL */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf
 new file mode 100644
-index 00000000000..6639f55aa73
+index 00000000000..e5f8f73e608
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf
-@@ -0,0 +1,332 @@
+@@ -0,0 +1,364 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -1203,6 +1193,9 @@ index 00000000000..6639f55aa73
 +* distribution of this software and related documentation without an express
 +* license agreement from NVIDIA CORPORATION is strictly prohibited.
 +*/
++
++// These are turned on/off together in the plugin settings. Turned on if the lighting values are too large to be stored (like in extended radiance mode)
++#define RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
 +
 +#include "/Engine/Private/Common.ush"
 +
@@ -1255,6 +1248,8 @@ index 00000000000..6639f55aa73
 +float       DDGIVolume_probeChangeThreshold;
 +float       DDGIVolume_probeBrightnessThreshold;
 +int3		DDGIVolume_probeScrollOffsets;
++int         DDGIVolume_ProbeIndexStart;
++int         DDGIVolume_ProbeIndexCount;
 +
 +// Probe ray traced radiance and hit distance
 +RWTexture2D<float4> DDGIProbeRTRadianceUAV;
@@ -1269,7 +1264,7 @@ index 00000000000..6639f55aa73
 +#endif
 +
 +#if RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY
-+// Note: When using shared memory, RAYS_PER_PROBE must be passed in as a define at shader compilation time 
++// Note: When using shared memory, RAYS_PER_PROBE must be passed in as a define at shader compilation time
 +// See Harness.cpp::CompileShaders() in the Test Harness application
 +// #define RAYS_PER_PROBE 144
 +
@@ -1298,7 +1293,6 @@ index 00000000000..6639f55aa73
 +[numthreads(PROBE_NUM_TEXELS, PROBE_NUM_TEXELS, 1)]
 +void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint GroupIndex : SV_GroupIndex)
 +{
-+	// I couldn't get UE4 to accept using a struct for the shader parameter, despite structs being used elsewhere.
 +	DDGIVolumeDescGPU_Local DDGIVolume;
 +	DDGIVolume.probeGridCounts = DDGIVolume_probeGridCounts;
 +	DDGIVolume.numRaysPerProbe = DDGIVolume_numRaysPerProbe;
@@ -1313,12 +1307,23 @@ index 00000000000..6639f55aa73
 +
 +    float4 result = float4(0.f, 0.f, 0.f, 0.f);
 +
-+    // Find the index of the probe that this thread maps to (for reading the RT radiance buffer)
++	// Find the index of the probe that this thread maps to (for reading the RT radiance buffer)
 +    int probeIndex = DDGIGetProbeIndex(DispatchThreadID.xy, DDGIVolume.probeGridCounts, PROBE_NUM_TEXELS);
++	bool exitEarly = probeIndex < 0;
++
++	// Handle round robin updating.
++	// If this probe is outside of the window for updating, bail out.
++	{
++		int numProbes = DDGIVolume_probeGridCounts.x * DDGIVolume_probeGridCounts.y * DDGIVolume_probeGridCounts.z;
++		int probeRRIndex = (probeIndex < DDGIVolume_ProbeIndexStart) ? probeIndex + numProbes : probeIndex;
++		if (probeRRIndex >= DDGIVolume_ProbeIndexStart + DDGIVolume_ProbeIndexCount)
++			exitEarly = true;
++	}
++
++	 // we have to do it this way so the GroupMemoryBarrierWithGroupSync() call isn't conditional when UE compiles this shader.
 +	float3 probeRayDirection = float3(1.0f, 0.0f, 0.0f);
 +	uint2 probeTexCoords = uint2(0, 0);
-+	bool exitEarly = false;
-+    while (probeIndex >= 0)  // we have to do it this way so the GroupMemoryBarrierWithGroupSync() call isn't conditional when UE compiles this shader.
++    while (!exitEarly)
 +    {
 +#if RTXGI_DDGI_PROBE_SCROLL
 +		int storageProbeIndex = DDGIGetProbeIndexOffset(probeIndex, DDGIVolume.probeGridCounts, DDGIVolume.probeScrollOffsets);
@@ -1399,8 +1404,8 @@ index 00000000000..6639f55aa73
 +	}
 +
 +#if RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY
-+	// Wait for all threads in the group to finish shared memory operations
-+	GroupMemoryBarrierWithGroupSync();
++    // Wait for all threads in the group to finish shared memory operations
++    GroupMemoryBarrierWithGroupSync();
 +#endif /* RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY */
 +
 +    if (probeIndex < 0 || exitEarly)
@@ -1417,7 +1422,7 @@ index 00000000000..6639f55aa73
 +
 +    int rayIndex = 0;
 +#if RTXGI_DDGI_PROBE_RELOCATION || RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-+    rayIndex = NUM_FIXED_TEST_RAYS;
++    rayIndex = RTXGI_DDGI_NUM_FIXED_RAYS;
 +#endif
 +
 +    // Blend radiance or distance values from each ray to compute irradiance or fitered distance
@@ -1488,37 +1493,54 @@ index 00000000000..6639f55aa73
 +#endif
 +    }
 +
-+    // Normalize the blended irradiance (or filtered distance), if the combined weight is not close to zero
++    // Normalize the blended irradiance (or filtered distance), if the combined weight is not close to zero.
++    // To match the Monte Carlo Estimator for Irradiance, we should divide by N. Instead, we are dividing by
++    // N * sum(cos(theta)) (the sum of the weights) to reduce variance.
++    // To account for this, we must mulitply in a factor of 1/2.
 +    const float epsilon = 1e-9f * float(DDGIVolume.numRaysPerProbe);
-+    result.rgb *= 1.f / max(result.a, epsilon);
-+
-+#if RTXGI_DDGI_BLEND_RADIANCE
-+    // Tone-mapping gamma adjustment
-+    result.rgb = pow(result.rgb, DDGIVolume.probeInverseIrradianceEncodingGamma);
-+#endif
++    result.rgb *= 1.f / max(2.f * result.a, epsilon);
 +
 +    float  hysteresis = DDGIVolume.probeHysteresis;
 +    float3 previous = DDGIProbeUAV[probeTexCoords].rgb;
 +
 +#if RTXGI_DDGI_BLEND_RADIANCE
++    // Tone-mapping gamma adjustment
++    result.rgb = pow(result.rgb, DDGIVolume.probeInverseIrradianceEncodingGamma);
++
 +    if (RTXGIMaxComponent(previous.rgb - result.rgb) > DDGIVolume.probeChangeThreshold)
 +    {
 +        // Lower the hysteresis when a large lighting change is detected
 +        hysteresis = max(0.f, hysteresis - 0.15f);
 +    }
-+    
++
 +    float3 delta = (result.rgb - previous.rgb);
 +    if (length(delta) > DDGIVolume.probeBrightnessThreshold)
 +    {
 +        // Clamp the maximum change in irradiance when a large brightness change is detected
-+        result.rgb = previous.rgb + (delta * 0.25f);
++        result.rgb = previous.rgb + (delta * 0.75f);
 +    }
-+#endif
 +
-+    // Interpolate the new blended irradiance (or filtered distance) with the existing 
-+    // irradiance (or filtered distance) in the probe. A high hysteresis value emphasizes
-+    // the existing probe irradiance (or filtered distance).
++    // Interpolate the new blended irradiance with the existing irradiance in the probe.
++    // A high hysteresis value emphasizes the existing probe irradiance.
++    //
++    // When using lower bit depth formats for irradiance, the difference between lerped values
++    // may be smaller than what the texture format can represent. This can stop progress towards
++    // the target value when going from high to low values. When darkening, step at least the minimum
++    // value the texture format can represent to ensure the target value is reached. The threshold value
++    // for 10-bit/channel formats is always used (even for 32-bit/channel formats) to speed up light to
++    // dark convergence.
++    static const float c_threshold = 1.f / 1024.f;
++    float3 lerpDelta = (1.f - hysteresis) * delta;
++    if (RTXGIMaxComponent(result.rgb) < RTXGIMaxComponent(previous.rgb))
++    {
++        lerpDelta = min(max(c_threshold, abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
++    }
++    result = float4(previous.rgb + lerpDelta, 1.f);
++#else
++    // Interpolate the new filtered distance with the existing filtered distance in the probe.
++    // A high hysteresis value emphasizes the existing probe filtered distance.
 +    result = float4(lerp(result.rgb, previous.rgb, hysteresis), 1.f);
++#endif
 +
 +    DDGIProbeUAV[probeTexCoords] = result;
 +
@@ -1528,10 +1550,10 @@ index 00000000000..6639f55aa73
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf
 new file mode 100644
-index 00000000000..9b5c6243a98
+index 00000000000..d21d5f01fc2
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,129 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -1542,12 +1564,15 @@ index 00000000000..9b5c6243a98
 +* license agreement from NVIDIA CORPORATION is strictly prohibited.
 +*/
 +
++// These are turned on/off together in the plugin settings. Turned on if the lighting values are too large to be stored (like in extended radiance mode)
++#define RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
++
 +#include "/Engine/Private/Common.ush"
 +
 +// Below is Adapted from ProbeBorderUpdateCS.hlsl in the SDK aiming for minimal changes to help future merges.
 +
 +#include "../DDGIVolumeDefines.ush"
-+#include "../DDGIVolumeDescGPU.ush"
++//#include "../DDGIVolumeDescGPU.ush"
 +
 +uint    ProbeNumIrradianceOrDistanceTexels;
 +
@@ -1592,7 +1617,7 @@ index 00000000000..9b5c6243a98
 +    threadCoordinates.y += probeSideLengthMinusOne;
 +    copyCoordinates = uint2(probeStart + offset, threadCoordinates.y - 1);
 +
-+    // Bottom row   
++    // Bottom row
 +    DDGIProbeUAV[threadCoordinates] = DDGIProbeUAV[copyCoordinates];
 +}
 +
@@ -1661,10 +1686,10 @@ index 00000000000..9b5c6243a98
 \ No newline at end of file
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeCommon.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeCommon.ush
 new file mode 100644
-index 00000000000..0e40fd8f746
+index 00000000000..11091a4910d
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeCommon.ush
-@@ -0,0 +1,494 @@
+@@ -0,0 +1,534 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -1681,7 +1706,13 @@ index 00000000000..0e40fd8f746
 +#include "../Common.ush"
 +#include "../../SDKDefines.ush"
 +#include "../DDGIVolumeDefines.ush"
-+#include "../DDGIVolumeDescGPU.ush"
++//#include "../DDGIVolumeDescGPU.ush"
++
++#if RTXGI_DDGI_PROBE_RELOCATION || RTXGI_DDGI_PROBE_STATE_CLASSIFIER
++// The number of fixed rays that are used for probe relocation and classification.
++// These rays do not vary to produce temporally stable results during relocation and classification.
++#define RTXGI_DDGI_NUM_FIXED_RAYS 32
++#endif
 +
 +//------------------------------------------------------------------------
 +// Probe Indexing Helpers
@@ -1694,7 +1725,7 @@ index 00000000000..0e40fd8f746
 +{
 +#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
 +    return (probeGridCounts.x * probeGridCounts.z);
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
 +    return (probeGridCounts.x * probeGridCounts.y);
 +#endif
 +}
@@ -1704,9 +1735,9 @@ index 00000000000..0e40fd8f746
 +*/
 +int DDGIGetPlaneIndex(uint2 threadCoords, int3 probeGridCounts, int probeNumTexels)
 +{
-+#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
++#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
 +    return int(threadCoords.x / (probeGridCounts.x * probeNumTexels));
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    return int(threadCoords.x / (probeGridCounts.y * probeNumTexels));
 +#endif
 +}
@@ -1716,9 +1747,9 @@ index 00000000000..0e40fd8f746
 +*/
 +int DDGIGetProbeIndexInPlane(uint2 threadCoords, int planeIndex, int3 probeGridCounts, int probeNumTexels)
 +{
-+#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
++#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
 +    return int(threadCoords.x / probeNumTexels) - (planeIndex * probeGridCounts.x) + (probeGridCounts.x * int(threadCoords.y / probeNumTexels));
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    return int(threadCoords.x / probeNumTexels) - (planeIndex * probeGridCounts.y) + (probeGridCounts.y * int(threadCoords.y / probeNumTexels));
 +#endif
 +}
@@ -1735,8 +1766,10 @@ index 00000000000..0e40fd8f746
 +    // Compute the probe index for this thread
 +#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
 +    return int2(probeIndex % (probeGridCounts.x * probeGridCounts.y), probeIndex / (probeGridCounts.x * probeGridCounts.y));
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    return int2(probeIndex % (probeGridCounts.y * probeGridCounts.z), probeIndex / (probeGridCounts.y * probeGridCounts.z));
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    return int2(probeIndex % (probeGridCounts.x * probeGridCounts.z), probeIndex / (probeGridCounts.x * probeGridCounts.z));
 +#endif
 +}
 +
@@ -1767,7 +1800,7 @@ index 00000000000..0e40fd8f746
 +#endif
 +    int x = gridSpaceX + (planeIndex * probeGridCounts.x);
 +    int y = gridSpaceY % probeGridCounts.z;
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    int gridSpaceX = (probeIndex % probeGridCounts.y);
 +    int gridSpaceY = (probeIndex / probeGridCounts.y);
 +#if RTXGI_DDGI_PROBE_SCROLL
@@ -1777,14 +1810,27 @@ index 00000000000..0e40fd8f746
 +#endif
 +    int x = gridSpaceX + (planeIndex * probeGridCounts.y);
 +    int y = gridSpaceY % probeGridCounts.x;
++#elif  RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    int gridSpaceX = (probeIndex % probeGridCounts.x);
++    int gridSpaceY = (probeIndex / probeGridCounts.x);
++#if RTXGI_DDGI_PROBE_SCROLL
++    gridSpaceX = (gridSpaceX + probeScrollOffsets.x) % probeGridCounts.x;
++    gridSpaceY = (gridSpaceY + probeScrollOffsets.y) % probeGridCounts.y;
++    planeIndex = (planeIndex + probeScrollOffsets.z) % probeGridCounts.z;
++#endif
++    int x = gridSpaceX + (planeIndex * probeGridCounts.x);
++    int y = gridSpaceY % probeGridCounts.y;
 +#endif
 +
 +#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
 +    float textureWidth = probeTexels * (probeGridCounts.x * probeGridCounts.y);
 +    float textureHeight = probeTexels * probeGridCounts.z;
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    float textureWidth = probeTexels * (probeGridCounts.y * probeGridCounts.z);
 +    float textureHeight = probeTexels * probeGridCounts.x;
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    float textureWidth = probeTexels * (probeGridCounts.x * probeGridCounts.z);
++    float textureHeight = probeTexels * probeGridCounts.y;
 +#endif
 +
 +    float2 uv = float2(x * probeTexels, y * probeTexels) + (probeTexels * 0.5f);
@@ -1825,7 +1871,7 @@ index 00000000000..0e40fd8f746
 +    float3 direction = float3(coords.x, coords.y, 1.f - abs(coords.x) - abs(coords.y));
 +    if (direction.z < 0.f)
 +    {
-+        direction.xy = (1.f - abs(direction.yx)) * RTXGISignNotZero(direction.xy);  
++        direction.xy = (1.f - abs(direction.yx)) * RTXGISignNotZero(direction.xy);
 +    }
 +    return normalize(direction);
 +}
@@ -1851,13 +1897,13 @@ index 00000000000..0e40fd8f746
 +
 +/*
 +* Computes a low discrepancy spherically distributed direction on the unit sphere,
-+* for the given index in a set of samples. Each direction is unique in 
++* for the given index in a set of samples. Each direction is unique in
 +* the set, but the set of directions is always the same.
 +*/
 +float3 DDGISphericalFibonacci(float index, float numSamples)
 +{
 +    const float b = (sqrt(5.f) * 0.5f + 0.5f) - 1.f;
-+    float phi = 2.f * RTXGI_PI * frac(index * b);
++    float phi = RTXGI_2PI * frac(index * b);
 +    float cosTheta = 1.f - (2.f * index + 1.f) * (1.f / numSamples);
 +    float sinTheta = sqrt(saturate(1.f - (cosTheta * cosTheta)));
 +
@@ -1871,13 +1917,14 @@ index 00000000000..0e40fd8f746
 +float3 DDGIGetProbeRayDirection(int rayIndex, int numRaysPerProbe, matrix<float, 4, 4> rotationTransform)
 +{
 +#if RTXGI_DDGI_PROBE_RELOCATION || RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-+    bool useFixedRays = rayIndex < NUM_FIXED_TEST_RAYS;
-+    int correctedRayIndex = useFixedRays ? rayIndex : rayIndex - NUM_FIXED_TEST_RAYS;
-+    int correctedNumRays = useFixedRays ? min(NUM_FIXED_TEST_RAYS, numRaysPerProbe) : numRaysPerProbe - NUM_FIXED_TEST_RAYS;
-+    float3 direction = DDGISphericalFibonacci(correctedRayIndex, correctedNumRays);
++    bool useFixedRays = rayIndex < RTXGI_DDGI_NUM_FIXED_RAYS;
++    int  adjustedRayIndex = useFixedRays ? rayIndex : rayIndex - RTXGI_DDGI_NUM_FIXED_RAYS;
++    int  adjustedNumRays = useFixedRays ? min(RTXGI_DDGI_NUM_FIXED_RAYS, numRaysPerProbe) : numRaysPerProbe - RTXGI_DDGI_NUM_FIXED_RAYS;
++
++    float3 direction = DDGISphericalFibonacci(adjustedRayIndex, adjustedNumRays);
 +    if (useFixedRays)
 +    {
-+        // we intentionally never rotate the fixed rays so that relocation/classification is temporally stable
++        // Don't rotate the fixed rays so that relocation/classification is temporally stable
 +        return normalize(direction);
 +    }
 +#else
@@ -1898,8 +1945,10 @@ index 00000000000..0e40fd8f746
 +    // Compute the probe index for this thread
 +#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
 +    return texcoord.x + (texcoord.y * (probeGridCounts.x * probeGridCounts.y));
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    return texcoord.x + (texcoord.y * (probeGridCounts.y * probeGridCounts.z));
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    return texcoord.x + (texcoord.y * (probeGridCounts.x * probeGridCounts.z));
 +#endif
 +}
 +
@@ -1911,8 +1960,10 @@ index 00000000000..0e40fd8f746
 +{
 +#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
 +    return probeCoords.x + (probeGridCounts.x * probeCoords.z) + (probeGridCounts.x * probeGridCounts.z) * probeCoords.y;
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    return probeCoords.y + (probeGridCounts.y * probeCoords.x) + (probeGridCounts.y * probeGridCounts.x) * probeCoords.z;
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    return probeCoords.x + (probeGridCounts.x * probeCoords.y) + (probeGridCounts.x * probeGridCounts.y) * probeCoords.z;
 +#endif
 +}
 +
@@ -1938,15 +1989,16 @@ index 00000000000..0e40fd8f746
 +    int planeIndex = probeIndex / probesPerPlane;
 +    int probeIndexInPlane = probeIndex % probesPerPlane;
 +
-+    // trying to get the top left texel for a given probe
-+#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
++    // Get the top left texel for a given probe
++#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
 +    int planeWidthInProbes = probeGridCounts.x;
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    int planeWidthInProbes = probeGridCounts.y;
 +#endif
++
 +    int2 probeCoordInPlane = int2(probeIndexInPlane % planeWidthInProbes, probeIndexInPlane / planeWidthInProbes);
-+    int baseCoordX = (planeWidthInProbes * planeIndex + probeCoordInPlane.x) * probeNumTexels;
-+    int baseCoordY = probeCoordInPlane.y * probeNumTexels;
++    int  baseCoordX = (planeWidthInProbes * planeIndex + probeCoordInPlane.x) * probeNumTexels;
++    int  baseCoordY = probeCoordInPlane.y * probeNumTexels;
 +    return uint2(baseCoordX, baseCoordY);
 +}
 +
@@ -1962,18 +2014,22 @@ index 00000000000..0e40fd8f746
 +    probeCoords.x = probeIndex % probeGridCounts.x;
 +    probeCoords.y = probeIndex / (probeGridCounts.x * probeGridCounts.z);
 +    probeCoords.z = (probeIndex / probeGridCounts.x) % probeGridCounts.z;
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    probeCoords.x = (probeIndex / probeGridCounts.y) % probeGridCounts.x;
 +    probeCoords.y = probeIndex % probeGridCounts.y;
 +    probeCoords.z = probeIndex / (probeGridCounts.x * probeGridCounts.y);
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    probeCoords.x = probeIndex % probeGridCounts.x;
++    probeCoords.y = (probeIndex / probeGridCounts.x) % probeGridCounts.y;
++    probeCoords.z = probeIndex / (probeGridCounts.y * probeGridCounts.x);
 +#endif
 +
 +    return probeCoords;
 +}
 +
 +/**
-+* Computes the 3D grid coordinates of the base probe (i.e. floor of xyz) of the 8-probe 
-+* cube that surrounds the given world space position. The other seven probes are offset 
++* Computes the 3D grid coordinates of the base probe (i.e. floor of xyz) of the 8-probe
++* cube that surrounds the given world space position. The other seven probes are offset
 +* by 0 or 1 in grid space along each axis.
 +*/
 +int3 DDGIGetBaseProbeGridCoords(float3 worldPosition, float3 origin, int3 probeGridCounts, float3 probeGridSpacing)
@@ -2048,8 +2104,10 @@ index 00000000000..0e40fd8f746
 +{
 +#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
 +    int textureWidth = (probeGridCounts.x * probeGridCounts.y);
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    int textureWidth = (probeGridCounts.y * probeGridCounts.z);
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    int textureWidth = (probeGridCounts.x * probeGridCounts.z);
 +#endif
 +
 +    // Find the texture coords of the probe in the offsets texture
@@ -2061,8 +2119,10 @@ index 00000000000..0e40fd8f746
 +{
 +#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
 +    int textureWidth = (probeGridCounts.x * probeGridCounts.y);
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    int textureWidth = (probeGridCounts.y * probeGridCounts.z);
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    int textureWidth = (probeGridCounts.x * probeGridCounts.z);
 +#endif
 +
 +    // Find the texture coords of the probe in the offsets texture
@@ -2093,7 +2153,7 @@ index 00000000000..0e40fd8f746
 +#endif /* RTXGI_DDGI_PROBE_STATE_CLASSIFIER */
 +
 +//------------------------------------------------------------------------
-+// Probe scroll movement
++// Volume Scrolling Movement
 +//------------------------------------------------------------------------
 +
 +#if RTXGI_DDGI_PROBE_SCROLL
@@ -2110,7 +2170,8 @@ index 00000000000..0e40fd8f746
 +}
 +
 +#if RTXGI_DDGI_PROBE_RELOCATION
-+// modified versions of the GetProbeWorldPositionWithOffset functions that correct for probeScrollOffsets
++// Modified versions of the GetProbeWorldPositionWithOffset functions that account for probeScrollOffsets
++
 +/*
 +* Computes the world space position of a probe at the given probe index, including the probe's offset value.
 +*/
@@ -2118,8 +2179,10 @@ index 00000000000..0e40fd8f746
 +{
 +#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
 +    int textureWidth = (probeGridCounts.x * probeGridCounts.y);
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    int textureWidth = (probeGridCounts.y * probeGridCounts.z);
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    int textureWidth = (probeGridCounts.x * probeGridCounts.z);
 +#endif
 +
 +    // Find the texture coords of the probe in the offsets texture
@@ -2134,8 +2197,10 @@ index 00000000000..0e40fd8f746
 +{
 +#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
 +    int textureWidth = (probeGridCounts.x * probeGridCounts.y);
-+#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_UNREAL
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +    int textureWidth = (probeGridCounts.y * probeGridCounts.z);
++#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
++    int textureWidth = (probeGridCounts.x * probeGridCounts.z);
 +#endif
 +
 +    // Find the texture coords of the probe in the offsets texture
@@ -2161,10 +2226,10 @@ index 00000000000..0e40fd8f746
 +#endif /* RTXGI_DDGI_PROBE_COMMON_HLSL */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf
 new file mode 100644
-index 00000000000..406b16737b3
+index 00000000000..c174f96137f
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,158 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -2189,6 +2254,8 @@ index 00000000000..406b16737b3
 +float4x4 DDGIVolume_probeRayRotationTransform;
 +float    DDGIVolume_probeMinFrontfaceDistance;
 +int3     DDGIVolume_probeScrollOffsets;
++int      DDGIVolume_ProbeIndexStart;
++int      DDGIVolume_ProbeIndexCount;
 +
 +RWTexture2D<float4> DDGIProbeRTRadianceUAV;
 +RWTexture2D<float4> DDGIProbeOffsets;
@@ -2199,12 +2266,22 @@ index 00000000000..406b16737b3
 +    // Compute the probe index for this thread
 +    int probeIndex = DDGIGetProbeIndex(DispatchThreadID.xy, DDGIVolume_probeGridCounts);
 +
-+    // we might have excess threads due to launching in threadgroups of 32, so early-out if necessary
-+    int numTotalProbes = DDGIVolume_probeGridCounts.x * DDGIVolume_probeGridCounts.y * DDGIVolume_probeGridCounts.z;
-+    if (probeIndex >= numTotalProbes)
++    // Early out if the thread maps past the number of probes
++    int numProbes = DDGIVolume_probeGridCounts.x * DDGIVolume_probeGridCounts.y * DDGIVolume_probeGridCounts.z;
++    if (probeIndex >= numProbes)
 +    {
 +        return;
 +    }
++
++	// Handle round robin updating.
++	// If this probe is outside of the window for updating, bail out.
++	{
++		int numProbes = DDGIVolume_probeGridCounts.x * DDGIVolume_probeGridCounts.y * DDGIVolume_probeGridCounts.z;
++		int probeRRIndex = (probeIndex < DDGIVolume_ProbeIndexStart) ? probeIndex + numProbes : probeIndex;
++		if (probeRRIndex >= DDGIVolume_ProbeIndexStart + DDGIVolume_ProbeIndexCount)
++			return;
++	}
++
 +#if RTXGI_DDGI_PROBE_SCROLL
 +    int storageProbeIndex = DDGIGetProbeIndexOffset(probeIndex, DDGIVolume_probeGridCounts, DDGIVolume_probeScrollOffsets);
 +#else
@@ -2224,9 +2301,11 @@ index 00000000000..406b16737b3
 +    float farthestFrontfaceDistance = 0.f;
 +    float backfaceCount = 0.f;
 +
-+    int numSphereSamples = min(DDGIVolume_numRaysPerProbe, NUM_FIXED_TEST_RAYS);
-+    // Loop over the probe rays to find the number of backfaces and closest/farthest distances to them
-+    for (int rayIndex = 0; rayIndex < numSphereSamples; rayIndex++)
++    // Get the number of ray samples to inspect
++    int numRays = min(DDGIVolume_numRaysPerProbe, RTXGI_DDGI_NUM_FIXED_RAYS);
++
++    // Iterate over the rays cast for this probe to find the number of backfaces and closest/farthest distances to the probe
++    for (int rayIndex = 0; rayIndex < numRays; rayIndex++)
 +    {
 +        int2 rayTexCoord = int2(rayIndex, probeIndex);
 +
@@ -2236,13 +2315,15 @@ index 00000000000..406b16737b3
 +#else
 +        float hitDistance = DDGIProbeRTRadianceUAV[rayTexCoord].g;
 +#endif
-+        if (hitDistance < 0.f) 
++
++        // Found a backface
++        if (hitDistance < 0.f)
 +        {
 +            backfaceCount++;
 +
 +            // Negate the hit distance on a backface hit and scale back to the full distance
 +            hitDistance = hitDistance * -5.f;
-+            if (hitDistance < closestBackfaceDistance) 
++            if (hitDistance < closestBackfaceDistance)
 +            {
 +                // Make up for the shortening of backfaces
 +                closestBackfaceDistance = hitDistance;
@@ -2250,14 +2331,15 @@ index 00000000000..406b16737b3
 +            }
 +        }
 +
-+        if (hitDistance > 0.f) 
++        // Found a frontface
++        if (hitDistance > 0.f)
 +        {
-+            if (hitDistance < closestFrontfaceDistance) 
++            if (hitDistance < closestFrontfaceDistance)
 +            {
 +                closestFrontfaceDistance = hitDistance;
 +                closestFrontfaceIndex = rayIndex;
 +            }
-+            else if (hitDistance > farthestFrontfaceDistance) 
++            else if (hitDistance > farthestFrontfaceDistance)
 +            {
 +                farthestFrontfaceDistance = hitDistance;
 +                farthestFrontfaceIndex = rayIndex;
@@ -2267,22 +2349,23 @@ index 00000000000..406b16737b3
 +
 +    float3 fullOffset = float3(1e27f, 1e27f, 1e27f);
 +
-+    if (closestBackfaceIndex != -1 && (float(backfaceCount) / numSphereSamples) > DDGIVolume_probeBackfaceThreshold)
++    if (closestBackfaceIndex != -1 && (float(backfaceCount) / numRays) > DDGIVolume_probeBackfaceThreshold)
 +    {
-+        // If there's a close backface AND more than 25% of the hit geometry is backfaces, assume the probe is inside geometry
++        // If there is a close backface AND more than 25% of the hit geometry are backfacing, assume the probe is inside geometry
 +        float3 closestBackfaceDirection = closestBackfaceDistance * normalize(DDGIGetProbeRayDirection(closestBackfaceIndex, DDGIVolume_numRaysPerProbe, DDGIVolume_probeRayRotationTransform));
 +        fullOffset = currentOffset + closestBackfaceDirection * (ProbeDistanceScale + 1.f);
 +    }
-+    else if (closestFrontfaceDistance < DDGIVolume_probeMinFrontfaceDistance) 
++    else if (closestFrontfaceDistance < DDGIVolume_probeMinFrontfaceDistance)
 +    {
-+        // don't move the probe if moving towards the farthest frontface will also bring us closer to the nearest frontface
++        // Don't move the probe if moving towards the farthest frontface will also bring us closer to the nearest frontface
 +        float3 closestFrontfaceDirection = normalize(DDGIGetProbeRayDirection(closestFrontfaceIndex, DDGIVolume_numRaysPerProbe, DDGIVolume_probeRayRotationTransform));
 +        float3 farthestFrontfaceDirection = normalize(DDGIGetProbeRayDirection(farthestFrontfaceIndex, DDGIVolume_numRaysPerProbe, DDGIVolume_probeRayRotationTransform));
 +
 +        if (dot(closestFrontfaceDirection, farthestFrontfaceDirection) <= 0.f)
 +        {
-+            // this clamp/scale factor ensures that we never move through the farthest frontface
++            // Ensures the probe never moves through the farthest frontface
 +            farthestFrontfaceDistance *= min(farthestFrontfaceDistance, 1.f);
++
 +            // ProbeDistanceScale decreases from 1.f - 0.f for backface movement
 +            // It can go to 0 to ensure some movement away from close surfaces
 +            fullOffset = currentOffset + farthestFrontfaceDirection * ProbeDistanceScale;
@@ -2290,7 +2373,7 @@ index 00000000000..406b16737b3
 +    }
 +    else if (closestFrontfaceDistance > DDGIVolume_probeMinFrontfaceDistance + ProbeDistanceScale)
 +    {
-+        // the probe is far from everything, try to move back towards zero offset
++        // Probe isn't near anything, try to move it back towards zero offset
 +        float moveBackMargin = min(closestFrontfaceDistance - DDGIVolume_probeMinFrontfaceDistance, length(currentOffset));
 +        float3 moveBackDirection = normalize(-currentOffset);
 +        fullOffset = currentOffset + (moveBackMargin * moveBackDirection);
@@ -2298,7 +2381,7 @@ index 00000000000..406b16737b3
 +
 +    // Absolute maximum distance probe could be moved is 0.5 * probeSpacing
 +    // Clamp to less than maximum distance to avoid degenerate cases
-+    if (all(abs(fullOffset) < 0.45f * DDGIVolume_probeGridSpacing)) 
++    if (all(abs(fullOffset) < 0.45f * DDGIVolume_probeGridSpacing))
 +    {
 +        currentOffset = fullOffset;
 +    }
@@ -2307,10 +2390,10 @@ index 00000000000..406b16737b3
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeStateClassifierCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeStateClassifierCS.usf
 new file mode 100644
-index 00000000000..df19d459791
+index 00000000000..485a7b1ca18
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeStateClassifierCS.usf
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,105 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -2335,21 +2418,31 @@ index 00000000000..df19d459791
 +int      DDGIVolume_numRaysPerProbe;
 +float    DDGIVolume_probeBackfaceThreshold;
 +int3     DDGIVolume_probeScrollOffsets;
++int      DDGIVolume_ProbeIndexStart;
++int      DDGIVolume_ProbeIndexCount;
 +
 +[numthreads(8, 4, 1)]
 +void DDGIProbeStateClassifierCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint GroupIndex : SV_GroupIndex)
 +{
-+    float closestFrontfaceDistance = 1e27f;
-+    int   backfaceCount = 0;
-+
 +    // Compute the probe index for this thread
 +    int probeIndex = DDGIGetProbeIndex(DispatchThreadID.xy, DDGIVolume_probeGridCounts);
-+    // we might have excess threads due to launching in threadgroups of 32, so early-out if necessary
++
++    // Early out if the thread maps past the number of probes
 +    int numTotalProbes = DDGIVolume_probeGridCounts.x * DDGIVolume_probeGridCounts.y * DDGIVolume_probeGridCounts.z;
 +    if (probeIndex >= numTotalProbes)
 +    {
 +        return;
 +    }
++
++	// Handle round robin updating.
++	// If this probe is outside of the window for updating, bail out.
++	{
++		int numProbes = DDGIVolume_probeGridCounts.x * DDGIVolume_probeGridCounts.y * DDGIVolume_probeGridCounts.z;
++		int probeRRIndex = (probeIndex < DDGIVolume_ProbeIndexStart) ? probeIndex + numProbes : probeIndex;
++		if (probeRRIndex >= DDGIVolume_ProbeIndexStart + DDGIVolume_ProbeIndexCount)
++			return;
++	}
++
 +#if RTXGI_DDGI_PROBE_SCROLL
 +    int storageProbeIndex = DDGIGetProbeIndexOffset(probeIndex, DDGIVolume_probeGridCounts, DDGIVolume_probeScrollOffsets);
 +#else
@@ -2368,9 +2461,14 @@ index 00000000000..df19d459791
 +    geometryBounds *= 1.45f;
 +#endif
 +
-+    int numSphereSamples = min(DDGIVolume_numRaysPerProbe, NUM_FIXED_TEST_RAYS);
++    float closestFrontfaceDistance = 1e27f;
++    int   backfaceCount = 0;
++
++    // Get the number of ray samples to inspect
++    int numRays = min(DDGIVolume_numRaysPerProbe, RTXGI_DDGI_NUM_FIXED_RAYS);
++
 +    // Iterate over the rays cast for this probe
-+    for (int rayIndex = 0; rayIndex < numSphereSamples; rayIndex++)
++    for (int rayIndex = 0; rayIndex < numRays; rayIndex++)
 +    {
 +        int2 rayTexCoord = int2(rayIndex, probeIndex);
 +
@@ -2382,18 +2480,18 @@ index 00000000000..df19d459791
 +#endif
 +
 +        // Don't include backface hit distances
-+        if (hitDistance < 0.f) 
++        if (hitDistance < 0.f)
 +        {
 +            backfaceCount++;
 +            continue;
 +        }
 +
 +        // Store the closest front face hit distance
-+        closestFrontfaceDistance = min(closestFrontfaceDistance, hitDistance);      
++        closestFrontfaceDistance = min(closestFrontfaceDistance, hitDistance);
 +    }
 +
-+    // If this probe is near geometry, wake it up unless backface percentage is above probeBackfaceThreshold
-+    if (all(closestFrontfaceDistance <= geometryBounds) && (float(backfaceCount) / numSphereSamples < DDGIVolume_probeBackfaceThreshold))
++    // If this probe is near geometry, wake it up if the backface percentage is above probeBackfaceThreshold
++    if (all(closestFrontfaceDistance <= geometryBounds) && (float(backfaceCount) / numRays < DDGIVolume_probeBackfaceThreshold))
 +    {
 +        DDGIProbeStates[offsetTexelPosition] = PROBE_STATE_ACTIVE;
 +        return;
@@ -2403,10 +2501,10 @@ index 00000000000..df19d459791
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDKDefines.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDKDefines.ush
 new file mode 100644
-index 00000000000..2c9c6ee921d
+index 00000000000..9f31b1cbc1d
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDKDefines.ush
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,31 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -2422,27 +2520,28 @@ index 00000000000..2c9c6ee921d
 +
 +#ifndef RTXGI_NAME_D3D_OBJECTS
 +#define RTXGI_NAME_D3D_OBJECTS 1
-+#endif 
++#endif
 +
 +#ifndef RTXGI_PERF_MARKERS
 +#define RTXGI_PERF_MARKERS 1
 +#endif
 +
 +#define RTXGI_COORDINATE_SYSTEM_LEFT 0
-+#define RTXGI_COORDINATE_SYSTEM_RIGHT 1
-+#define RTXGI_COORDINATE_SYSTEM_UNREAL 2
++#define RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP 1
++#define RTXGI_COORDINATE_SYSTEM_RIGHT 2
++#define RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP 3
 +
 +#ifndef RTXGI_COORDINATE_SYSTEM
-+#define RTXGI_COORDINATE_SYSTEM RTXGI_COORDINATE_SYSTEM_UNREAL
++#define RTXGI_COORDINATE_SYSTEM RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
 +#endif
 +
 +#endif /* RTXGI_DEFINES_H */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/VisualizeDDGIProbes.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/VisualizeDDGIProbes.usf
 new file mode 100644
-index 00000000000..c72021293a1
+index 00000000000..9f31be8264d
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/VisualizeDDGIProbes.usf
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,151 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -2452,6 +2551,9 @@ index 00000000000..c72021293a1
 +* distribution of this software and related documentation without an express
 +* license agreement from NVIDIA CORPORATION is strictly prohibited.
 +*/
++
++// These are turned on/off together in the plugin settings. Turned on if the lighting values are too large to be stored (like in extended radiance mode)
++#define RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
 +
 +#include "/Engine/Public/Platform.ush"
 +
@@ -2477,6 +2579,7 @@ index 00000000000..c72021293a1
 +float PreExposure;
 +uint ShouldUsePreExposure;
 +int3 VolumeProbeScrollOffsets;
++float IrradianceScalar;
 +
 +struct FVisualizeDDGIProbesVSToPS
 +{
@@ -2506,7 +2609,7 @@ index 00000000000..c72021293a1
 +									0.f, ProbeRadius, 0.f, 0.f,
 +									0.f, 0.f, ProbeRadius, 0.f,
 +									Translation.x, Translation.y, Translation.z, 1.f};
-+	
++
 +	Output.ProbeOrigin = Translation;
 +	Output.InstanceId = InstanceId;
 +	Output.WorldPosition = float4(InPosition.xyz, 1.f);
@@ -2536,10 +2639,21 @@ index 00000000000..c72021293a1
 +
 +	if (Mode == 1)
 +	{
++		// Decode the tone curve
 +		Output = ProbeIrradianceTexture.SampleLevel(ProbeSampler, ProbeUVIrradiance, 0).rgb;
-+		Output = pow(Output.rgb, VolumeProbeIrradianceEncodingGamma);
-+		Output *= (0.5f * RTXGI_PI);            // Factored out of the probes
-+		Output /= RTXGI_PI;
++		Output = pow(Output.rgb, VolumeProbeIrradianceEncodingGamma * 0.5f);
++
++		// Go back to linear irradiance
++		Output *= Output;
++
++		// Multiply by the area of the integration domain (2PI) to complete the irradiance estimate. Divide by PI to normalize for the display.
++		Output *= 2.f;
++
++		#if !RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE
++			Output *= 1.0989f;    // Adjust for energy loss due to reduced precision in the R10G10B10A2 irradiance texture format
++		#endif
++
++		Output /= IrradianceScalar;
 +	}
 +	else if(Mode == 2)
 +	{
@@ -2579,7 +2693,6 @@ index 00000000000..c72021293a1
 +
 +	OutColor = float4(Output, 1.f);
 +}
-+
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIBlueprintLibrary.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIBlueprintLibrary.cpp
 new file mode 100644
 index 00000000000..e65f6661585
@@ -2696,10 +2809,10 @@ index 00000000000..d64c3818810
 +#endif
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp
 new file mode 100644
-index 00000000000..985f31c5783
+index 00000000000..dd06ba06bca
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp
-@@ -0,0 +1,872 @@
+@@ -0,0 +1,941 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -2725,7 +2838,8 @@ index 00000000000..985f31c5783
 +#include "DeferredShadingRenderer.h"
 +#include "ScenePrivate.h"
 +
-+DECLARE_GPU_STAT_NAMED(RTXGI, TEXT("RTXGI"));
++DECLARE_GPU_STAT_NAMED(RTXGI_Update, TEXT("RTXGI_Update"));
++DECLARE_GPU_STAT_NAMED(RTXGI_ApplyLighting, TEXT("RTXGI_ApplyLighting"));
 +
 +static TAutoConsoleVariable<bool> CVarUseDDGI(
 +	TEXT("r.RTXGI.DDGI"),
@@ -2737,6 +2851,7 @@ index 00000000000..985f31c5783
 +	SHADER_PARAMETER_TEXTURE(Texture2D, ProbeIrradiance)
 +	SHADER_PARAMETER_TEXTURE(Texture2D, ProbeDistance)
 +	SHADER_PARAMETER_UAV(RWTexture2D<float4>, ProbeOffsets)
++	SHADER_PARAMETER_TEXTURE(Texture2D<uint>, ProbeStates)
 +	SHADER_PARAMETER(FVector, Position)
 +	SHADER_PARAMETER(FVector, Radius)
 +	SHADER_PARAMETER(FVector, ProbeGridSpacing)
@@ -2749,7 +2864,9 @@ index 00000000000..985f31c5783
 +	SHADER_PARAMETER(float, NormalBias)
 +	SHADER_PARAMETER(float, ViewBias)
 +	SHADER_PARAMETER(float, BlendDistance)
++	SHADER_PARAMETER(float, BlendDistanceBlack)
 +	SHADER_PARAMETER(float, ApplyLighting)
++	SHADER_PARAMETER(float, IrradianceScalar)
 +END_SHADER_PARAMETER_STRUCT()
 +
 +BEGIN_SHADER_PARAMETER_STRUCT(FApplyLightingDeferredShaderParameters, )
@@ -2775,7 +2892,7 @@ index 00000000000..985f31c5783
 +public:
 +	DECLARE_GLOBAL_SHADER(FApplyLightingDeferredShaderVS);
 +	SHADER_USE_PARAMETER_STRUCT(FApplyLightingDeferredShaderVS, FGlobalShader);
-+	
++
 +	using FParameters = FApplyLightingDeferredShaderParameters;
 +
 +	class FEnableRelocation : SHADER_PERMUTATION_BOOL("RTXGI_DDGI_PROBE_RELOCATION");
@@ -2786,7 +2903,7 @@ index 00000000000..985f31c5783
 +	static void ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment)
 +	{
 +		FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
-+		
++
 +		FString volumeMacroList;
 +		for (int i = 0; i < FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_MAX_SHADING_VOLUMES; ++i)
 +			volumeMacroList += FString::Printf(TEXT(" VOLUME_ENTRY(%i)"), i);
@@ -2795,7 +2912,7 @@ index 00000000000..985f31c5783
 +		OutEnvironment.SetDefine(TEXT("RTXGI_DDGI_PROBE_STATE_CLASSIFIER"), FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_PROBE_STATE_CLASSIFIER ? 1 : 0);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -2815,8 +2932,9 @@ index 00000000000..985f31c5783
 +	class FLightingChannelsDim : SHADER_PERMUTATION_BOOL("USE_LIGHTING_CHANNELS");
 +	class FEnableRelocation : SHADER_PERMUTATION_BOOL("RTXGI_DDGI_PROBE_RELOCATION");
 +	class FEnableScrolling : SHADER_PERMUTATION_BOOL("RTXGI_DDGI_PROBE_SCROLL");
++	class FDebugFormatRadiance : SHADER_PERMUTATION_BOOL("RTXGI_DDGI_DEBUG_FORMAT_RADIANCE");
 +
-+	using FPermutationDomain = TShaderPermutationDomain<FLightingChannelsDim, FEnableRelocation, FEnableScrolling>;
++	using FPermutationDomain = TShaderPermutationDomain<FLightingChannelsDim, FEnableRelocation, FEnableScrolling, FDebugFormatRadiance>;
 +
 +	static void ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment)
 +	{
@@ -2830,7 +2948,7 @@ index 00000000000..985f31c5783
 +		OutEnvironment.SetDefine(TEXT("RTXGI_DDGI_PROBE_STATE_CLASSIFIER"), FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_PROBE_STATE_CLASSIFIER ? 1 : 0);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -2849,24 +2967,25 @@ index 00000000000..985f31c5783
 +FTexture2DRHIRef FDDGIVolumeSceneProxy::DummyTex = nullptr;
 +FUnorderedAccessViewRHIRef FDDGIVolumeSceneProxy::DummyUAV = nullptr;
 +
-+void FDDGIVolumeSceneProxy::OnIrradianceBitsChange()
++void FDDGIVolumeSceneProxy::OnIrradianceOrDistanceBitsChange()
 +{
-+	bool highBitCount = (GetDefault<URTXGIPluginSettings>()->IrradianceBits == EDDGIIrradianceBits::n32);
++	EDDGIIrradianceBits IrradianceBits = GetDefault<URTXGIPluginSettings>()->IrradianceBits;
++	EDDGIDistanceBits DistanceBits = GetDefault<URTXGIPluginSettings>()->DistanceBits;
 +
 +	// tell all the proxies about the change
 +	ENQUEUE_RENDER_COMMAND(DDGIOnIrradianceBitsChange)(
-+		[highBitCount](FRHICommandListImmediate& RHICmdList)
++		[IrradianceBits, DistanceBits](FRHICommandListImmediate& RHICmdList)
 +		{
 +			for (FDDGIVolumeSceneProxy* DDGIProxy : AllProxiesReadyForRender_RenderThread)
 +			{
-+				DDGIProxy->ReallocateSurfaces_RenderThread(RHICmdList, highBitCount);
++				DDGIProxy->ReallocateSurfaces_RenderThread(RHICmdList, IrradianceBits, DistanceBits);
 +				DDGIProxy->ResetTextures_RenderThread(RHICmdList);
 +			}
 +		}
 +	);
 +}
 +
-+void FDDGIVolumeSceneProxy::ReallocateSurfaces_RenderThread(FRHICommandListImmediate& RHICmdList, bool highBitCount)
++void FDDGIVolumeSceneProxy::ReallocateSurfaces_RenderThread(FRHICommandListImmediate& RHICmdList, EDDGIIrradianceBits IrradianceBits, EDDGIDistanceBits DistanceBits)
 +{
 +	FIntPoint ProxyDims = ComponentData.Get2DProbeCount();
 +
@@ -2875,7 +2994,7 @@ index 00000000000..985f31c5783
 +		int numTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsIrradiance;
 +		FIntPoint ProxyTexDims = ProxyDims * (numTexels + 2);
 +		FRHIResourceCreateInfo createInfo(TEXT("DDGIIrradiance"));
-+		ProbesIrradianceTex = RHICreateTexture2D(ProxyTexDims.X, ProxyTexDims.Y, highBitCount ? FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatIrradianceHighBitDepth : FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatIrradianceLowBitDepth, 1, 1, TexCreate_ShaderResource | TexCreate_UAV, createInfo);
++		ProbesIrradianceTex = RHICreateTexture2D(ProxyTexDims.X, ProxyTexDims.Y, (IrradianceBits == EDDGIIrradianceBits::n32 ) ? FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatIrradianceHighBitDepth : FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatIrradianceLowBitDepth, 1, 1, TexCreate_ShaderResource | TexCreate_UAV, createInfo);
 +		ProbesIrradianceUAV = RHICreateUnorderedAccessView(ProbesIrradianceTex, 0);
 +	}
 +
@@ -2884,7 +3003,7 @@ index 00000000000..985f31c5783
 +		int numTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsDistance;
 +		FIntPoint ProxyTexDims = ProxyDims * (numTexels + 2);
 +		FRHIResourceCreateInfo createInfo(TEXT("DDGIDistance"));
-+		ProbesDistanceTex = RHICreateTexture2D(ProxyTexDims.X, ProxyTexDims.Y, FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatDistance, 1, 1, TexCreate_ShaderResource | TexCreate_UAV, createInfo);
++		ProbesDistanceTex = RHICreateTexture2D(ProxyTexDims.X, ProxyTexDims.Y, (DistanceBits == EDDGIDistanceBits::n32) ? FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatDistanceHighBitDepth : FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatDistanceLowBitDepth, 1, 1, TexCreate_ShaderResource | TexCreate_UAV, createInfo);
 +		ProbesDistanceUAV = RHICreateUnorderedAccessView(ProbesDistanceTex, 0);
 +	}
 +
@@ -2923,7 +3042,7 @@ index 00000000000..985f31c5783
 +
 +	if (ProbesOffsetsUAV)
 +		RHICmdList.ClearUAVFloat(ProbesOffsetsUAV, FVector4{ 0.0f, 0.0f, 0.0f, 0.0f });
-+	
++
 +	if (ProbesStatesUAV)
 +		RHICmdList.ClearUAVUint(ProbesStatesUAV, FUintVector4{ 0, 0, 0, 0 });
 +}
@@ -2932,205 +3051,241 @@ index 00000000000..985f31c5783
 +	const FScene& Scene,
 +	const FViewInfo& View,
 +	FRDGBuilder& GraphBuilder,
-+	FSceneRenderTargets& SceneContext)
++	FSceneRenderTargets& SceneContext,
++	FRDGTextureRef LightingChannelsTexture)
 +{
-+	// no DDGI if it's disabled
-+	if (!CVarUseDDGI.GetValueOnRenderThread())
-+		return;
++	// Early out if DDGI is disabled
++	if (!CVarUseDDGI.GetValueOnRenderThread())return;
 +
-+	RDG_GPU_STAT_SCOPE(GraphBuilder, RTXGI);
-+	RDG_EVENT_SCOPE(GraphBuilder, "RTXGI");
-+
-+	// Let DDGIVolumeUpdate update all/any volumes as it sees fit
-+	DDGIVolumeUpdate::DDGIUpdatePerFrame_RenderThread(Scene, View, GraphBuilder);
-+
-+	// Get the volumes, sorted from densest to least dense
-+	struct FProxyEntry
++	// Let DDGIVolumeUpdate update all/any volumes as it sees fit.
++	// Only update volumes when rendering a main view though. These other views can USE probe lighting, but shouldn't update it.
++	// This is especially true for situations like bIsSceneCapture, when bSceneCaptureUsesRayTracing is false, and it can make incorrect probe update results.
++	if (!View.bIsSceneCapture && !View.bIsReflectionCapture && !View.bIsPlanarReflection)
 +	{
-+		FVector Position;
-+		FVector Scale;
-+		float Density;
-+		uint32 lightingChannelMask;
-+		const FDDGIVolumeSceneProxy* proxy;
-+	};
-+	TArray<FProxyEntry> proxyEntries;
-+	{
-+		for (FDDGIVolumeSceneProxy* proxy : AllProxiesReadyForRender_RenderThread)
-+		{
-+			if (proxy->OwningScene != &Scene)
-+				continue;
-+
-+			FVector ProxyPosition = proxy->ComponentData.Transform.GetLocation();
-+			FVector ProxyScale = proxy->ComponentData.Transform.GetScale3D();
-+
-+			// frustum culling
-+			FVector ProxyExtent = ProxyScale * 100.0f;
-+			if (!View.ViewFrustum.IntersectBox(ProxyPosition, ProxyExtent))
-+				continue;
-+
-+			float ProxyDensity = float(proxy->ComponentData.ProbeCounts.X * proxy->ComponentData.ProbeCounts.Y * proxy->ComponentData.ProbeCounts.Z) / (ProxyScale.X * ProxyScale.Y * ProxyScale.Z);
-+			uint32 ProxyLightingChannelMask =
-+				(proxy->ComponentData.LightingChannels.bChannel0 ? 1 : 0) |
-+				(proxy->ComponentData.LightingChannels.bChannel1 ? 2 : 0) |
-+				(proxy->ComponentData.LightingChannels.bChannel2 ? 4 : 0);
-+			proxyEntries.Add(FProxyEntry{ ProxyPosition, ProxyScale, ProxyDensity, ProxyLightingChannelMask, proxy });
-+
-+			if (proxyEntries.Num() == FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_MAX_SHADING_VOLUMES)
-+				break;
-+		}
-+
-+		Algo::Sort(proxyEntries, [](const FProxyEntry& A, const FProxyEntry& B)
-+			{
-+				return A.Density > B.Density;
-+			}
-+		);
++		RDG_GPU_STAT_SCOPE(GraphBuilder, RTXGI_Update);
++		RDG_EVENT_SCOPE(GraphBuilder, "RTXGI Update");
++		DDGIVolumeUpdate::DDGIUpdatePerFrame_RenderThread(Scene, View, GraphBuilder);
 +	}
 +
-+	// only do this pass if we have proxy entries that can contribute light to pixels
-+	if (proxyEntries.Num() == 0)
-+		return;
-+
-+	// get the textures we'll need
-+	FRDGTextureRef GBufferATexture = GraphBuilder.RegisterExternalTexture(SceneContext.GBufferA);
-+	FRDGTextureRef GBufferBTexture = GraphBuilder.RegisterExternalTexture(SceneContext.GBufferB);
-+	FRDGTextureRef GBufferCTexture = GraphBuilder.RegisterExternalTexture(SceneContext.GBufferC);
-+	FRDGTextureRef SceneDepthTexture = GraphBuilder.RegisterExternalTexture(SceneContext.SceneDepthZ);
-+	FRDGTextureRef LightingChannelsTexture = (View.bUsesLightingChannels && SceneContext.LightingChannels) ? GraphBuilder.RegisterExternalTexture(SceneContext.LightingChannels) : nullptr;
-+	FRDGTextureRef SceneColorTexture = GraphBuilder.RegisterExternalTexture(SceneContext.GetSceneColor());
-+
-+	// calculate some things we'll need
-+	FMatrix ScreenToTranslatedWorld = FMatrix(
-+		FPlane(1, 0, 0, 0),
-+		FPlane(0, 1, 0, 0),
-+		FPlane(0, 0, View.ProjectionMatrixUnadjustedForRHI.M[2][2], 1),
-+		FPlane(0, 0, View.ProjectionMatrixUnadjustedForRHI.M[3][2], 0))
-+		* View.ViewMatrices.GetInvTranslatedViewProjectionMatrix();
-+
-+	for (int permutationIndex = 0; permutationIndex < 4; ++permutationIndex)
 +	{
-+		bool enableRelocation = (permutationIndex & 1) != 0;
-+		bool enableScrolling = (permutationIndex & 2) != 0;
++		RDG_GPU_STAT_SCOPE(GraphBuilder, RTXGI_ApplyLighting);
++		RDG_EVENT_SCOPE(GraphBuilder, "RTXGI Apply Lighting");
 +
-+		// only render this permutation if there is at least one volume that matches these settings
-+		bool foundAMatch = false;
-+		for (int32 i = 0; i < proxyEntries.Num(); ++i)
++		// DDGIVolume and useful metadata
++		struct FProxyEntry
 +		{
-+			foundAMatch = true;
-+			foundAMatch = foundAMatch && (enableRelocation == proxyEntries[i].proxy->ComponentData.EnableProbeRelocation);
-+			foundAMatch = foundAMatch && (enableScrolling == proxyEntries[i].proxy->ComponentData.EnableProbeScrolling);
-+			if (foundAMatch)
-+				break;
-+		}
-+		if (!foundAMatch)
-+			continue;
++			FVector Position;
++			FVector Scale;
++			float Density;
++			uint32 lightingChannelMask;
++			const FDDGIVolumeSceneProxy* proxy;
++		};
 +
-+		// get permuted vertex shader
-+		FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(ERHIFeatureLevel::SM5);
-+		FApplyLightingDeferredShaderVS::FPermutationDomain PermutationVectorVS;
-+		PermutationVectorVS.Set<FApplyLightingDeferredShaderVS::FEnableRelocation>(enableRelocation);
-+		PermutationVectorVS.Set<FApplyLightingDeferredShaderVS::FEnableScrolling>(enableScrolling);
-+		TShaderMapRef<FApplyLightingDeferredShaderVS> VertexShader(GlobalShaderMap, PermutationVectorVS);
-+
-+		// get permuted pixel shader
-+		FApplyLightingDeferredShaderPS::FPermutationDomain PermutationVectorPS;
-+		PermutationVectorPS.Set<FApplyLightingDeferredShaderPS::FLightingChannelsDim>(LightingChannelsTexture != nullptr);
-+		PermutationVectorPS.Set<FApplyLightingDeferredShaderPS::FEnableRelocation>(enableRelocation);
-+		PermutationVectorPS.Set<FApplyLightingDeferredShaderPS::FEnableScrolling>(enableScrolling);
-+		TShaderMapRef<FApplyLightingDeferredShaderPS> PixelShader(GlobalShaderMap, PermutationVectorPS);
-+
-+		// set parameters
-+		FApplyLightingDeferredShaderParameters DefaultPassParameters;
-+		FApplyLightingDeferredShaderParameters* PassParameters = GraphBuilder.AllocParameters<FApplyLightingDeferredShaderParameters>();
-+		*PassParameters = DefaultPassParameters;
-+		PassParameters->Normals = GBufferATexture;
-+		PassParameters->Depth = SceneDepthTexture;
-+		PassParameters->BaseColor = GBufferCTexture;
-+		PassParameters->Metallic = GBufferBTexture;
-+		PassParameters->LightingChannelsTexture = LightingChannelsTexture;
-+		PassParameters->ScreenToTranslatedWorld = ScreenToTranslatedWorld;
-+		PassParameters->WorldCameraOrigin = View.ViewMatrices.GetViewOrigin();
-+		PassParameters->InvDeviceZToWorldZTransform = View.InvDeviceZToWorldZTransform;
-+		PassParameters->RenderTargets[0] = FRenderTargetBinding(SceneColorTexture, ERenderTargetLoadAction::ELoad);
-+
-+		PassParameters->LinearClampSampler = TStaticSamplerState<SF_Trilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-+
-+		PassParameters->ShouldUsePreExposure = View.Family->EngineShowFlags.Tonemapper;
-+		PassParameters->NumVolumes = proxyEntries.Num();
-+		PassParameters->PreExposure = View.PreExposure;
-+
-+		for (int32 i = 0; i < proxyEntries.Num(); ++i)
++		// Find all the volumes that intersect the view frustum
++		TArray<FProxyEntry> volumes;
++		for (FDDGIVolumeSceneProxy* volumeProxy : AllProxiesReadyForRender_RenderThread)
 +		{
-+			PassParameters->DDGIVolume[i].ProbeIrradiance = proxyEntries[i].proxy->ProbesIrradianceTex;
-+			PassParameters->DDGIVolume[i].ProbeDistance = proxyEntries[i].proxy->ProbesDistanceTex;
-+			PassParameters->DDGIVolume[i].ProbeOffsets = proxyEntries[i].proxy->ProbesOffsetsUAV ? proxyEntries[i].proxy->ProbesOffsetsUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
++			// Skip this volume if it belongs to another scene
++			if (volumeProxy->OwningScene != &Scene) continue;
 +
-+			PassParameters->DDGIVolume[i].Position = proxyEntries[i].Position;
-+			PassParameters->DDGIVolume[i].Radius = proxyEntries[i].Scale * 100.0f;
-+			PassParameters->DDGIVolume[i].LightingChannelMask = proxyEntries[i].lightingChannelMask;
++			// Get the volume position and scale
++			FVector ProxyPosition = volumeProxy->ComponentData.Transform.GetLocation();
++			FVector ProxyScale = volumeProxy->ComponentData.Transform.GetScale3D();
 +
-+			FVector volumeSize = proxyEntries[i].proxy->ComponentData.Transform.GetScale3D() * 200.0f;
-+			FVector probeGridSpacing;
-+			probeGridSpacing.X = volumeSize.X / float(proxyEntries[i].proxy->ComponentData.ProbeCounts.X);
-+			probeGridSpacing.Y = volumeSize.Y / float(proxyEntries[i].proxy->ComponentData.ProbeCounts.Y);
-+			probeGridSpacing.Z = volumeSize.Z / float(proxyEntries[i].proxy->ComponentData.ProbeCounts.Z);
-+			PassParameters->DDGIVolume[i].ProbeGridSpacing = probeGridSpacing;
++			// Skip this volume if it doesn't intersect the view frustum
++			FVector ProxyExtent = ProxyScale * 100.0f;
++			if (!View.ViewFrustum.IntersectBox(ProxyPosition, ProxyExtent)) continue;
 +
-+			PassParameters->DDGIVolume[i].ProbeGridCounts = proxyEntries[i].proxy->ComponentData.ProbeCounts;
-+			PassParameters->DDGIVolume[i].ProbeNumIrradianceTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsIrradiance;
-+			PassParameters->DDGIVolume[i].ProbeNumDistanceTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsDistance;
-+			PassParameters->DDGIVolume[i].ProbeIrradianceEncodingGamma = proxyEntries[i].proxy->ComponentData.ProbeIrradianceEncodingGamma;
-+			PassParameters->DDGIVolume[i].NormalBias = proxyEntries[i].proxy->ComponentData.NormalBias;
-+			PassParameters->DDGIVolume[i].ViewBias = proxyEntries[i].proxy->ComponentData.ViewBias;
-+			PassParameters->DDGIVolume[i].BlendDistance = proxyEntries[i].proxy->ComponentData.BlendDistance;
-+			PassParameters->DDGIVolume[i].ProbeScrollOffsets = proxyEntries[i].proxy->ComponentData.ProbeScrollOffsets;
++			float ProxyDensity = float(volumeProxy->ComponentData.ProbeCounts.X * volumeProxy->ComponentData.ProbeCounts.Y * volumeProxy->ComponentData.ProbeCounts.Z) / (ProxyScale.X * ProxyScale.Y * ProxyScale.Z);
++			uint32 ProxyLightingChannelMask =
++				(volumeProxy->ComponentData.LightingChannels.bChannel0 ? 1 : 0) |
++				(volumeProxy->ComponentData.LightingChannels.bChannel1 ? 2 : 0) |
++				(volumeProxy->ComponentData.LightingChannels.bChannel2 ? 4 : 0);
 +
-+			// Only apply lighting if this is the pass we should apply in.
-+			// The shader needs to know about all of the volumes though for blending purposes.
-+			bool applyLighting = true;
-+			applyLighting = applyLighting && (enableRelocation == proxyEntries[i].proxy->ComponentData.EnableProbeRelocation);
-+			applyLighting = applyLighting && (enableScrolling == proxyEntries[i].proxy->ComponentData.EnableProbeScrolling);
-+			PassParameters->DDGIVolume[i].ApplyLighting = applyLighting;
++			// Add the current volume to the list of in-frustum volumes
++			volumes.Add(FProxyEntry{ ProxyPosition, ProxyScale, ProxyDensity, ProxyLightingChannelMask, volumeProxy });
 +		}
 +
-+		// fill out the rest of the textures.
-+		for (int32 i = proxyEntries.Num(); i < FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_MAX_SHADING_VOLUMES; ++i)
-+		{
-+			PassParameters->DDGIVolume[i].ProbeIrradiance = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
-+			PassParameters->DDGIVolume[i].ProbeDistance = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
-+			PassParameters->DDGIVolume[i].ProbeOffsets = FDDGIVolumeSceneProxy::GetDummyUAV();
-+		}
++		// Early out if no volumes contribute light to the current view
++		if (volumes.Num() == 0) return;
 +
-+		// call the shader
-+		FIntRect ViewRect = View.ViewRect;
-+		GraphBuilder.AddPass(
-+			Forward<FRDGEventName>(RDG_EVENT_NAME("DDGI Apply Lighting")),
-+			PassParameters,
-+			ERDGPassFlags::Raster,
-+			[PassParameters, GlobalShaderMap, VertexShader, PixelShader, ViewRect](FRHICommandList& RHICmdList)
++		// TODO: manage in-frustum volumes in a more sophisticated way
++		// Support a large number of volumes by culling volumes based on spatial data, projected view area, and/or other heuristics
++
++		// Sort the in-frustum volumes by user specified priority
++		Algo::Sort(volumes, [](const FProxyEntry& A, const FProxyEntry& B)
++		{
++			if (A.proxy->ComponentData.LightingPriority < B.proxy->ComponentData.LightingPriority) return true;
++			if ((A.proxy->ComponentData.LightingPriority == B.proxy->ComponentData.LightingPriority) && (A.Density > B.Density)) return true;
++			return false;
++		});
++
++		// Get the number of relevant in-frustum volumes
++		int32 numVolumes = FMath::Min(volumes.Num(), FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_MAX_SHADING_VOLUMES);
++
++		// Truncate the in-frustum volumes list to the maximum number of volumes supported
++		volumes.SetNum(numVolumes, true);
++
++		// Sort the final volume list by descending probe density
++		Algo::Sort(volumes, [](const FProxyEntry& A, const FProxyEntry& B)
++		{
++			return (A.Density > B.Density);
++		});
++
++		// Get the GBuffer textures
++		FRDGTextureRef GBufferATexture = GraphBuilder.RegisterExternalTexture(SceneContext.GBufferA);
++		FRDGTextureRef GBufferBTexture = GraphBuilder.RegisterExternalTexture(SceneContext.GBufferB);
++		FRDGTextureRef GBufferCTexture = GraphBuilder.RegisterExternalTexture(SceneContext.GBufferC);
++		FRDGTextureRef SceneDepthTexture = GraphBuilder.RegisterExternalTexture(SceneContext.SceneDepthZ);
++		FRDGTextureRef SceneColorTexture = GraphBuilder.RegisterExternalTexture(SceneContext.GetSceneColor());
++		if (!View.bUsesLightingChannels) LightingChannelsTexture = nullptr;
++
++		// Precompute the inverse view-projection transformation matrix
++		FMatrix ScreenToTranslatedWorld = FMatrix(
++			FPlane(1, 0, 0, 0),
++			FPlane(0, 1, 0, 0),
++			FPlane(0, 0, View.ProjectionMatrixUnadjustedForRHI.M[2][2], 1),
++			FPlane(0, 0, View.ProjectionMatrixUnadjustedForRHI.M[3][2], 0))
++			* View.ViewMatrices.GetInvTranslatedViewProjectionMatrix();
++
++		// Loop over the shader permutations to render indirect light from relevant volumes
++		for (int permutationIndex = 0; permutationIndex < 4; ++permutationIndex)
++		{
++			// Render with the current shader permutation if there one (or more) volume that matches the permutation settings
++			bool enableRelocation = (permutationIndex & 1) != 0;
++			bool enableScrolling = (permutationIndex & 2) != 0;
++			bool foundAMatch = false;
++			for (int32 i = 0; i < volumes.Num(); ++i)
 +			{
-+				RHICmdList.SetViewport(ViewRect.Min.X, ViewRect.Min.Y, 0.0f, ViewRect.Max.X, ViewRect.Max.Y, 1.0f);
-+
-+				FGraphicsPipelineStateInitializer GraphicsPSOInit;
-+
-+				RHICmdList.ApplyCachedRenderTargets(GraphicsPSOInit);
-+				GraphicsPSOInit.BlendState = TStaticBlendState<CW_RGB, BO_Add, BF_One, BF_One, BO_Add, BF_One, BF_One>::GetRHI();
-+				GraphicsPSOInit.RasterizerState = TStaticRasterizerState<>::GetRHI();
-+				GraphicsPSOInit.DepthStencilState = TStaticDepthStencilState<false, CF_Always>::GetRHI();
-+
-+				GraphicsPSOInit.BoundShaderState.VertexDeclarationRHI = GetVertexDeclarationFVector4();
-+				GraphicsPSOInit.BoundShaderState.VertexShaderRHI = VertexShader.GetVertexShader();
-+				GraphicsPSOInit.BoundShaderState.PixelShaderRHI = PixelShader.GetPixelShader();
-+				GraphicsPSOInit.PrimitiveType = PT_TriangleList;
-+
-+				SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit);
-+				RHICmdList.SetStencilRef(0);
-+
-+				SetShaderParameters(RHICmdList, VertexShader, VertexShader.GetVertexShader(), *PassParameters);
-+				SetShaderParameters(RHICmdList, PixelShader, PixelShader.GetPixelShader(), *PassParameters);
-+
-+				RHICmdList.DrawPrimitive(0, 1, 1);
++				foundAMatch = true;
++				foundAMatch = foundAMatch && (enableRelocation == volumes[i].proxy->ComponentData.EnableProbeRelocation);
++				foundAMatch = foundAMatch && (enableScrolling == volumes[i].proxy->ComponentData.EnableProbeScrolling);
++				if (foundAMatch) break;
 +			}
-+		);
++
++			// Skip this shader permutation if there are no volumes that match its feature set
++			if (!foundAMatch) continue;
++
++			// Get the vertex shader permutation
++			FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(ERHIFeatureLevel::SM5);
++			FApplyLightingDeferredShaderVS::FPermutationDomain PermutationVectorVS;
++			PermutationVectorVS.Set<FApplyLightingDeferredShaderVS::FEnableRelocation>(enableRelocation);
++			PermutationVectorVS.Set<FApplyLightingDeferredShaderVS::FEnableScrolling>(enableScrolling);
++			TShaderMapRef<FApplyLightingDeferredShaderVS> VertexShader(GlobalShaderMap, PermutationVectorVS);
++
++			// Get the pixel shader permutation
++			bool highBitCount = (GetDefault<URTXGIPluginSettings>()->IrradianceBits == EDDGIIrradianceBits::n32);
++			FApplyLightingDeferredShaderPS::FPermutationDomain PermutationVectorPS;
++			PermutationVectorPS.Set<FApplyLightingDeferredShaderPS::FLightingChannelsDim>(LightingChannelsTexture != nullptr);
++			PermutationVectorPS.Set<FApplyLightingDeferredShaderPS::FEnableRelocation>(enableRelocation);
++			PermutationVectorPS.Set<FApplyLightingDeferredShaderPS::FEnableScrolling>(enableScrolling);
++			PermutationVectorPS.Set<FApplyLightingDeferredShaderPS::FDebugFormatRadiance>(highBitCount);
++			TShaderMapRef<FApplyLightingDeferredShaderPS> PixelShader(GlobalShaderMap, PermutationVectorPS);
++
++			// Set the shader parameters
++			FApplyLightingDeferredShaderParameters DefaultPassParameters;
++			FApplyLightingDeferredShaderParameters* PassParameters = GraphBuilder.AllocParameters<FApplyLightingDeferredShaderParameters>();
++			*PassParameters = DefaultPassParameters;
++			PassParameters->Normals = GBufferATexture;
++			PassParameters->Depth = SceneDepthTexture;
++			PassParameters->BaseColor = GBufferCTexture;
++			PassParameters->Metallic = GBufferBTexture;
++			PassParameters->LightingChannelsTexture = LightingChannelsTexture;
++			PassParameters->ScreenToTranslatedWorld = ScreenToTranslatedWorld;
++			PassParameters->WorldCameraOrigin = View.ViewMatrices.GetViewOrigin();
++			PassParameters->InvDeviceZToWorldZTransform = View.InvDeviceZToWorldZTransform;
++			PassParameters->RenderTargets[0] = FRenderTargetBinding(SceneColorTexture, ERenderTargetLoadAction::ELoad);
++			PassParameters->LinearClampSampler = TStaticSamplerState<SF_Trilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
++			PassParameters->ShouldUsePreExposure = View.Family->EngineShowFlags.Tonemapper;
++			PassParameters->PreExposure = View.PreExposure;
++			PassParameters->NumVolumes = numVolumes;
++
++			// Set the shader parameters for the relevant volumes
++			for (int32 volumeIndex = 0; volumeIndex < numVolumes; ++volumeIndex)
++			{
++				FProxyEntry volume = volumes[volumeIndex];
++				const FDDGIVolumeSceneProxy* volumeProxy = volume.proxy;
++
++				// Set the volume textures
++				PassParameters->DDGIVolume[volumeIndex].ProbeIrradiance = volumeProxy->ProbesIrradianceTex;
++				PassParameters->DDGIVolume[volumeIndex].ProbeDistance = volumeProxy->ProbesDistanceTex;
++				PassParameters->DDGIVolume[volumeIndex].ProbeOffsets = volumeProxy->ProbesOffsetsUAV ? volumeProxy->ProbesOffsetsUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
++				PassParameters->DDGIVolume[volumeIndex].ProbeStates = volumeProxy->ProbesStatesTex;
++
++				// Set the volume parameters
++				PassParameters->DDGIVolume[volumeIndex].Position = volume.Position;
++				PassParameters->DDGIVolume[volumeIndex].Radius = volume.Scale * 100.0f;
++				PassParameters->DDGIVolume[volumeIndex].LightingChannelMask = volume.lightingChannelMask;
++
++				FVector volumeSize = volumeProxy->ComponentData.Transform.GetScale3D() * 200.0f;
++				FVector probeGridSpacing;
++				probeGridSpacing.X = volumeSize.X / float(volumeProxy->ComponentData.ProbeCounts.X);
++				probeGridSpacing.Y = volumeSize.Y / float(volumeProxy->ComponentData.ProbeCounts.Y);
++				probeGridSpacing.Z = volumeSize.Z / float(volumeProxy->ComponentData.ProbeCounts.Z);
++
++				PassParameters->DDGIVolume[volumeIndex].ProbeGridSpacing = probeGridSpacing;
++				PassParameters->DDGIVolume[volumeIndex].ProbeGridCounts = volumeProxy->ComponentData.ProbeCounts;
++				PassParameters->DDGIVolume[volumeIndex].ProbeNumIrradianceTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsIrradiance;
++				PassParameters->DDGIVolume[volumeIndex].ProbeNumDistanceTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsDistance;
++				PassParameters->DDGIVolume[volumeIndex].ProbeIrradianceEncodingGamma = volumeProxy->ComponentData.ProbeIrradianceEncodingGamma;
++				PassParameters->DDGIVolume[volumeIndex].NormalBias = volumeProxy->ComponentData.NormalBias;
++				PassParameters->DDGIVolume[volumeIndex].ViewBias = volumeProxy->ComponentData.ViewBias;
++				PassParameters->DDGIVolume[volumeIndex].BlendDistance = volumeProxy->ComponentData.BlendDistance;
++				PassParameters->DDGIVolume[volumeIndex].BlendDistanceBlack = volumeProxy->ComponentData.BlendDistanceBlack;
++				PassParameters->DDGIVolume[volumeIndex].ProbeScrollOffsets = volumeProxy->ComponentData.ProbeScrollOffsets;
++
++				// Only apply lighting if this is the pass it should be applied in
++				// The shader needs data for all of the volumes for blending purposes
++				bool applyLighting = true;
++				applyLighting = applyLighting && (enableRelocation == volumeProxy->ComponentData.EnableProbeRelocation);
++				applyLighting = applyLighting && (enableScrolling == volumeProxy->ComponentData.EnableProbeScrolling);
++				PassParameters->DDGIVolume[volumeIndex].ApplyLighting = applyLighting;
++				PassParameters->DDGIVolume[volumeIndex].IrradianceScalar = volumeProxy->ComponentData.IrradianceScalar;
++
++				// Apply the lighting multiplier to artificially lighten or darken the indirect light from the volume
++				PassParameters->DDGIVolume[volumeIndex].IrradianceScalar /= volumeProxy->ComponentData.LightingMultiplier;
++			}
++
++			// When there are fewer relevant volumes than the maximum supported, set the empty volume texture slots to dummy values
++			for (int32 volumeIndex = numVolumes; volumeIndex < FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_MAX_SHADING_VOLUMES; ++volumeIndex)
++			{
++				PassParameters->DDGIVolume[volumeIndex].ProbeIrradiance = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
++				PassParameters->DDGIVolume[volumeIndex].ProbeDistance = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
++				PassParameters->DDGIVolume[volumeIndex].ProbeOffsets = FDDGIVolumeSceneProxy::GetDummyUAV();
++				PassParameters->DDGIVolume[volumeIndex].ProbeStates = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
++			}
++
++			// Dispatch the fullscreen shader
++			FIntRect ViewRect = View.ViewRect;
++			GraphBuilder.AddPass(
++				Forward<FRDGEventName>(RDG_EVENT_NAME("DDGI Apply Lighting")),
++				PassParameters,
++				ERDGPassFlags::Raster,
++				[PassParameters, GlobalShaderMap, VertexShader, PixelShader, ViewRect](FRHICommandList& RHICmdList)
++				{
++					RHICmdList.SetViewport(ViewRect.Min.X, ViewRect.Min.Y, 0.0f, ViewRect.Max.X, ViewRect.Max.Y, 1.0f);
++
++					FGraphicsPipelineStateInitializer GraphicsPSOInit;
++					RHICmdList.ApplyCachedRenderTargets(GraphicsPSOInit);
++					GraphicsPSOInit.BlendState = TStaticBlendState<CW_RGB, BO_Add, BF_One, BF_One, BO_Add, BF_One, BF_One>::GetRHI();
++					GraphicsPSOInit.RasterizerState = TStaticRasterizerState<>::GetRHI();
++					GraphicsPSOInit.DepthStencilState = TStaticDepthStencilState<false, CF_Always>::GetRHI();
++
++					GraphicsPSOInit.BoundShaderState.VertexDeclarationRHI = GetVertexDeclarationFVector4();
++					GraphicsPSOInit.BoundShaderState.VertexShaderRHI = VertexShader.GetVertexShader();
++					GraphicsPSOInit.BoundShaderState.PixelShaderRHI = PixelShader.GetPixelShader();
++					GraphicsPSOInit.PrimitiveType = PT_TriangleList;
++
++					SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit);
++					RHICmdList.SetStencilRef(0);
++
++					SetShaderParameters(RHICmdList, VertexShader, VertexShader.GetVertexShader(), *PassParameters);
++					SetShaderParameters(RHICmdList, PixelShader, PixelShader.GetPixelShader(), *PassParameters);
++
++					RHICmdList.DrawPrimitive(0, 1, 1);
++				}
++			);
++		}
 +	}
 +}
 +
@@ -3189,6 +3344,9 @@ index 00000000000..985f31c5783
 +	FRHIResourceCreateInfo createInfo(TEXT("DDGIGetTexturePixelsSave"));
 +	ret.textureCPU = RHICreateTexture2D(textureGPU->GetSizeX(), textureGPU->GetSizeY(), textureGPU->GetFormat(), 1, 1, TexCreate_ShaderResource | TexCreate_Transient, createInfo);
 +	RHICmdList.CopyTexture(textureGPU, ret.textureCPU, FRHICopyTextureInfo{});
++
++	ret.pixelFormat = (int32)textureGPU->GetFormat();
++
 +	return ret;
 +}
 +
@@ -3206,7 +3364,7 @@ index 00000000000..985f31c5783
 +	RHIUnlockTexture2D(texturePixels.textureCPU, 0, false);
 +}
 +
-+static void SaveFDDGITexturePixels(FArchive& Ar, FDDGITexturePixels& texturePixels, FTexture2DRHIRef textureGPU, bool saveFormat)
++static void SaveFDDGITexturePixels(FArchive& Ar, FDDGITexturePixels& texturePixels, bool saveFormat)
 +{
 +	check(Ar.IsSaving());
 +
@@ -3216,14 +3374,7 @@ index 00000000000..985f31c5783
 +	Ar << texturePixels.pixels;
 +
 +	if (saveFormat)
-+	{
-+		uint32 format = 0;
-+
-+		if (textureGPU)
-+			format = (int32)textureGPU->GetFormat();
-+
-+		Ar << format;
-+	}
++		Ar << texturePixels.pixelFormat;
 +}
 +
 +static void LoadFDDGITexturePixels(FArchive& Ar, FDDGITexturePixels& texturePixels, EPixelFormat expectedPixelFormat, bool loadFormat)
@@ -3255,12 +3406,21 @@ index 00000000000..985f31c5783
 +	ENQUEUE_RENDER_COMMAND(DDGILoadTex)(
 +		[&texturePixels](FRHICommandListImmediate& RHICmdList)
 +		{
-+			uint32 destStride;
-+			uint8* mappedTextureMemory = (uint8*)RHILockTexture2D(texturePixels.textureCPU, 0, RLM_WriteOnly, destStride, false);
-+			if (texturePixels.stride == destStride)
-+				FMemory::Memcpy(mappedTextureMemory, &texturePixels.pixels[0], texturePixels.h * texturePixels.stride);
-+			RHIUnlockTexture2D(texturePixels.textureCPU, 0, false);
++			if (texturePixels.pixels.Num() == texturePixels.h * texturePixels.stride)
++			{
++				uint32 destStride;
++				uint8* mappedTextureMemory = (uint8*)RHILockTexture2D(texturePixels.textureCPU, 0, RLM_WriteOnly, destStride, false);
++				if (texturePixels.stride == destStride)
++				{
++					FMemory::Memcpy(mappedTextureMemory, &texturePixels.pixels[0], texturePixels.h * texturePixels.stride);
++				}
++				RHIUnlockTexture2D(texturePixels.textureCPU, 0, false);
++			}
++
++			// Only clear the pixels when in a game. Cooking needs these pixels to write them back out to disk on save, after load, when headless etc.
++			#if !WITH_EDITOR
 +			texturePixels.pixels.Reset();
++			#endif
 +		}
 +	);
 +}
@@ -3292,9 +3452,10 @@ index 00000000000..985f31c5783
 +		{
 +			FDDGITexturePixels Irradiance, Distance, Offsets, States;
 +
-+			if (proxy)
++			// if we have a proxy and are not cooking, get the probe data from the textures
++			if (proxy && !Ar.IsCooking())
 +			{
-+				// copy the textures to a cpu readable texture
++				// copy textures to cpu readable textures
 +				ENQUEUE_RENDER_COMMAND(DDGISaveTexStep1)(
 +					[&Irradiance, &Distance, &Offsets, &States, proxy](FRHICommandListImmediate& RHICmdList)
 +					{
@@ -3318,27 +3479,40 @@ index 00000000000..985f31c5783
 +				);
 +				FlushRenderingCommands();
 +			}
++			// When cooking, we just write out the pixels we got from load
++			else
++			{
++				Irradiance = LoadContext.Irradiance;
++				Distance = LoadContext.Distance;
++				Offsets = LoadContext.Offsets;
++				States = LoadContext.States;
++			}
 +
 +			// write the data out
-+			SaveFDDGITexturePixels(Ar, Irradiance, proxy ? proxy->ProbesIrradianceTex : nullptr, saveFormat);
-+			SaveFDDGITexturePixels(Ar, Distance, proxy ? proxy->ProbesDistanceTex : nullptr, saveFormat);
-+			SaveFDDGITexturePixels(Ar, Offsets, proxy ? proxy->ProbesOffsetsTex : nullptr, saveFormat);
-+			SaveFDDGITexturePixels(Ar, States, proxy ? proxy->ProbesStatesTex : nullptr, saveFormat);
++			SaveFDDGITexturePixels(Ar, Irradiance, saveFormat);
++			SaveFDDGITexturePixels(Ar, Distance, saveFormat);
++			SaveFDDGITexturePixels(Ar, Offsets, saveFormat);
++			SaveFDDGITexturePixels(Ar, States, saveFormat);
 +		}
 +		else if (Ar.IsLoading())
 +		{
-+			bool highBitCount = (GetDefault<URTXGIPluginSettings>()->IrradianceBits == EDDGIIrradianceBits::n32);
++			EDDGIIrradianceBits IrradianceBits = GetDefault<URTXGIPluginSettings>()->IrradianceBits;
++			EDDGIDistanceBits DistanceBits = GetDefault<URTXGIPluginSettings>()->DistanceBits;
 +			bool loadFormat = Ar.CustomVer(FDDGICustomVersion::GUID) >= FDDGICustomVersion::SaveLoadProbeTexturesFmt;
 +
 +			// read the data in and note that it's ready for load, so we can do that as soon as we have a scene context
-+			LoadFDDGITexturePixels(Ar, LoadContext.Irradiance, highBitCount ? FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatIrradianceHighBitDepth : FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatIrradianceLowBitDepth, loadFormat);
-+			LoadFDDGITexturePixels(Ar, LoadContext.Distance, FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatDistance, loadFormat);
++			LoadFDDGITexturePixels(Ar, LoadContext.Irradiance, (IrradianceBits == EDDGIIrradianceBits::n32) ? FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatIrradianceHighBitDepth : FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatIrradianceLowBitDepth, loadFormat);
++			LoadFDDGITexturePixels(Ar, LoadContext.Distance, (DistanceBits == EDDGIDistanceBits::n32) ? FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatDistanceHighBitDepth : FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatDistanceLowBitDepth, loadFormat);
 +			LoadFDDGITexturePixels(Ar, LoadContext.Offsets, FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatOffsets, loadFormat);
 +			LoadFDDGITexturePixels(Ar, LoadContext.States, FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatStates, loadFormat);
-+			
-+			FlushRenderingCommands();
 +
-+			LoadContext.ReadyForLoad = true;
++			bool& ReadyForLoad = LoadContext.ReadyForLoad;
++			ENQUEUE_RENDER_COMMAND(DDGILoadReady)(
++				[&ReadyForLoad](FRHICommandListImmediate& RHICmdList)
++				{
++					ReadyForLoad = true;
++				}
++			);
 +		}
 +	}
 +}
@@ -3400,6 +3574,7 @@ index 00000000000..985f31c5783
 +		ComponentData.ProbeCounts = ProbeCounts;
 +		ComponentData.ProbeDistanceExponent = probeDistanceExponent;
 +		ComponentData.ProbeIrradianceEncodingGamma = probeIrradianceEncodingGamma;
++		ComponentData.LightingPriority = LightingPriority;
 +		ComponentData.UpdatePriority = UpdatePriority;
 +		ComponentData.ProbeHysteresis = ProbeHysteresis;
 +		ComponentData.ProbeChangeThreshold = probeChangeThreshold;
@@ -3407,11 +3582,17 @@ index 00000000000..985f31c5783
 +		ComponentData.NormalBias = NormalBias;
 +		ComponentData.ViewBias = ViewBias;
 +		ComponentData.BlendDistance = VolumeBlendDistance;
++		ComponentData.BlendDistanceBlack = VolumeBlendDistanceBlack;
 +		ComponentData.ProbeBackfaceThreshold = ProbeBackfaceThreshold;
 +		ComponentData.ProbeMinFrontfaceDistance = ProbeMinFrontfaceDistance;
 +		ComponentData.EnableProbeRelocation = EnableProbeRelocation;
 +		ComponentData.EnableProbeScrolling = EnableProbeScrolling;
 +		ComponentData.ProbeScrollOffsets = ProbeScrollOffset;
++		ComponentData.IrradianceScalar = IrradianceScalar;
++		ComponentData.EmissiveMultiplier = EmissiveMultiplier;
++		ComponentData.LightingMultiplier = LightMultiplier;
++		ComponentData.RuntimeStatic = RuntimeStatic;
++		ComponentData.SkyLight = SkyLight;
 +
 +		// If the ProbeCounts are too large to make textures, let's not update the render thread data to avoid a crash.
 +		// Everything is ok with not getting an update, ever, so this is safe.
@@ -3442,13 +3623,14 @@ index 00000000000..985f31c5783
 +		}
 +
 +		FDDGIVolumeSceneProxy* DDGIProxy = SceneProxy;
-+		bool highBitCount = (GetDefault<URTXGIPluginSettings>()->IrradianceBits == EDDGIIrradianceBits::n32);
++		EDDGIIrradianceBits IrradianceBits = GetDefault<URTXGIPluginSettings>()->IrradianceBits;
++		EDDGIDistanceBits DistanceBits = GetDefault<URTXGIPluginSettings>()->DistanceBits;
 +
 +		FDDGITextureLoadContext TextureLoadContext = LoadContext;
 +		LoadContext.ReadyForLoad = false;
 +
 +		ENQUEUE_RENDER_COMMAND(UpdateGIVolumeTransformCommand)(
-+			[DDGIProxy, ComponentData, TextureLoadContext, highBitCount](FRHICommandListImmediate& RHICmdList)
++			[DDGIProxy, ComponentData, TextureLoadContext, IrradianceBits, DistanceBits](FRHICommandListImmediate& RHICmdList)
 +			{
 +				bool needReallocate =
 +					DDGIProxy->ComponentData.ProbeCounts != ComponentData.ProbeCounts ||
@@ -3464,7 +3646,7 @@ index 00000000000..985f31c5783
 +
 +				if (needReallocate)
 +				{
-+					DDGIProxy->ReallocateSurfaces_RenderThread(RHICmdList, highBitCount);
++					DDGIProxy->ReallocateSurfaces_RenderThread(RHICmdList, IrradianceBits, DistanceBits);
 +					DDGIProxy->ResetTextures_RenderThread(RHICmdList);
 +					FDDGIVolumeSceneProxy::AllProxiesReadyForRender_RenderThread.Add(DDGIProxy);
 +				}
@@ -3574,10 +3756,10 @@ index 00000000000..985f31c5783
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp
 new file mode 100644
-index 00000000000..e1f2fec731b
+index 00000000000..5adba91e0e3
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp
-@@ -0,0 +1,1273 @@
+@@ -0,0 +1,1315 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -3663,7 +3845,7 @@ index 00000000000..e1f2fec731b
 +	float _32 = sin1 * (sq3 * cos2) + cos1 * (sq3 * sin2);
 +	float _33 = 1.f - 2.f * u3;
 +
-+	return FMatrix(	
++	return FMatrix(
 +		FPlane( _11, _12, _13, 0.f ),
 +		FPlane(_21, _22, _23, 0.f ),
 +		FPlane(_31, _32, _33, 0.f ),
@@ -3683,7 +3865,9 @@ index 00000000000..e1f2fec731b
 +	class FDebugFormatRadiance : SHADER_PERMUTATION_BOOL("RTXGI_DDGI_DEBUG_FORMAT_RADIANCE");
 +	class FEnableScrolling : SHADER_PERMUTATION_BOOL("RTXGI_DDGI_PROBE_SCROLL");
 +
-+	using FPermutationDomain = TShaderPermutationDomain<FEnableTwoSidedGeometryDim, FEnableMaterialsDim, FDecoupleSampleGeneration, FEnableRelocation, FDebugFormatRadiance, FEnableScrolling>;
++	class FSkyLight : SHADER_PERMUTATION_BOOL("DDGI_SKYLIGHT");
++
++	using FPermutationDomain = TShaderPermutationDomain<FEnableTwoSidedGeometryDim, FEnableMaterialsDim, FDecoupleSampleGeneration, FEnableRelocation, FDebugFormatRadiance, FEnableScrolling, FSkyLight>;
 +
 +	static void ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment)
 +	{
@@ -3705,7 +3889,7 @@ index 00000000000..e1f2fec731b
 +		SHADER_PARAMETER_TEXTURE(Texture2D, ProbeIrradiance)
 +		SHADER_PARAMETER_TEXTURE(Texture2D, ProbeDistance)
 +		SHADER_PARAMETER_UAV(RWTexture2D<float4>, ProbeOffsets)
-+		SHADER_PARAMETER_UAV(RWTexture2D<uint>, ProbeStates)
++		SHADER_PARAMETER_TEXTURE(Texture2D<uint>, ProbeStates)
 +		SHADER_PARAMETER(FVector, Origin)
 +		SHADER_PARAMETER(FVector, ProbeGridSpacing)
 +		SHADER_PARAMETER(float, ProbeMaxRayDistance)
@@ -3720,6 +3904,10 @@ index 00000000000..e1f2fec731b
 +		SHADER_PARAMETER(float, ViewBias)
 +		SHADER_PARAMETER(FIntVector, ProbeScrollOffsets)
 +		SHADER_PARAMETER_SAMPLER(SamplerState, LinearClampSampler)
++		SHADER_PARAMETER(float, IrradianceScalar)
++		SHADER_PARAMETER(float, EmissiveMultiplier)
++		SHADER_PARAMETER(int, ProbeIndexStart)
++		SHADER_PARAMETER(int, ProbeIndexCount)
 +	END_SHADER_PARAMETER_STRUCT()
 +
 +	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
@@ -3826,7 +4014,7 @@ index 00000000000..e1f2fec731b
 +		OutEnvironment.SetDefine(TEXT("DDGIIrradianceBlendDebug"), 0);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -3848,6 +4036,8 @@ index 00000000000..e1f2fec731b
 +			SHADER_PARAMETER(float, DDGIVolume_probeChangeThreshold)
 +			SHADER_PARAMETER(float, DDGIVolume_probeBrightnessThreshold)
 +			SHADER_PARAMETER(FIntVector, DDGIVolume_probeScrollOffsets)
++			SHADER_PARAMETER(int, DDGIVolume_ProbeIndexStart)
++			SHADER_PARAMETER(int, DDGIVolume_ProbeIndexCount)
 +		// }
 +
 +		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, DDGIProbeRTRadianceUAV)
@@ -3886,7 +4076,7 @@ index 00000000000..e1f2fec731b
 +		OutEnvironment.SetDefine(TEXT("DDGIDistanceBlendDebug"), 0);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -3908,6 +4098,8 @@ index 00000000000..e1f2fec731b
 +			SHADER_PARAMETER(float, DDGIVolume_probeChangeThreshold)
 +			SHADER_PARAMETER(float, DDGIVolume_probeBrightnessThreshold)
 +			SHADER_PARAMETER(FIntVector, DDGIVolume_probeScrollOffsets)
++			SHADER_PARAMETER(int, DDGIVolume_ProbeIndexStart)
++			SHADER_PARAMETER(int, DDGIVolume_ProbeIndexCount)
 +		// }
 +
 +		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, DDGIProbeRTRadianceUAV)
@@ -3931,7 +4123,7 @@ index 00000000000..e1f2fec731b
 +		FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -3957,7 +4149,7 @@ index 00000000000..e1f2fec731b
 +		FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -3991,7 +4183,7 @@ index 00000000000..e1f2fec731b
 +		OutEnvironment.SetDefine(TEXT("RTXGI_DDGI_PROBE_RELOCATION"), 1);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -4008,6 +4200,8 @@ index 00000000000..e1f2fec731b
 +		SHADER_PARAMETER(FMatrix, DDGIVolume_probeRayRotationTransform)
 +		SHADER_PARAMETER(float, DDGIVolume_probeMinFrontfaceDistance)
 +		SHADER_PARAMETER(FIntVector, DDGIVolume_ProbeScrollOffsets)
++		SHADER_PARAMETER(int, DDGIVolume_ProbeIndexStart)
++		SHADER_PARAMETER(int, DDGIVolume_ProbeIndexCount)
 +
 +		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, DDGIProbeRTRadianceUAV)
 +		SHADER_PARAMETER_UAV(RWTexture2D<float4>, DDGIProbeOffsets)
@@ -4034,7 +4228,7 @@ index 00000000000..e1f2fec731b
 +		OutEnvironment.SetDefine(TEXT("RTXGI_DDGI_PROBE_STATE_CLASSIFIER"), 1);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -4048,6 +4242,8 @@ index 00000000000..e1f2fec731b
 +		SHADER_PARAMETER(int, DDGIVolume_numRaysPerProbe)
 +		SHADER_PARAMETER(float, DDGIVolume_probeBackfaceThreshold)
 +		SHADER_PARAMETER(FIntVector, DDGIVolume_probeScrollOffsets)
++		SHADER_PARAMETER(int, DDGIVolume_ProbeIndexStart)
++		SHADER_PARAMETER(int, DDGIVolume_ProbeIndexCount)
 +
 +		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, DDGIProbeRTRadianceUAV)
 +		SHADER_PARAMETER_UAV(RWTexture2D<uint>, DDGIProbeStates)
@@ -4107,6 +4303,15 @@ index 00000000000..e1f2fec731b
 +		ARTPEDelegate.Remove(OnAskRaytracingPassEnabledDelegateHandle);
 +	}
 +
++	static void CopyTexture_RenderThread(FRHICommandList& RHICmdList, FTexture2DRHIRef dest, FDDGITexturePixels src)
++	{
++		// bail out if incompatible
++		if (!dest || !src.textureCPU || dest->GetSizeX() != src.w || dest->GetSizeY() != src.h)
++			return;
++
++		RHICmdList.CopyTexture(src.textureCPU, dest, FRHICopyTextureInfo{});
++	}
++
 +	void DDGIUpdatePerFrame_RenderThread(const FScene& Scene, const FViewInfo& View, FRDGBuilder& GraphBuilder)
 +	{
 +		// ASSUMES RENDERTHREAD
@@ -4120,7 +4325,32 @@ index 00000000000..e1f2fec731b
 +		float totalPriority = 0.0f;
 +		for (FDDGIVolumeSceneProxy* proxy : FDDGIVolumeSceneProxy::AllProxiesReadyForRender_RenderThread)
 +		{
++			// load the textures from disk if we should, regardless of when or if they are getting updated
++			if (proxy->TextureLoadContext.ReadyForLoad)
++			{
++				GraphBuilder.AddPass(
++					RDG_EVENT_NAME("DDGI Volume Texture Loading"),
++					GraphBuilder.AllocParameters<FDummyShaderParameters>(),
++					ERDGPassFlags::Compute | ERDGPassFlags::NeverCull,
++					[proxy](FRHICommandList& RHICmdList)
++					{
++						if (!proxy->TextureLoadContext.ReadyForLoad)
++							return;
++
++						CopyTexture_RenderThread(RHICmdList, proxy->ProbesIrradianceTex, proxy->TextureLoadContext.Irradiance);
++						CopyTexture_RenderThread(RHICmdList, proxy->ProbesDistanceTex, proxy->TextureLoadContext.Distance);
++						CopyTexture_RenderThread(RHICmdList, proxy->ProbesOffsetsTex, proxy->TextureLoadContext.Offsets);
++						CopyTexture_RenderThread(RHICmdList, proxy->ProbesStatesTex, proxy->TextureLoadContext.States);
++						proxy->TextureLoadContext.Clear();
++					}
++				);
++			}
++
 +			if (proxy->OwningScene != &Scene)
++				continue;
++
++			// Don't update static runtime volumes during gameplay
++			if (View.bIsGameView && proxy->ComponentData.RuntimeStatic)
 +				continue;
 +
 +			sceneVolumes.Add(proxy);
@@ -4149,7 +4379,7 @@ index 00000000000..e1f2fec731b
 +		const auto FeatureLevel = GMaxRHIFeatureLevel;
 +		auto ShaderMap = GetGlobalShaderMap(FeatureLevel);
 +
-+		for (int i = 0; i < 8; ++i)
++		for (int i = 0; i < 16; ++i)
 +		{
 +			FRayTracingRTXGIProbeUpdateRGS::FPermutationDomain PermutationVector;
 +			PermutationVector.Set<FRayTracingRTXGIProbeUpdateRGS::FEnableTwoSidedGeometryDim>(true);
@@ -4158,7 +4388,7 @@ index 00000000000..e1f2fec731b
 +			PermutationVector.Set<FRayTracingRTXGIProbeUpdateRGS::FEnableRelocation>((i & 1) != 0 ? true : false);
 +			PermutationVector.Set<FRayTracingRTXGIProbeUpdateRGS::FDebugFormatRadiance>((i & 2) != 0 ? true : false);
 +			PermutationVector.Set<FRayTracingRTXGIProbeUpdateRGS::FEnableScrolling>((i & 4) != 0 ? true : false);
-+
++			PermutationVector.Set<FRayTracingRTXGIProbeUpdateRGS::FSkyLight>((i & 8) != 0 ? true : false);
 +			TShaderMapRef<FRayTracingRTXGIProbeUpdateRGS> RayGenerationShader(ShaderMap, PermutationVector);
 +
 +			OutRayGenShaders.Add(RayGenerationShader.GetRayTracingShader());
@@ -4187,35 +4417,8 @@ index 00000000000..e1f2fec731b
 +		#endif //!(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 +	}
 +
-+	static void CopyTexture_RenderThread(FRHICommandList& RHICmdList, FTexture2DRHIRef dest, FDDGITexturePixels src)
-+	{
-+		// bail out if incompatible
-+		if (!dest || !src.textureCPU || dest->GetSizeX() != src.w || dest->GetSizeY() != src.h)
-+			return;
-+
-+		RHICmdList.CopyTexture(src.textureCPU, dest, FRHICopyTextureInfo{});
-+	}
-+
 +	void DDGIUpdateVolume_RenderThread(const FScene& Scene, const FViewInfo& View, FRDGBuilder& GraphBuilder, FDDGIVolumeSceneProxy* VolProxy)
 +	{
-+		// load the textures from disk if we should
-+		if (VolProxy->TextureLoadContext.ReadyForLoad)
-+		{
-+			GraphBuilder.AddPass(
-+				RDG_EVENT_NAME("DDGI Volume Texture Loading"),
-+				GraphBuilder.AllocParameters<FDummyShaderParameters>(),
-+				ERDGPassFlags::Compute,
-+				[VolProxy](FRHICommandList& RHICmdList)
-+				{
-+					CopyTexture_RenderThread(RHICmdList, VolProxy->ProbesIrradianceTex, VolProxy->TextureLoadContext.Irradiance);
-+					CopyTexture_RenderThread(RHICmdList, VolProxy->ProbesDistanceTex, VolProxy->TextureLoadContext.Distance);
-+					CopyTexture_RenderThread(RHICmdList, VolProxy->ProbesOffsetsTex, VolProxy->TextureLoadContext.Offsets);
-+					CopyTexture_RenderThread(RHICmdList, VolProxy->ProbesStatesTex, VolProxy->TextureLoadContext.States);
-+					VolProxy->TextureLoadContext.Clear();
-+				}
-+			);
-+		}
-+
 +		if (!ShouldDynamicUpdate(View))
 +			return;
 +
@@ -4232,7 +4435,7 @@ index 00000000000..e1f2fec731b
 +		FRDGTextureUAVRef ProbesRadianceUAV;
 +		{
 +			const FDDGIVolumeSceneProxy::FComponentData& ComponentData = VolProxy->ComponentData;
-+			FRDGTextureDesc DDGIDebugOutputDesc = FRDGTextureDesc::Create2DDesc(
++			FRDGTextureDesc DDGIDebugOutputDesc = FRDGTextureDesc::Create2D(
 +				FIntPoint
 +				{
 +					(int32)ComponentData.GetNumRaysPerProbe(),
@@ -4241,10 +4444,9 @@ index 00000000000..e1f2fec731b
 +				// This texture stores both color and distance
 +				highBitCount ? FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatRadianceHighBitDepth : FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatRadianceLowBitDepth,
 +				FClearValueBinding::None,
-+				TexCreate_None,
-+				TexCreate_ShaderResource | TexCreate_UAV,
-+				false
++				TexCreate_ShaderResource | TexCreate_UAV
 +			);
++
 +			ProbesRadianceTex = GraphBuilder.CreateTexture(DDGIDebugOutputDesc, TEXT("DDGIVolumeRadiance"));
 +			ProbesRadianceUAV = GraphBuilder.CreateUAV(ProbesRadianceTex);
 +		}
@@ -4278,13 +4480,11 @@ index 00000000000..e1f2fec731b
 +		static const int c_probeVisHeight = 600;
 +
 +		// create the texture and uav being rendered to
-+		FRDGTextureDesc ProbeVisTex = FRDGTextureDesc::Create2DDesc(
++		FRDGTextureDesc ProbeVisTex = FRDGTextureDesc::Create2D(
 +			FIntPoint(c_probeVisWidth, c_probeVisHeight),
 +			EPixelFormat::PF_A32B32G32R32F,
 +			FClearValueBinding::None,
-+			TexCreate_None,
-+			TexCreate_ShaderResource | TexCreate_UAV,
-+			false
++			TexCreate_ShaderResource | TexCreate_UAV
 +		);
 +		FRDGTextureUAVRef ProbeVisUAV = GraphBuilder.CreateUAV(GraphBuilder.CreateTexture(ProbeVisTex, TEXT("DDGIProbeVis")));
 +
@@ -4330,7 +4530,7 @@ index 00000000000..e1f2fec731b
 +
 +		PassParameters->SSProfilesTexture = GraphBuilder.RegisterExternalTexture(View.RayTracingSubSurfaceProfileTexture);
 +		PassParameters->ViewUniformBuffer = View.ViewUniformBuffer;
-+		PassParameters->LightDataPacked = View.RayTracingLightingDataUniformBuffer;
++		PassParameters->LightDataPacked = View.RayTracingLightData.UniformBuffer;
 +
 +		FIntPoint DispatchSize(c_probeVisWidth, c_probeVisHeight);
 +
@@ -4352,6 +4552,26 @@ index 00000000000..e1f2fec731b
 +
 +	void DDGIUpdateVolume_RenderThread_RTRadiance(const FScene& Scene, const FViewInfo& View, FRDGBuilder& GraphBuilder, FDDGIVolumeSceneProxy* VolProxy, const FMatrix& randomRotation, FRDGTextureRef ProbesRadianceTex, FRDGTextureUAVRef ProbesRadianceUAV, bool highBitCount)
 +	{
++		// Deal with probe ray budgets, and updating probes in a round robin fashion within the volume
++		int ProbeUpdateRayBudget = GetDefault<URTXGIPluginSettings>()->ProbeUpdateRayBudget;
++		if (ProbeUpdateRayBudget == 0)
++		{
++			VolProxy->ProbeIndexStart = 0;
++			VolProxy->ProbeIndexCount = VolProxy->ComponentData.GetProbeCount();
++		}
++		else
++		{
++			int ProbeCount = VolProxy->ComponentData.GetProbeCount();
++			int ProbeUpdateBudget = ProbeUpdateRayBudget / VolProxy->ComponentData.GetNumRaysPerProbe();
++			if (ProbeUpdateBudget < 1)
++				ProbeUpdateBudget = 1;
++			if (ProbeUpdateBudget > ProbeCount)
++				ProbeUpdateBudget = ProbeCount;
++			VolProxy->ProbeIndexStart += ProbeUpdateBudget;
++			VolProxy->ProbeIndexStart = VolProxy->ProbeIndexStart % ProbeCount;
++			VolProxy->ProbeIndexCount = ProbeUpdateBudget;
++		}
++
 +		const auto FeatureLevel = GMaxRHIFeatureLevel;
 +		auto ShaderMap = GetGlobalShaderMap(FeatureLevel);
 +
@@ -4362,6 +4582,7 @@ index 00000000000..e1f2fec731b
 +		PermutationVector.Set<FRayTracingRTXGIProbeUpdateRGS::FEnableRelocation>(VolProxy->ComponentData.EnableProbeRelocation);
 +		PermutationVector.Set<FRayTracingRTXGIProbeUpdateRGS::FDebugFormatRadiance>(highBitCount);
 +		PermutationVector.Set<FRayTracingRTXGIProbeUpdateRGS::FEnableScrolling>(VolProxy->ComponentData.EnableProbeScrolling);
++		PermutationVector.Set<FRayTracingRTXGIProbeUpdateRGS::FSkyLight>(VolProxy->ComponentData.SkyLight);
 +		TShaderMapRef<FRayTracingRTXGIProbeUpdateRGS> RayGenerationShader(ShaderMap, PermutationVector);
 +
 +		FRayTracingRTXGIProbeUpdateRGS::FParameters DefaultPassParameters;
@@ -4392,7 +4613,7 @@ index 00000000000..e1f2fec731b
 +			PassParameters->DDGIVolume.ProbeIrradiance = VolProxy->ProbesIrradianceTex;
 +			PassParameters->DDGIVolume.ProbeDistance = VolProxy->ProbesDistanceTex;
 +			PassParameters->DDGIVolume.ProbeOffsets = VolProxy->ProbesOffsetsUAV ? VolProxy->ProbesOffsetsUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
-+			PassParameters->DDGIVolume.ProbeStates = VolProxy->ProbesStatesUAV ? VolProxy->ProbesStatesUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
++			PassParameters->DDGIVolume.ProbeStates = VolProxy->ProbesStatesTex;
 +
 +			PassParameters->DDGIVolume.Origin = VolProxy->ComponentData.Transform.GetLocation();
 +			PassParameters->DDGIVolume.ProbeMaxRayDistance = VolProxy->ComponentData.ProbeMaxRayDistance;
@@ -4416,34 +4637,35 @@ index 00000000000..e1f2fec731b
 +			PassParameters->DDGIVolume.NormalBias = VolProxy->ComponentData.NormalBias;
 +			PassParameters->DDGIVolume.ViewBias = VolProxy->ComponentData.ViewBias;
 +			PassParameters->DDGIVolume.ProbeScrollOffsets = VolProxy->ComponentData.ProbeScrollOffsets;
-+
++			PassParameters->DDGIVolume.IrradianceScalar = VolProxy->ComponentData.IrradianceScalar;
++			PassParameters->DDGIVolume.EmissiveMultiplier = VolProxy->ComponentData.EmissiveMultiplier;
++			PassParameters->DDGIVolume.ProbeIndexStart = VolProxy->ProbeIndexStart;
++			PassParameters->DDGIVolume.ProbeIndexCount = VolProxy->ProbeIndexCount;
 +			PassParameters->DDGIVolume.LinearClampSampler = TStaticSamplerState<SF_Trilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
 +		}
 +
-+		FRDGTextureDesc DDGIDebugOutputDesc = FRDGTextureDesc::Create2DDesc(
++		FRDGTextureDesc DDGIDebugOutputDesc = FRDGTextureDesc::Create2D(
 +			ProbesRadianceTex->Desc.Extent,
 +			ProbesRadianceTex->Desc.Format,
 +			FClearValueBinding::None,
-+			TexCreate_None,
-+			TexCreate_ShaderResource | TexCreate_UAV,
-+			false
++			TexCreate_ShaderResource | TexCreate_UAV
 +		);
 +		PassParameters->DebugOutput = GraphBuilder.CreateUAV(GraphBuilder.CreateTexture(DDGIDebugOutputDesc, TEXT("DDGIVolumeUpdateDebug")));
 +
 +		PassParameters->SSProfilesTexture = GraphBuilder.RegisterExternalTexture(View.RayTracingSubSurfaceProfileTexture);
 +		PassParameters->ViewUniformBuffer = View.ViewUniformBuffer;
-+		PassParameters->LightDataPacked = View.RayTracingLightingDataUniformBuffer;
++		PassParameters->LightDataPacked = View.RayTracingLightData.UniformBuffer;
 +
 +		FIntPoint DispatchSize = ProbesRadianceTex->Desc.Extent;
 +
-+		FTexture2DRHIRef irradianceTex = VolProxy->ProbesIrradianceTex;
-+		FTexture2DRHIRef distanceTex = VolProxy->ProbesDistanceTex;
++		FUnorderedAccessViewRHIRef irradianceUAV = VolProxy->ProbesIrradianceUAV;
++		FUnorderedAccessViewRHIRef distanceUAV = VolProxy->ProbesDistanceUAV;
 +
 +		GraphBuilder.AddPass(
 +			RDG_EVENT_NAME("DDGI RTRadiance %dx%d", DispatchSize.X, DispatchSize.Y),
 +			PassParameters,
 +			ERDGPassFlags::Compute,
-+			[PassParameters, &View, RayGenerationShader, DispatchSize, irradianceTex, distanceTex, ProbesRadianceTex](FRHICommandList& RHICmdList)
++			[PassParameters, &View, RayGenerationShader, DispatchSize, irradianceUAV, distanceUAV, ProbesRadianceTex](FRHICommandList& RHICmdList)
 +			{
 +				FRayTracingShaderBindingsWriter GlobalResources;
 +				SetShaderParameters(GlobalResources, RayGenerationShader, *PassParameters);
@@ -4453,9 +4675,8 @@ index 00000000000..e1f2fec731b
 +
 +				// Irradiance and distance are read during the probe update rgs above to give infinite bounce lighting.
 +				// They are going to be written next based on these results.
-+				RHICmdList.TransitionResource(EResourceTransitionAccess::ERWBarrier, EResourceTransitionPipeline::EComputeToCompute, irradianceTex);
-+				RHICmdList.TransitionResource(EResourceTransitionAccess::ERWBarrier, EResourceTransitionPipeline::EComputeToCompute, distanceTex);
-+				//RHICmdList.TransitionResource(EResourceTransitionAccess::ERWBarrier, EResourceTransitionPipeline::EComputeToCompute, ProbesRadianceTex->GetRHI());
++				RHICmdList.Transition(FRHITransitionInfo(irradianceUAV, ERHIAccess::ERWBarrier, ERHIAccess::ERWBarrier));
++				RHICmdList.Transition(FRHITransitionInfo(distanceUAV, ERHIAccess::ERWBarrier, ERHIAccess::ERWBarrier));
 +			}
 +		);
 +	}
@@ -4473,7 +4694,7 @@ index 00000000000..e1f2fec731b
 +		FDDGIIrradianceBlend::FParameters DefaultPassParameters;
 +		FDDGIIrradianceBlend::FParameters* PassParameters = GraphBuilder.AllocParameters<FDDGIIrradianceBlend::FParameters>();
 +		*PassParameters = DefaultPassParameters;
-+		
++
 +		PassParameters->DDGIVolume_probeGridCounts = VolProxy->ComponentData.ProbeCounts;
 +		PassParameters->DDGIVolume_numRaysPerProbe = VolProxy->ComponentData.GetNumRaysPerProbe();
 +		PassParameters->DDGIVolume_probeRayRotationTransform = randomRotation;
@@ -4483,6 +4704,8 @@ index 00000000000..e1f2fec731b
 +		PassParameters->DDGIVolume_probeChangeThreshold = VolProxy->ComponentData.ProbeChangeThreshold;
 +		PassParameters->DDGIVolume_probeBrightnessThreshold = VolProxy->ComponentData.ProbeBrightnessThreshold;
 +		PassParameters->DDGIVolume_probeScrollOffsets = VolProxy->ComponentData.ProbeScrollOffsets;
++		PassParameters->DDGIVolume_ProbeIndexStart = VolProxy->ProbeIndexStart;
++		PassParameters->DDGIVolume_ProbeIndexCount = VolProxy->ProbeIndexCount;
 +
 +		// calculate grid spacing based on size (scale) and probe count
 +		// regarding the *200: the scale is the radius so we need to double it. There is also an implict * 100 of the basic box.
@@ -4497,13 +4720,11 @@ index 00000000000..e1f2fec731b
 +		PassParameters->DDGIProbeUAV = VolProxy->ProbesIrradianceUAV;
 +		PassParameters->DDGIProbeStates = VolProxy->ProbesStatesUAV ? VolProxy->ProbesStatesUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
 +
-+		FRDGTextureDesc DDGIDebugOutputDesc = FRDGTextureDesc::Create2DDesc(
++		FRDGTextureDesc DDGIDebugOutputDesc = FRDGTextureDesc::Create2D(
 +			VolProxy->ProbesIrradianceTex->GetSizeXY(),
 +			VolProxy->ProbesIrradianceTex->GetFormat(),
 +			FClearValueBinding::None,
-+			TexCreate_None,
-+			TexCreate_ShaderResource | TexCreate_UAV,
-+			false
++			TexCreate_ShaderResource | TexCreate_UAV
 +		);
 +		PassParameters->DebugOutput = GraphBuilder.CreateUAV(GraphBuilder.CreateTexture(DDGIDebugOutputDesc, TEXT("DDGIIrradianceBlendDebug")));
 +
@@ -4540,6 +4761,8 @@ index 00000000000..e1f2fec731b
 +		PassParameters->DDGIVolume_probeChangeThreshold = VolProxy->ComponentData.ProbeChangeThreshold;
 +		PassParameters->DDGIVolume_probeBrightnessThreshold = VolProxy->ComponentData.ProbeBrightnessThreshold;
 +		PassParameters->DDGIVolume_probeScrollOffsets = VolProxy->ComponentData.ProbeScrollOffsets;
++		PassParameters->DDGIVolume_ProbeIndexStart = VolProxy->ProbeIndexStart;
++		PassParameters->DDGIVolume_ProbeIndexCount = VolProxy->ProbeIndexCount;
 +
 +		// calculate grid spacing based on size (scale) and probe count
 +		// regarding the *200: the scale is the radius so we need to double it. There is also an implict * 100 of the basic box.
@@ -4554,13 +4777,11 @@ index 00000000000..e1f2fec731b
 +		PassParameters->DDGIProbeUAV = VolProxy->ProbesDistanceUAV;
 +		PassParameters->DDGIProbeStates = VolProxy->ProbesStatesUAV ? VolProxy->ProbesStatesUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
 +
-+		FRDGTextureDesc DDGIDebugOutputDesc = FRDGTextureDesc::Create2DDesc(
++		FRDGTextureDesc DDGIDebugOutputDesc = FRDGTextureDesc::Create2D(
 +			VolProxy->ProbesDistanceTex->GetSizeXY(),
 +			VolProxy->ProbesDistanceTex->GetFormat(),
 +			FClearValueBinding::None,
-+			TexCreate_None,
-+			TexCreate_ShaderResource | TexCreate_UAV,
-+			false
++			TexCreate_ShaderResource | TexCreate_UAV
 +		);
 +		PassParameters->DebugOutput = GraphBuilder.CreateUAV(GraphBuilder.CreateTexture(DDGIDebugOutputDesc, TEXT("DDGIDistanceBlendDebug")));
 +
@@ -4574,16 +4795,16 @@ index 00000000000..e1f2fec731b
 +		);
 +
 +		// UAV barrier for irradiance and distance uavs so the blends are done before doing border updates
-+		FTexture2DRHIRef irradianceTex = VolProxy->ProbesIrradianceTex;
-+		FTexture2DRHIRef distanceTex = VolProxy->ProbesDistanceTex;
++		FUnorderedAccessViewRHIRef irradianceUAV = VolProxy->ProbesIrradianceUAV;
++		FUnorderedAccessViewRHIRef distanceUAV = VolProxy->ProbesDistanceUAV;
 +		GraphBuilder.AddPass(
 +			RDG_EVENT_NAME("DDGI Pre Border Update UAV Barrier"),
 +			GraphBuilder.AllocParameters<FDummyShaderParameters>(),
-+			ERDGPassFlags::Compute,
-+			[irradianceTex, distanceTex](FRHICommandList& RHICmdList)
++			ERDGPassFlags::Compute | ERDGPassFlags::NeverCull,
++			[irradianceUAV, distanceUAV](FRHICommandList& RHICmdList)
 +			{
-+				RHICmdList.TransitionResource(EResourceTransitionAccess::ERWBarrier, EResourceTransitionPipeline::EComputeToCompute, irradianceTex);
-+				RHICmdList.TransitionResource(EResourceTransitionAccess::ERWBarrier, EResourceTransitionPipeline::EComputeToCompute, distanceTex);
++				RHICmdList.Transition(FRHITransitionInfo(irradianceUAV, ERHIAccess::ERWBarrier, ERHIAccess::ERWBarrier));
++				RHICmdList.Transition(FRHITransitionInfo(distanceUAV, ERHIAccess::ERWBarrier, ERHIAccess::ERWBarrier));
 +			}
 +		);
 +	}
@@ -4704,16 +4925,16 @@ index 00000000000..e1f2fec731b
 +		}
 +
 +		// UAV barrier for irradiance and distance uavs so the border updates are done before they are read by the next processes
-+		FTexture2DRHIRef irradianceTex = VolProxy->ProbesIrradianceTex;
-+		FTexture2DRHIRef distanceTex = VolProxy->ProbesDistanceTex;
++		FUnorderedAccessViewRHIRef irradianceUAV = VolProxy->ProbesIrradianceUAV;
++		FUnorderedAccessViewRHIRef distanceUAV = VolProxy->ProbesDistanceUAV;
 +		GraphBuilder.AddPass(
 +			RDG_EVENT_NAME("DDGI Post Border Update UAV Barrier"),
 +			GraphBuilder.AllocParameters<FDummyShaderParameters>(),
-+			ERDGPassFlags::Compute,
-+			[irradianceTex, distanceTex](FRHICommandList& RHICmdList)
++			ERDGPassFlags::Compute | ERDGPassFlags::NeverCull,
++			[irradianceUAV, distanceUAV](FRHICommandList& RHICmdList)
 +			{
-+				RHICmdList.TransitionResource(EResourceTransitionAccess::ERWBarrier, EResourceTransitionPipeline::EComputeToCompute, irradianceTex);
-+				RHICmdList.TransitionResource(EResourceTransitionAccess::ERWBarrier, EResourceTransitionPipeline::EComputeToCompute, distanceTex);
++				RHICmdList.Transition(FRHITransitionInfo(irradianceUAV, ERHIAccess::ERWBarrier, ERHIAccess::ERWBarrier));
++				RHICmdList.Transition(FRHITransitionInfo(distanceUAV, ERHIAccess::ERWBarrier, ERHIAccess::ERWBarrier));
 +			}
 +		);
 +	}
@@ -4746,6 +4967,8 @@ index 00000000000..e1f2fec731b
 +		PassParameters->DDGIVolume_numRaysPerProbe = VolProxy->ComponentData.GetNumRaysPerProbe();
 +
 +		PassParameters->DDGIVolume_ProbeScrollOffsets = VolProxy->ComponentData.ProbeScrollOffsets;
++		PassParameters->DDGIVolume_ProbeIndexStart = VolProxy->ProbeIndexStart;
++		PassParameters->DDGIVolume_ProbeIndexCount = VolProxy->ProbeIndexCount;
 +
 +		PassParameters->DDGIVolume_probeBackfaceThreshold = VolProxy->ComponentData.ProbeBackfaceThreshold;
 +		PassParameters->DDGIVolume_probeRayRotationTransform = randomRotation;
@@ -4772,14 +4995,14 @@ index 00000000000..e1f2fec731b
 +		);
 +
 +		// UAV barrier for ProbesOffsets
-+		FTexture2DRHIRef offsetsTex = VolProxy->ProbesOffsetsTex;
++		FUnorderedAccessViewRHIRef offsetsUAV = VolProxy->ProbesOffsetsUAV;
 +		GraphBuilder.AddPass(
 +			RDG_EVENT_NAME("DDGI Probe Relocation UAV Barrier"),
 +			GraphBuilder.AllocParameters<FDummyShaderParameters>(),
-+			ERDGPassFlags::Compute,
-+			[offsetsTex](FRHICommandList& RHICmdList)
++			ERDGPassFlags::Compute | ERDGPassFlags::NeverCull,
++			[offsetsUAV](FRHICommandList& RHICmdList)
 +			{
-+				RHICmdList.TransitionResource(EResourceTransitionAccess::ERWBarrier, EResourceTransitionPipeline::EComputeToCompute, offsetsTex);
++				RHICmdList.Transition(FRHITransitionInfo(offsetsUAV, ERHIAccess::ERWBarrier, ERHIAccess::ERWBarrier));
 +			}
 +		);
 +	}
@@ -4812,6 +5035,8 @@ index 00000000000..e1f2fec731b
 +		PassParameters->DDGIVolume_numRaysPerProbe = VolProxy->ComponentData.GetNumRaysPerProbe();
 +		PassParameters->DDGIVolume_probeBackfaceThreshold = VolProxy->ComponentData.ProbeBackfaceThreshold;
 +		PassParameters->DDGIVolume_probeScrollOffsets = VolProxy->ComponentData.ProbeScrollOffsets;
++		PassParameters->DDGIVolume_ProbeIndexStart = VolProxy->ProbeIndexStart;
++		PassParameters->DDGIVolume_ProbeIndexCount = VolProxy->ProbeIndexCount;
 +
 +		PassParameters->DDGIProbeRTRadianceUAV = ProbesRadianceUAV;
 +		PassParameters->DDGIProbeStates = VolProxy->ProbesStatesUAV;
@@ -4835,14 +5060,14 @@ index 00000000000..e1f2fec731b
 +		);
 +
 +		// UAV barrier for ProbesStates
-+		FTexture2DRHIRef statesTex = VolProxy->ProbesStatesTex;
++		FUnorderedAccessViewRHIRef statesUAV = VolProxy->ProbesStatesUAV;
 +		GraphBuilder.AddPass(
 +			RDG_EVENT_NAME("DDGI Probe Classification UAV Barrier"),
 +			GraphBuilder.AllocParameters<FDummyShaderParameters>(),
-+			ERDGPassFlags::Compute,
-+			[statesTex](FRHICommandList& RHICmdList)
++			ERDGPassFlags::Compute|ERDGPassFlags::NeverCull,
++			[statesUAV](FRHICommandList& RHICmdList)
 +			{
-+				RHICmdList.TransitionResource(EResourceTransitionAccess::ERWBarrier, EResourceTransitionPipeline::EComputeToCompute, statesTex);
++				RHICmdList.Transition(FRHITransitionInfo(statesUAV, ERHIAccess::ERWBarrier, ERHIAccess::ERWBarrier));
 +			}
 +		);
 +	}
@@ -4850,13 +5075,12 @@ index 00000000000..e1f2fec731b
 +} // namespace DDGIVolumeUpdate
 +
 +#undef LOCTEXT_NAMESPACE
-+
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.h
 new file mode 100644
-index 00000000000..d4f5e2045f8
+index 00000000000..091de95b0ae
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.h
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,26 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -4883,13 +5107,12 @@ index 00000000000..d4f5e2045f8
 +
 +	void DDGIUpdatePerFrame_RenderThread(const FScene& Scene, const FViewInfo& View,FRDGBuilder& GraphBuilder);
 +}
-+
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeVisualize.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeVisualize.cpp
 new file mode 100644
-index 00000000000..f7769cbbc39
+index 00000000000..6466eeba813
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeVisualize.cpp
-@@ -0,0 +1,433 @@
+@@ -0,0 +1,545 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -4949,6 +5172,7 @@ index 00000000000..f7769cbbc39
 +	SHADER_PARAMETER(float, PreExposure)
 +	SHADER_PARAMETER(int32, ShouldUsePreExposure)
 +	SHADER_PARAMETER(FIntVector, VolumeProbeScrollOffsets)
++	SHADER_PARAMETER(float, IrradianceScalar)
 +	RENDER_TARGET_BINDING_SLOTS()
 +END_SHADER_PARAMETER_STRUCT()
 +
@@ -4971,7 +5195,7 @@ index 00000000000..f7769cbbc39
 +		OutEnvironment.SetDefine(TEXT("RTXGI_DDGI_PROBE_STATE_CLASSIFIER"), FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_PROBE_STATE_CLASSIFIER ? 1 : 0);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -4990,8 +5214,9 @@ index 00000000000..f7769cbbc39
 +
 +	class FEnableRelocation : SHADER_PERMUTATION_BOOL("RTXGI_DDGI_PROBE_RELOCATION");
 +	class FEnableScrolling : SHADER_PERMUTATION_BOOL("RTXGI_DDGI_PROBE_SCROLL");
++	class FDebugFormatRadiance : SHADER_PERMUTATION_BOOL("RTXGI_DDGI_DEBUG_FORMAT_RADIANCE");
 +
-+	using FPermutationDomain = TShaderPermutationDomain<FEnableRelocation, FEnableScrolling>;
++	using FPermutationDomain = TShaderPermutationDomain<FEnableRelocation, FEnableScrolling, FDebugFormatRadiance>;
 +
 +	static void ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment)
 +	{
@@ -4999,7 +5224,7 @@ index 00000000000..f7769cbbc39
 +		OutEnvironment.SetDefine(TEXT("RTXGI_DDGI_PROBE_STATE_CLASSIFIER"), FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_PROBE_STATE_CLASSIFIER ? 1 : 0);
 +
 +		// needed for a typed UAV load. This already assumes we are raytracing, so should be fine.
-+		//OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
++		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 +	}
 +
 +	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -5180,7 +5405,7 @@ index 00000000000..f7769cbbc39
 +TGlobalResource<TDDGIProbeSphereVertexBuffer<36, 24, FVector4>> GDDGIProbeSphereVertexBuffer;
 +TGlobalResource<TDDGIProbeSphereIndexBuffer<36, 24>> GDDGIProbeSphereIndexBuffer;
 +
-+void FDDGIVolumeSceneProxy::RenderVisualization_RenderThread(const FScene& Scene, const FSceneRenderTargets& SceneContext, const FViewInfo& View, FRHICommandListImmediate& RHICmdList)
++void FDDGIVolumeSceneProxy::RenderVisualization_RenderThread(const FScene& Scene, const FSceneRenderTargets& SceneContext, const FViewInfo& View, FRDGBuilder& GraphBuilder)
 +{
 +	check(IsInRenderingThread() || IsInParallelRenderingThread());
 +
@@ -5190,8 +5415,6 @@ index 00000000000..f7769cbbc39
 +
 +	float probeRadius = GetDefault<URTXGIPluginSettings>()->DebugProbeRadius;
 +	float depthScale = CVarShowProbeDepthScale.GetValueOnRenderThread();
-+
-+	FRDGBuilder GraphBuilder(RHICmdList);
 +
 +	// Get other things we'll need for all proxies
 +	FIntRect ViewRect = View.ViewRect;
@@ -5211,6 +5434,8 @@ index 00000000000..f7769cbbc39
 +		FVolumeVisualizeShaderPS::FPermutationDomain PermutationVectorPS;
 +		PermutationVectorPS.Set<FVolumeVisualizeShaderPS::FEnableRelocation>(proxy->ComponentData.EnableProbeRelocation);
 +		PermutationVectorPS.Set<FVolumeVisualizeShaderPS::FEnableScrolling>(proxy->ComponentData.EnableProbeScrolling);
++		bool highBitCount = (GetDefault<URTXGIPluginSettings>()->IrradianceBits == EDDGIIrradianceBits::n32);
++		PermutationVectorPS.Set<FVolumeVisualizeShaderPS::FDebugFormatRadiance>(highBitCount);
 +
 +		FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(ERHIFeatureLevel::SM5);
 +		TShaderMapRef<FVolumeVisualizeShaderVS> VertexShader(GlobalShaderMap, PermutationVectorVS);
@@ -5227,7 +5452,7 @@ index 00000000000..f7769cbbc39
 +		FVolumeVisualizeShaderParameters DefaultPassParameters;
 +		FVolumeVisualizeShaderParameters* PassParameters = GraphBuilder.AllocParameters<FVolumeVisualizeShaderParameters>();
 +		*PassParameters = DefaultPassParameters;
-+		
++
 +		PassParameters->ProbeIrradianceTexture = proxy->ProbesIrradianceTex;
 +		PassParameters->ProbeDistanceTexture = proxy->ProbesDistanceTex;
 +		PassParameters->ProbeOffsets = proxy->ProbesOffsetsTex;
@@ -5239,6 +5464,7 @@ index 00000000000..f7769cbbc39
 +
 +		PassParameters->ShouldUsePreExposure = View.Family->EngineShowFlags.Tonemapper;
 +		PassParameters->PreExposure = View.PreExposure;
++		PassParameters->IrradianceScalar = proxy->ComponentData.IrradianceScalar;
 +
 +		PassParameters->VolumeProbeScrollOffsets = proxy->ComponentData.ProbeScrollOffsets;
 +
@@ -5293,11 +5519,9 @@ index 00000000000..f7769cbbc39
 +			}
 +		);
 +	}
-+
-+	GraphBuilder.Execute();
 +}
 +#else
-+void FDDGIVolumeSceneProxy::RenderVisualization_RenderThread(const FScene& Scene, const FSceneRenderTargets& SceneContext, const FViewInfo& View, FRHICommandListImmediate& RHICmdList)
++void FDDGIVolumeSceneProxy::RenderVisualization_RenderThread(const FScene& Scene, const FSceneRenderTargets& SceneContext, const FViewInfo& View, FRDGBuilder& GraphBuilder)
 +{
 +
 +}
@@ -5322,13 +5546,124 @@ index 00000000000..f7769cbbc39
 +	return DummyUAV;
 +}
 +
-+// TODO: need to compile out the delegate for visualization in shipping builds!
++#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
++
++static bool MemoryUseExec(UWorld* InWorld, const TCHAR* Cmd, FOutputDevice& Ar)
++{
++	if (!FParse::Command(&Cmd, TEXT("r.RTXGI.MemoryUsed")))
++		return false;
++
++	struct VolumeMemoryInfo
++	{
++		const FDDGIVolumeSceneProxy* proxy = nullptr;
++		const AActor* actor = nullptr;
++		int irradianceBytes = 0;
++		int distanceBytes = 0;
++		int offsetsBytes = 0;
++		int statesBytes = 0;
++	};
++
++	TArray<VolumeMemoryInfo> memoryInfo;
++
++	ENQUEUE_RENDER_COMMAND(MemoryUsage)(
++		[&memoryInfo](FRHICommandListImmediate& RHICmdList)
++		{
++			for (FDDGIVolumeSceneProxy* proxy : FDDGIVolumeSceneProxy::AllProxiesReadyForRender_RenderThread)
++			{
++				VolumeMemoryInfo info;
++				info.proxy = proxy;
++
++				if (proxy->ProbesIrradianceTex)
++				{
++					FRHITexture2D* texture = proxy->ProbesIrradianceTex->GetTexture2D();
++					if (texture)
++						info.irradianceBytes = texture->GetSizeX()* texture->GetSizeY()* GPixelFormats[texture->GetFormat()].BlockBytes;
++				}
++
++				if (proxy->ProbesDistanceTex)
++				{
++					FRHITexture2D* texture = proxy->ProbesDistanceTex->GetTexture2D();
++					if (texture)
++						info.distanceBytes = texture->GetSizeX() * texture->GetSizeY() * GPixelFormats[texture->GetFormat()].BlockBytes;
++				}
++
++				if (proxy->ProbesOffsetsTex)
++				{
++					FRHITexture2D* texture = proxy->ProbesOffsetsTex->GetTexture2D();
++					if (texture)
++						info.offsetsBytes = texture->GetSizeX() * texture->GetSizeY() * GPixelFormats[texture->GetFormat()].BlockBytes;
++				}
++
++				if (proxy->ProbesStatesTex)
++				{
++					FRHITexture2D* texture = proxy->ProbesStatesTex->GetTexture2D();
++					if (texture)
++						info.statesBytes = texture->GetSizeX() * texture->GetSizeY() * GPixelFormats[texture->GetFormat()].BlockBytes;
++				}
++
++				memoryInfo.Push(info);
++			}
++		}
++	);
++	FlushRenderingCommands();
++
++	ULevel* level = InWorld->GetCurrentLevel();
++
++	for (AActor* actor : level->Actors)
++	{
++		if (!actor)
++			continue;
++
++		UDDGIVolumeComponent* volume = Cast<UDDGIVolumeComponent>(actor->GetComponentByClass(UDDGIVolumeComponent::StaticClass()));
++		if (!volume)
++			continue;
++
++		for (VolumeMemoryInfo& info : memoryInfo)
++		{
++			if (info.proxy == volume->SceneProxy)
++			{
++				info.actor = actor;
++				break;
++			}
++		}
++	}
++
++	UE_LOG(LogConsoleResponse, Log, TEXT("RTXGI Texture Memory Usage (NOTE: Does not include alignment padding, so actual memory usage could be higher):"));
++
++	int totalBytes = 0;
++	static const float c_oneMegabyte = 1024.0f * 1024.0f;
++
++	for (VolumeMemoryInfo& info : memoryInfo)
++	{
++		int bytes = 0;
++		bytes += info.irradianceBytes;
++		bytes += info.distanceBytes;
++		bytes += info.offsetsBytes;
++		bytes += info.statesBytes;
++		totalBytes += bytes;
++
++		UE_LOG(LogConsoleResponse, Log, TEXT("  %s: %0.2f MB (%d B)"), (info.actor ? *info.actor->GetFullName() : *FString("<Unknown>")), float(bytes) / c_oneMegabyte, bytes);
++
++		UE_LOG(LogConsoleResponse, Log, TEXT("    Irradiance: %0.2f MB (%d B)"), float(info.irradianceBytes) / c_oneMegabyte, info.irradianceBytes);
++		UE_LOG(LogConsoleResponse, Log, TEXT("    Distance: %0.2f MB (%d B)"), float(info.distanceBytes) / c_oneMegabyte, info.distanceBytes);
++		UE_LOG(LogConsoleResponse, Log, TEXT("    Offsets: %0.2f MB (%d B)"), float(info.offsetsBytes) / c_oneMegabyte, info.offsetsBytes);
++		UE_LOG(LogConsoleResponse, Log, TEXT("    States: %0.2f MB (%d B)"), float(info.statesBytes) / c_oneMegabyte, info.statesBytes);
++	}
++
++	UE_LOG(LogConsoleResponse, Log, TEXT("Total: %0.2f MB (%d B)"), float(totalBytes) / c_oneMegabyte, totalBytes);
++
++	return true;
++}
++
++static FStaticSelfRegisteringExec RendererExecRegistration(MemoryUseExec);
++
++#endif  // !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPlugin.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPlugin.cpp
 new file mode 100644
-index 00000000000..81e7fddb15f
+index 00000000000..2b7d2860bf3
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPlugin.cpp
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,59 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -5347,7 +5682,6 @@ index 00000000000..81e7fddb15f
 +
 +#include "DDGIVolumeUpdate.h"
 +#include "DDGIVolumeComponent.h"
-+
 +#include "Misc/Paths.h"
 +#include "ShaderCore.h"
 +
@@ -5391,10 +5725,10 @@ index 00000000000..81e7fddb15f
 +IMPLEMENT_MODULE(FRTXGIPlugin, RTXGI)
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.cpp
 new file mode 100644
-index 00000000000..e567ddbed0d
+index 00000000000..0b46fd15306
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.cpp
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,47 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -5417,11 +5751,14 @@ index 00000000000..e567ddbed0d
 +{
 +	Super::PostEditChangeProperty(PropertyChangedEvent);
 +
-+	// tell the scene proxies about the irradiance bit change
++	// tell the scene proxies about the bit depth change
 +	if (PropertyChangedEvent.MemberProperty)
 +	{
-+		if (PropertyChangedEvent.MemberProperty->GetFName() == GET_MEMBER_NAME_CHECKED(URTXGIPluginSettings, IrradianceBits))
-+			FDDGIVolumeSceneProxy::OnIrradianceBitsChange();
++		if (PropertyChangedEvent.MemberProperty->GetFName() == GET_MEMBER_NAME_CHECKED(URTXGIPluginSettings, IrradianceBits) ||
++			PropertyChangedEvent.MemberProperty->GetFName() == GET_MEMBER_NAME_CHECKED(URTXGIPluginSettings, DistanceBits))
++		{
++			FDDGIVolumeSceneProxy::OnIrradianceOrDistanceBitsChange();
++		}
 +	}
 +}
 +
@@ -5439,13 +5776,12 @@ index 00000000000..e567ddbed0d
 +}
 +
 +#undef LOCTEXT_NAMESPACE
-+
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.h
 new file mode 100644
-index 00000000000..2f4515c760f
+index 00000000000..e8491787b18
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.h
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,76 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -5467,7 +5803,14 @@ index 00000000000..2f4515c760f
 +enum class EDDGIIrradianceBits : uint8
 +{
 +	n10 UMETA(DisplayName = "10 bit"),
-+	n32 UMETA(DisplayName = "32 bit (for extended luminance range rendering)")
++	n32 UMETA(DisplayName = "32 bit (for bright lighting and extended luminance range rendering)")
++};
++
++UENUM()
++enum class EDDGIDistanceBits : uint8
++{
++	n16 UMETA(DisplayName = "16 bit"),
++	n32 UMETA(DisplayName = "32 bit (for larger distances)")
 +};
 +
 +/**
@@ -5489,12 +5832,31 @@ index 00000000000..2f4515c760f
 +	virtual FText GetSectionText() const override;
 +#endif
 +
-+	/** The radius of the spheres that visualize the ddgi probes */
++	/** If the lighting values are too large, due to bright lights or extended radiance, they can clip using 10 bit textures.
++	* You can either adjust the irradiance scalar on the DDGI volume to help avoid clipping, or you can change this setting
++	* to use a 32 bit per color channel texture format.
++	*/
 +	UPROPERTY(config, EditAnywhere, Category=DDGI)
 +	EDDGIIrradianceBits IrradianceBits = EDDGIIrradianceBits::n10;
 +
++	/** Same story, but for probe distances and squared distances, used to prevent leaks.
++	*/
++	UPROPERTY(config, EditAnywhere, Category=DDGI)
++	EDDGIDistanceBits DistanceBits = EDDGIDistanceBits::n16;
++
++	/** The radius of the spheres that visualize the ddgi probes */
 +	UPROPERTY(config, EditAnywhere, Category=DDGI)
 +	float DebugProbeRadius = 5.0f;
++
++	/** The number of rays per frame DDGI is allowed to use to update volumes at max. One volume is updated per frame
++	* in a weighted round robin fashion, based on each volume's update priority. It will use this many rays maximum
++	* when updating a volume.  A budget value of 0 means there is no budget, and all probes will be updated each time.
++	* A default volume has 8x8x8 probes, and uses 288 rays per probe for updates. That means it takes 147,456 rays
++	* to update all probes. If you set the budget to 50,000 rays, it would take 3 frames to update all the probes which
++	* means the probes will be less responsive to lighting changes, but will take less processing time each frame to update.
++	*/
++	UPROPERTY(config, EditAnywhere, Category = DDGI, meta = (ClampMin = "0"))
++	int ProbeUpdateRayBudget = 0;
 +};
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIBlueprintLibrary.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIBlueprintLibrary.h
 new file mode 100644
@@ -5580,10 +5942,10 @@ index 00000000000..3d68d1a514e
 +};
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h
 new file mode 100644
-index 00000000000..8c7246735e7
+index 00000000000..1c9fba5b377
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h
-@@ -0,0 +1,316 @@
+@@ -0,0 +1,369 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -5609,6 +5971,9 @@ index 00000000000..8c7246735e7
 +class FSceneInterface;
 +class FSceneRenderTargets;
 +class FViewInfo;
++
++enum class EDDGIIrradianceBits : uint8;
++enum class EDDGIDistanceBits : uint8;
 +
 +// This needs to match the shader code in ProbeBlendingCS.usf
 +UENUM()
@@ -5670,15 +6035,16 @@ index 00000000000..8c7246735e7
 +		const FScene& InScene,
 +		const FViewInfo& View,
 +		FRDGBuilder& GraphBuilder,
-+		FSceneRenderTargets& SceneContext
++		FSceneRenderTargets& SceneContext,
++		FRDGTextureRef LightingChannelsTexture
 +	);
 +
-+	void ReallocateSurfaces_RenderThread(FRHICommandListImmediate& RHICmdList, bool highBitCount);
++	void ReallocateSurfaces_RenderThread(FRHICommandListImmediate& RHICmdList, EDDGIIrradianceBits IrradianceBits, EDDGIDistanceBits DistanceBits);
 +	void ResetTextures_RenderThread(FRHICommandListImmediate& RHICmdList);
 +
-+	static void RenderVisualization_RenderThread(const FScene& Scene, const FSceneRenderTargets& SceneContext, const FViewInfo& View, FRHICommandListImmediate& RHICmdList);
++	static void RenderVisualization_RenderThread(const FScene& Scene, const FSceneRenderTargets& SceneContext, const FViewInfo& View, FRDGBuilder& GraphBuilder);
 +
-+	static void OnIrradianceBitsChange();
++	static void OnIrradianceOrDistanceBitsChange();
 +
 +	static FDelegateHandle OnRenderVisualizationDelegateHandle;
 +	static FDelegateHandle OnRenderDiffuseLightingDelegateHandle;
@@ -5696,7 +6062,8 @@ index 00000000000..8c7246735e7
 +		static const EPixelFormat c_pixelFormatRadianceHighBitDepth = EPixelFormat::PF_A32B32G32R32F;
 +		static const EPixelFormat c_pixelFormatIrradianceLowBitDepth = EPixelFormat::PF_A2B10G10R10;
 +		static const EPixelFormat c_pixelFormatIrradianceHighBitDepth = EPixelFormat::PF_A32B32G32R32F;
-+		static const EPixelFormat c_pixelFormatDistance = EPixelFormat::PF_G32R32F;
++		static const EPixelFormat c_pixelFormatDistanceHighBitDepth = EPixelFormat::PF_G32R32F;
++		static const EPixelFormat c_pixelFormatDistanceLowBitDepth = EPixelFormat::PF_G16R16F;
 +		static const EPixelFormat c_pixelFormatOffsets = EPixelFormat::PF_A16B16G16R16;
 +		static const EPixelFormat c_pixelFormatStates = EPixelFormat::PF_R8_UINT;
 +
@@ -5729,6 +6096,7 @@ index 00000000000..8c7246735e7
 +		FIntVector ProbeCounts = FIntVector(0); // 0 = invalid, will be written with valid counts before use
 +		float ProbeDistanceExponent = 1.0f;
 +		float ProbeIrradianceEncodingGamma = 1.0f;
++		int   LightingPriority = 0;
 +		float UpdatePriority = 1.0f;
 +		float ProbeHysteresis = 0.0f;
 +		float ProbeChangeThreshold = 0.0f;
@@ -5736,11 +6104,17 @@ index 00000000000..8c7246735e7
 +		float NormalBias = 0.0f;
 +		float ViewBias = 0.0f;
 +		float BlendDistance = 0.0f;
++		float BlendDistanceBlack = 0.0f;
 +		float ProbeBackfaceThreshold = 0.0f;
 +		float ProbeMinFrontfaceDistance = 0.0f;
 +		bool EnableProbeRelocation = false;
 +		bool EnableProbeScrolling = false;
 +		FIntVector ProbeScrollOffsets = FIntVector{ 0, 0, 0 };
++		float IrradianceScalar = 1.0f;
++		float EmissiveMultiplier = 1.0f;
++		float LightingMultiplier = 1.0f;
++		bool RuntimeStatic = false; // If true, does not update during gameplay, only during editor.
++		bool SkyLight = true;
 +
 +		// This is GetDDGIVolumeProbeCounts() from the SDK
 +		FIntPoint Get2DProbeCount() const
@@ -5749,6 +6123,11 @@ index 00000000000..8c7246735e7
 +				ProbeCounts.Y * ProbeCounts.Z,
 +				ProbeCounts.X
 +			);
++		}
++
++		int GetProbeCount() const
++		{
++			return ProbeCounts.X * ProbeCounts.Y * ProbeCounts.Z;
 +		}
 +	};
 +	FComponentData ComponentData;
@@ -5762,12 +6141,16 @@ index 00000000000..8c7246735e7
 +	FUnorderedAccessViewRHIRef ProbesIrradianceUAV;
 +	FUnorderedAccessViewRHIRef ProbesDistanceUAV;
 +	FUnorderedAccessViewRHIRef ProbesOffsetsUAV;
-+	FUnorderedAccessViewRHIRef ProbesStatesUAV;	
++	FUnorderedAccessViewRHIRef ProbesStatesUAV;
++
++	// Where to start the probe update from, for updating a subset of probes
++	int ProbeIndexStart = 0;
++	int ProbeIndexCount = 0;
 +
 +	static TSet<FDDGIVolumeSceneProxy*> AllProxiesReadyForRender_RenderThread;
 +	static TMap<const FSceneInterface*, float> SceneRoundRobinValue;
 +
-+	// to only render gi volumes in the scenes they are present in.
++	// Only render volumes in the scenes they are present in
 +	FSceneInterface* OwningScene;
 +
 +	static FTexture2DRHIRef GetDummyTex();
@@ -5820,9 +6203,14 @@ index 00000000000..8c7246735e7
 +	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "1"));
 +	FIntVector ProbeCounts = FIntVector(8, 8, 8);
 +
-+	// Priority for scheduling updates to this volume's probes. Higher priority gets updated more often. Weighted round robin updating.
-+	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0.001", ClampMax = "10.0"));
-+	float UpdatePriority = 1.f;
++	// A priority value used to select volumes when applying lighting. The volume with the lowest priority value is selected.
++	// If volumes have the same priority, then volumes are selected based on probe density. The highest density volume is selected.
++	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0", ClampMax = "10"));
++	int32 LightingPriority = 0;
++
++	// A priority value for scheduling updates to this volume's probes. Volumes with higher priority values get updated more often. Weighted round robin updating.
++	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0.0001", ClampMax = "100.0"));
++	float UpdatePriority = 0.0f;
 +
 +	// Maximum distance a probe ray may travel. Shortening this can increase performance. If you shorten it too much, it can miss geometry.
 +	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0"));
@@ -5848,6 +6236,11 @@ index 00000000000..8c7246735e7
 +	UPROPERTY(EditAnywhere, Category = "GI");
 +	float VolumeBlendDistance = 20.0f;
 +
++	// The distance from the edge of a volume at which it has zero weighting (turns black or yields to an encompassing volume). Useful if you don't want a linear fade all the way to the edge, which can be useful for scrolling volumes, hiding probes that haven't converged yet.
++	// Volume Blend Distance begins at this distance from the edge.
++	UPROPERTY(EditAnywhere, Category = "GI");
++	float VolumeBlendDistanceBlack = 0.0f;
++
 +	// If true, probes will attempt to relocate within their cell to leave geometry.
 +	UPROPERTY(EditAnywhere, Category = "GI");
 +	bool EnableProbeRelocation = true;
@@ -5855,6 +6248,10 @@ index 00000000000..8c7246735e7
 +	// If true, probes will keep their same position in world space as the volume moves around. Useful for moving volumes to have more temporally stable probes.
 +	UPROPERTY(EditAnywhere, Category = "GI");
 +	bool EnableProbeScrolling = false;
++
++	// If true, the volume will not update at runtime, and will keep the lighting values seen during edit.
++	UPROPERTY(EditAnywhere, Category = "GI");
++	bool RuntimeStatic = false;
 +
 +
 +
@@ -5888,6 +6285,24 @@ index 00000000000..8c7246735e7
 +	UPROPERTY(EditAnywhere, AdvancedDisplay, Category = "GI Advanced", meta = (ClampMin = "0", ClampMax = "1"));
 +	float ProbeBackfaceThreshold = 0.25f;
 +
++	// If you want to artificially increase the amount of lighting given by this volume, you can modify this lighting multiplier to do so.
++	UPROPERTY(EditAnywhere, AdvancedDisplay, Category = "GI Advanced", meta = (ClampMin = "0"));
++	float LightMultiplier = 1.0f;
++
++	// Use this to artificially modify how much emissive lighting contributes to GI
++	UPROPERTY(EditAnywhere, AdvancedDisplay, Category = "GI Advanced", meta = (ClampMin = "0"));
++	float EmissiveMultiplier = 1.0f;
++
++	// The probe irradiance is multiplied by this value when stored, to keep from being too large to be stored in the irradiance texture format.
++	// If your irradiance clips (it will be too dim), use this number to help prevent clipping, or change the project settings for the plugin to
++	// use the 32 bit floating point irradiance texture format.
++	UPROPERTY(EditAnywhere, AdvancedDisplay, Category = "GI Advanced", meta = (ClampMin = "0.001", ClampMax = "1"));
++	float IrradianceScalar = 1.0f;
++
++	// If true, non raytraced skylight contributes to GI
++	UPROPERTY(EditAnywhere, Category = "GI");
++	bool SkyLight = true;
++
 +	UPROPERTY(VisibleAnywhere, AdvancedDisplay, Category = "GI Advanced");
 +	FVector LastOrigin = FVector{ 0.0f, 0.0f, 0.0f };
 +
@@ -5902,10 +6317,10 @@ index 00000000000..8c7246735e7
 +};
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/RTXGIPlugin.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/RTXGIPlugin.h
 new file mode 100644
-index 00000000000..fc36f2f6c62
+index 00000000000..533122e57c3
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/RTXGIPlugin.h
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,37 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -5916,7 +6331,7 @@ index 00000000000..fc36f2f6c62
 +* license agreement from NVIDIA CORPORATION is strictly prohibited.
 +*/
 +
-+#pragma once 
++#pragma once
 +
 +#include "CoreMinimal.h"
 +#include "Modules/ModuleManager.h"
@@ -5943,13 +6358,12 @@ index 00000000000..fc36f2f6c62
 +	void StartupDDGI();
 +	void ShutdownDDGI();
 +};
-+
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/RTXGI.Build.cs b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/RTXGI.Build.cs
 new file mode 100644
-index 00000000000..3bb307dbdca
+index 00000000000..83f7332e621
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/RTXGI.Build.cs
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,60 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -5989,6 +6403,7 @@ index 00000000000..3bb307dbdca
 +			"Engine",
 +			"RenderCore",
 +			"Renderer",
++			"DeveloperSettings",
 +			"RHI",
 +		});
 +
@@ -6009,54 +6424,11 @@ index 00000000000..3bb307dbdca
 +		});
 +	}
 +}
-diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/UpdatingSDK.txt b/Engine/Plugins/Runtime/Nvidia/RTXGI/UpdatingSDK.txt
-new file mode 100644
-index 00000000000..287d48f4262
---- /dev/null
-+++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/UpdatingSDK.txt
-@@ -0,0 +1,23 @@
-+This is based on the RTXGI SDK hash below. Please update this text file if you update the SDK.
-+bfcb16072306bc2e386116a0c06c055c57e86e5d
-+
-+Here are the instructions for updating the RTXGI SDK.
-+
-+The steps may change of course, if files are added, renamed, deleted from the SDK, so take this as a loose guide.
-+
-+Updating the SDK:
-+* copy C:\gitlab\rtxgi-sdk\shaders\ddgi\* to C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\SDK\ddgi\*
-+* rename those from hlsl to .ush and .usf as they were prior. (headers = ush, else = usf)
-+* copy C:\gitlab\rtxgi-sdk\shaders\Common.hlsl to C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\SDK\Common.ush
-+* copy C:\gitlab\rtxgi-sdk\include\RTXGI\ddgi\DDGIVolumeDefines.h and DDGIVolumeDescGPU.h to C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\SDK\ and rename them .ush
-+* copy C:\gitlab\rtxgi-sdk\include\RTXGI\defines.h to C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\SDKDefines.ush and make sure the settings are correct for unreal (like handedness)
-+
-+There are changes in those shaders to make unreal happy, like changing how shader constants and resources are declared and interacted with. Also shader include directories. Check the diffs.
-+
-+Files of likely interest:
-+* C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\
-+ * ApplyLightingDeferred.usf is where diffuse irradiance is injected into the scene
-+ * ProbeUpdateRGS.usf is where the rays for probe radiance and distance are shot.
-+ * VisualizeDDGIProbes.usf is where the probe visualization (spheres) are rendered.
-+* C:\UE4\Engine\Plugins\Runtime\Nvidia\RTXGI\Source\RTXGI\Private\
-+ * this is where the CPU side logic is.
-\ No newline at end of file
-diff --git a/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp b/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp
-index f6f908fba18..30b0f39cfb9 100644
---- a/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp
-+++ b/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp
-@@ -44,7 +44,7 @@ static int32 GD3DAllowRemoveUnused = 0;
- 
- 
- static int32 GD3DCheckForDoubles = 1;
--static int32 GD3DCheckForTypedUAVs = 1;
-+static int32 GD3DCheckForTypedUAVs = 0;
- static int32 GD3DDumpAMDCodeXLFile = 0;
- 
- static const uint32 GD3DMaximumNumUAVs = 8; // Limit for feature level 11.0
 diff --git a/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.cpp b/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.cpp
-index 90b6e9dd495..55ad97ceb12 100644
+index b73b5c34957..81f7c8e0f85 100644
 --- a/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.cpp
 +++ b/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.cpp
-@@ -249,6 +249,32 @@ DECLARE_GPU_STAT(PostOpaqueExtensions);
+@@ -251,6 +251,32 @@ DECLARE_GPU_STAT(PostOpaqueExtensions);
  
  CSV_DEFINE_CATEGORY(LightCount, true);
  
@@ -6089,16 +6461,25 @@ index 90b6e9dd495..55ad97ceb12 100644
  const TCHAR* GetDepthPassReason(bool bDitheredLODTransitionsUseStencil, EShaderPlatform ShaderPlatform)
  {
  	if (IsForwardShadingEnabled(ShaderPlatform))
-@@ -1318,6 +1344,8 @@ bool FDeferredShadingSceneRenderer::DispatchRayTracingWorldUpdates(FRHICommandLi
+@@ -1098,6 +1124,8 @@ bool FDeferredShadingSceneRenderer::DispatchRayTracingWorldUpdates(FRHICommandLi
  		PrepareRayTracingTranslucency(View, RayGenShaders);
  		PrepareRayTracingDebug(View, RayGenShaders);
  		PreparePathTracing(View, RayGenShaders);
 +		FDeferredShadingDelegates::FPrepareRayTracingDelegate& PRTDelegate = FDeferredShadingDelegates::OnPrepareRayTracing();
 +		PRTDelegate.Broadcast(View, RayGenShaders);
  
- 		// Create ray tracing light list to obtain list of light function materials
+ 		View.RayTracingScene.RayTracingSceneRHI = RHICreateRayTracingScene(SceneInitializer);
  
-@@ -3390,6 +3418,11 @@ bool AnyRayTracingPassEnabled(const FScene* Scene, const FViewInfo& View)
+@@ -2111,7 +2139,7 @@ void FDeferredShadingSceneRenderer::Render(FRHICommandListImmediate& RHICmdList)
+ 		SCOPE_CYCLE_COUNTER(STAT_FDeferredShadingSceneRenderer_Lighting);
+ 
+ 		FRDGTextureRef DynamicBentNormalAOTexture = nullptr;
+-		RenderDiffuseIndirectAndAmbientOcclusion(GraphBuilder, SceneTextures, SceneColorTexture.Target, HairDatas);
++		RenderDiffuseIndirectAndAmbientOcclusion(GraphBuilder, SceneTextures, SceneColorTexture.Target, LightingChannelsTexture, HairDatas);
+ 
+ 		// These modulate the scenecolor output from the basepass, which is assumed to be indirect lighting
+ 		if (SceneContext.IsStaticLightingAllowed())
+@@ -2732,6 +2760,11 @@ bool AnyRayTracingPassEnabled(const FScene* Scene, const FViewInfo& View)
  	const bool bRayTracingShadows = CVarRayTracingShadows != nullptr && CVarRayTracingShadows->GetInt() > 0;
  	const bool bRayTracingStochasticRectLight = CVarStochasticRectLight != nullptr && CVarStochasticRectLight->GetInt() > 0;
  
@@ -6110,7 +6491,7 @@ index 90b6e9dd495..55ad97ceb12 100644
  	if (
  		ShouldRenderRayTracingAmbientOcclusion(View)
  		|| ShouldRenderRayTracingReflections(View)
-@@ -3400,6 +3433,7 @@ bool AnyRayTracingPassEnabled(const FScene* Scene, const FViewInfo& View)
+@@ -2742,6 +2775,7 @@ bool AnyRayTracingPassEnabled(const FScene* Scene, const FViewInfo& View)
  		|| bRayTracingStochasticRectLight
  		|| View.RayTracingRenderMode == ERayTracingRenderMode::PathTracing
  		|| View.RayTracingRenderMode == ERayTracingRenderMode::RayTracingDebug
@@ -6119,18 +6500,18 @@ index 90b6e9dd495..55ad97ceb12 100644
  	{
  		return true;
 diff --git a/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.h b/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.h
-index 40b7de6d25c..02bd6a4abf5 100644
+index a3451a0dcff..3e9488c4214 100644
 --- a/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.h
 +++ b/Engine/Source/Runtime/Renderer/Private/DeferredShadingRenderer.h
-@@ -28,6 +28,23 @@ class FRaytracingLightDataPacked;
- struct FSingleLayerWaterPassData;
- struct FHeightFogRenderingParameters;
+@@ -32,6 +32,23 @@ struct FRayTracingReflectionOptions;
+ struct FHairStrandsTransmittanceMaskData;
+ struct FHairStrandsRenderingData;
  
 +class RENDERER_API FDeferredShadingDelegates
 +{
 +public:
 +	DECLARE_MULTICAST_DELEGATE_TwoParams(FPrepareRayTracingDelegate, const FViewInfo& /*View*/, TArray<FRHIRayTracingShader*>& /*OutRayGenShaders*/);
-+	DECLARE_MULTICAST_DELEGATE_FourParams(FRenderDiffuseLightingDelegate, const FScene& /*InScene*/, const FViewInfo& /*View*/, FRDGBuilder& /*GraphBuilder*/, FSceneRenderTargets& /*SceneContext*/);
++	DECLARE_MULTICAST_DELEGATE_FiveParams(FRenderDiffuseLightingDelegate, const FScene& /*InScene*/, const FViewInfo& /*View*/, FRDGBuilder& /*GraphBuilder*/, FSceneRenderTargets& /*SceneContext*/, FRDGTextureRef /*LightingChannelsTexture*/);
 +	DECLARE_MULTICAST_DELEGATE_OneParam(FAskRaytracingPassEnabledDelegate, bool& /*bAnyRayTracingPassEnabled*/);
 +
 +	static FPrepareRayTracingDelegate& OnPrepareRayTracing();
@@ -6138,57 +6519,73 @@ index 40b7de6d25c..02bd6a4abf5 100644
 +	static FAskRaytracingPassEnabledDelegate& OnAskRaytracingPassEnabled();
 +
 +#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
-+	DECLARE_MULTICAST_DELEGATE_FourParams(FRenderVisualizationDelegate, const FScene& /*InScene*/, const FSceneRenderTargets& /*SceneContext*/, const FViewInfo& /*View*/, FRHICommandListImmediate& /*RHICmdList*/);
++	DECLARE_MULTICAST_DELEGATE_FourParams(FRenderVisualizationDelegate, const FScene& /*InScene*/, const FSceneRenderTargets& /*SceneContext*/, const FViewInfo& /*View*/, FRDGBuilder& /*GraphBuilder*/);
 +	static FRenderVisualizationDelegate& OnRenderVisualization();
 +#endif //!(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 +};
 +
- class FLightShaftsOutput
- {
- public:
+ /**
+  * Scene renderer that implements a deferred shading pipeline and associated features.
+  */
+@@ -221,6 +238,7 @@ private:
+ 		FRDGBuilder& GraphBuilder,
+ 		TRDGUniformBufferRef<FSceneTextureUniformParameters> SceneTexturesUniformBuffer,
+ 		FRDGTextureRef SceneColorTexture,
++		FRDGTextureRef LightingChannelsTexture,
+ 		FHairStrandsRenderingData* HairDatas);
+ 
+ 	/** Renders sky lighting and reflections that can be done in a deferred pass. */
 diff --git a/Engine/Source/Runtime/Renderer/Private/IndirectLightRendering.cpp b/Engine/Source/Runtime/Renderer/Private/IndirectLightRendering.cpp
-index 3234a8ae364..83f4e41642f 100644
+index 2f9669297b6..cda0b5b2b39 100644
 --- a/Engine/Source/Runtime/Renderer/Private/IndirectLightRendering.cpp
 +++ b/Engine/Source/Runtime/Renderer/Private/IndirectLightRendering.cpp
-@@ -401,6 +401,10 @@ void FDeferredShadingSceneRenderer::RenderDiffuseIndirectAndAmbientOcclusion(FRH
+@@ -342,6 +342,7 @@ void FDeferredShadingSceneRenderer::RenderDiffuseIndirectAndAmbientOcclusion(
+ 	FRDGBuilder& GraphBuilder,
+ 	TRDGUniformBufferRef<FSceneTextureUniformParameters> SceneTexturesUniformBuffer,
+ 	FRDGTextureRef SceneColorTexture,
++	FRDGTextureRef LightingChannelsTexture,
+ 	FHairStrandsRenderingData* InHairDatas)
+ {
+ 	RDG_EVENT_SCOPE(GraphBuilder, "DiffuseIndirectAndAO");
+@@ -474,6 +475,10 @@ void FDeferredShadingSceneRenderer::RenderDiffuseIndirectAndAmbientOcclusion(
+ 				DenoiserOutputs.AmbientOcclusionMask);
  		}
- 		else
- 		{
-+			// call into the delegate to let people inject diffuse lighting if they'd like to
-+			FDeferredShadingDelegates::FRenderDiffuseLightingDelegate& RDLDelegate = FDeferredShadingDelegates::OnRenderDiffuseLighting();
-+			RDLDelegate.Broadcast(*Scene, View, GraphBuilder, SceneContext);
-+
- 			// No need for denoising.
- 			DenoiseMode = 0;
- 		}
-@@ -962,6 +966,12 @@ void FDeferredShadingSceneRenderer::RenderDeferredReflectionsAndSkyLighting(FRHI
  
- 	GraphBuilder.Execute();
++		// Let plugins inject diffuse lighting if they'd like to
++		FDeferredShadingDelegates::FRenderDiffuseLightingDelegate& RDLDelegate = FDeferredShadingDelegates::OnRenderDiffuseLighting();
++		RDLDelegate.Broadcast(*Scene, View, GraphBuilder, SceneContext, LightingChannelsTexture);
++
+ 		// Applies diffuse indirect and ambient occlusion to the scene color.
+ 		if (DenoiserOutputs.Color || DenoiserOutputs.AmbientOcclusionMask)
+ 		{
+@@ -953,6 +958,12 @@ void FDeferredShadingSceneRenderer::RenderDeferredReflectionsAndSkyLighting(
+ 		}
+ 	}
  
 +#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 +	FDeferredShadingDelegates::FRenderVisualizationDelegate& PRVDelegate = FDeferredShadingDelegates::OnRenderVisualization();
 +	for (int32 ViewIndexZ = 0; ViewIndexZ < Views.Num(); ViewIndexZ++)
-+		PRVDelegate.Broadcast(*Scene, SceneContext, Views[ViewIndexZ], RHICmdList);
++		PRVDelegate.Broadcast(*Scene, SceneContext, Views[ViewIndexZ], GraphBuilder);
 +#endif //!(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 +
- 	ResolveSceneColor(RHICmdList);
+ 	AddResolveSceneColorPass(GraphBuilder, Views, SceneColorTexture);
  }
  
 diff --git a/Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingLighting.h b/Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingLighting.h
-index 93a6cd090d7..88f1dfed357 100644
+index 269674c22c2..c75888a721c 100644
 --- a/Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingLighting.h
 +++ b/Engine/Source/Runtime/Renderer/Private/RayTracing/RayTracingLighting.h
-@@ -14,7 +14,7 @@
+@@ -12,7 +12,7 @@
  
- #define RAY_TRACING_MAX_LIGHT_FUNCTIONS 16
+ #if RHI_RAYTRACING
  
 -BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FRaytracingLightDataPacked, )
 +BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FRaytracingLightDataPacked, RENDERER_API)
  	SHADER_PARAMETER(uint32, Count)
  	SHADER_PARAMETER(float, IESLightProfileInvCount)
- 	SHADER_PARAMETER_TEXTURE(Texture2D, LTCMatTexture)
+ 	SHADER_PARAMETER(uint32, CellCount)
 diff --git a/Engine/Source/Runtime/Renderer/Private/SystemTextures.h b/Engine/Source/Runtime/Renderer/Private/SystemTextures.h
-index 260ef3dd273..129a37dbf23 100644
+index 493f6ab7f44..5db78d67277 100644
 --- a/Engine/Source/Runtime/Renderer/Private/SystemTextures.h
 +++ b/Engine/Source/Runtime/Renderer/Private/SystemTextures.h
 @@ -11,7 +11,7 @@

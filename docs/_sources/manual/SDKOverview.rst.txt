@@ -1,7 +1,7 @@
-.. _SDKOverview:
-
 .. |reg| unicode:: U+000AE .. REGISTERED SIGN
    :ltrim:
+
+.. _SDKOverview:
 
 ===================
 RTXGI SDK Overview

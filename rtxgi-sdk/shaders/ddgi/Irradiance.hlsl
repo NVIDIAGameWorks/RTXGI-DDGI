@@ -112,6 +112,21 @@ float3 DDGIGetVolumeIrradiance(
         // Get the adjacent probe's index (used for texture lookups)
         int adjacentProbeIndex = DDGIGetProbeIndex(adjacentProbeCoords, volume.probeGridCounts);
 
+#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
+        {
+#if RTXGI_DDGI_PROBE_SCROLL
+            int probeIndex = DDGIGetProbeIndexOffset(adjacentProbeIndex, volume.probeGridCounts, volume.probeScrollOffsets);
+#else
+            int probeIndex = adjacentProbeIndex;
+#endif
+
+            // If the probe is marked as inactive, don't allow it to contribute to indirect lighting
+            int2 texelPosition = DDGIGetProbeTexelPosition(probeIndex, volume.probeGridCounts);
+            int  probeState = resources.probeStates[texelPosition];
+            if (probeState == PROBE_STATE_INACTIVE) continue;
+        }
+#endif
+
         // Compute the distance and direction from the (biased and non-biased) shading point and the adjacent probe
         float3 worldPosToAdjProbe = normalize(adjacentProbeWorldPosition - worldPosition);
         float3 biasedPosToAdjProbe = normalize(adjacentProbeWorldPosition - biasedWorldPosition);
@@ -191,6 +206,9 @@ float3 DDGIGetVolumeIrradiance(
         irradiance += (weight * probeIrradiance);
         accumulatedWeights += weight;
     }
+
+    // Avoid a divide by zero when weights sum to zero
+    if (accumulatedWeights == 0.f) return float3(0.f, 0.f, 0.f);
 
     irradiance *= (1.f / accumulatedWeights);   // Normalize by the accumulated weights
     irradiance *= irradiance;                   // Go back to linear irradiance

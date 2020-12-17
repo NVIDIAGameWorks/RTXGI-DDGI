@@ -236,19 +236,17 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
     const float epsilon = 1e-9f * float(DDGIVolume.numRaysPerProbe);
     result.rgb *= 1.f / max(2.f * result.a, epsilon);
 
-#if RTXGI_DDGI_BLEND_RADIANCE
-    // Tone-mapping gamma adjustment
-    result.rgb = pow(result.rgb, DDGIVolume.probeInverseIrradianceEncodingGamma);
-#endif
-
     float  hysteresis = DDGIVolume.probeHysteresis;
     float3 previous = DDGIProbeUAV[PROBE_UAV_INDEX][probeTexCoords].rgb;
 
 #if RTXGI_DDGI_BLEND_RADIANCE
+    // Tone-mapping gamma adjustment
+    result.rgb = pow(result.rgb, DDGIVolume.probeInverseIrradianceEncodingGamma);
+
     if (RTXGIMaxComponent(previous.rgb - result.rgb) > DDGIVolume.probeChangeThreshold)
     {
         // Lower the hysteresis when a large lighting change is detected
-        hysteresis = max(0.f, hysteresis - 0.15f);
+        hysteresis = max(0.f, hysteresis - 0.75f);
     }
     
     float3 delta = (result.rgb - previous.rgb);
@@ -257,12 +255,29 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
         // Clamp the maximum change in irradiance when a large brightness change is detected
         result.rgb = previous.rgb + (delta * 0.25f);
     }
-#endif
 
-    // Interpolate the new blended irradiance (or filtered distance) with the existing 
-    // irradiance (or filtered distance) in the probe. A high hysteresis value emphasizes
-    // the existing probe irradiance (or filtered distance).
+    // Interpolate the new blended irradiance with the existing irradiance in the probe.
+    // A high hysteresis value emphasizes the existing probe irradiance.
+    //
+    // When using lower bit depth formats for irradiance, the difference between lerped values
+    // may be smaller than what the texture format can represent. This can stop progress towards
+    // the target value when going from high to low values. When darkening, step at least the minimum
+    // value the texture format can represent to ensure the target value is reached. The threshold value
+    // for 10-bit/channel formats is always used (even for 32-bit/channel formats) to speed up light to
+    // dark convergence.
+    static const float c_threshold = 1.f / 1024.f;
+    float3 lerpDelta = (1.f - hysteresis) * delta;
+    if (RTXGIMaxComponent(result.rgb) < RTXGIMaxComponent(previous.rgb))
+    {
+        lerpDelta = min(max(c_threshold, abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
+    }
+    result = float4(previous.rgb + lerpDelta, 1.f);
+#else
+
+    // Interpolate the new filtered distance with the existing filtered distance in the probe.
+    // A high hysteresis value emphasizes the existing probe filtered distance.
     result = float4(lerp(result.rgb, previous.rgb, hysteresis), 1.f);
+#endif
 
     DDGIProbeUAV[PROBE_UAV_INDEX][probeTexCoords] = result;
 }

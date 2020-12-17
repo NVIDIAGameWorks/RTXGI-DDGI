@@ -1,41 +1,39 @@
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/RTXGI.uplugin b/Engine/Plugins/Runtime/Nvidia/RTXGI/RTXGI.uplugin
 new file mode 100644
-index 00000000000..df851f14812
+index 00000000000..f820b0beeb7
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/RTXGI.uplugin
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,27 @@
 +{
-+	"FileVersion" : 3,
-+	"Version" : 0,
-+	"VersionName" : "0.0",
-+	"FriendlyName" : "NVIDIA RTXGI Plugin",
-+	"Description" : "Plugin to support dynamic Global Illumination",
-+	"Category" : "Lighting",
-+	"CreatedBy" : "Epic Games, Inc.",
-+	"CreatedByURL" : "http://epicgames.com",
-+	"DocsURL" : "",
-+	"MarketplaceURL" : "",
-+	"SupportURL" : "",
-+	"EnabledByDefault" : false,
-+	"CanContainContent" : true,
-+	"IsBetaVersion" : true,
-+	"Installed" : false,
-+	"Modules" :
-+	[
++	"FileVersion": 3,
++	"Version": 1,
++	"VersionName": "1.1.23",
++	"FriendlyName": "NVIDIA RTXGI Plugin",
++	"Description": "Dynamic Real-Time Ray Traced Global Illumination",
++	"Category": "Lighting",
++	"CreatedBy": "NVIDIA Corporation",
++	"CreatedByURL": "https://developer.nvidia.com/rtxgi",
++	"DocsURL": "https://developer.nvidia.com/rtxgi",
++	"MarketplaceURL": "",
++	"SupportURL": "https://developer.nvidia.com/rtxgi",
++	"EnabledByDefault": false,
++	"CanContainContent": true,
++	"IsBetaVersion": false,
++	"Installed": false,
++	"Modules": [
 +		{
-+			"Name" : "RTXGI",
-+			"Type" : "Runtime",
-+			"LoadingPhase" : "PostConfigInit",
-+			"WhitelistPlatforms" :
-+			[
-+				"Win64",				
++			"Name": "RTXGI",
++			"Type": "Runtime",
++			"LoadingPhase": "PostConfigInit",
++			"WhitelistPlatforms": [
++				"Win64"
 +			]
 +		}
 +	]
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf
 new file mode 100644
-index 00000000000..9e55ed57640
+index 00000000000..1df0119a68d
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf
 @@ -0,0 +1,223 @@
@@ -93,6 +91,7 @@ index 00000000000..9e55ed57640
 +	Texture2D<float4> DDGIVolume_##x##_ProbeIrradiance; \
 +	Texture2D<float4> DDGIVolume_##x##_ProbeDistance; \
 +	RWTexture2D<float4> DDGIVolume_##x##_ProbeOffsets; \
++	Texture2D<uint> DDGIVolume_##x##_ProbeStates; \
 +	float3 DDGIVolume_##x##_Position; \
 +	float3 DDGIVolume_##x##_Radius; \
 +	float3 DDGIVolume_##x##_ProbeGridSpacing; \
@@ -127,7 +126,7 @@ index 00000000000..9e55ed57640
 +	OutScreenVector = mul(float4(OutPosition.xy, 1, 0), ScreenToTranslatedWorld).xyz;
 +}
 +
-+bool ApplyVolumeLightingContribution(out float4 lightWeight, in Texture2D<float4> ProbeIrradiance, in Texture2D<float4> ProbeDistance, in RWTexture2D<float4> ProbeOffsets, in float3 WorldPosition, in float3 Normal, in float3 CameraDirection,
++bool ApplyVolumeLightingContribution(out float4 lightWeight, in Texture2D<float4> ProbeIrradiance, in Texture2D<float4> ProbeDistance, in RWTexture2D<float4> ProbeOffsets, in Texture2D<uint> ProbeStates, in float3 WorldPosition, in float3 Normal, in float3 CameraDirection,
 +uint pixelLightingMask, in uint volumeLightingChannelMask, in float3 volumeRadius, in DDGIVolumeDescGPU DDGIVolume, in float3 albedo, in float BlendDistance, in float BlendDistanceBlack, in float ApplyLighting, in float IrradianceScalar)
 +{
 +	lightWeight = float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -152,10 +151,9 @@ index 00000000000..9e55ed57640
 +#if RTXGI_DDGI_PROBE_RELOCATION
 +		resources.probeOffsets = ProbeOffsets;
 +#endif
-+// It doesn't actually need this, so not passing it through
-+//#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-+		//resources.probeStates = ProbeStates;
-+//#endif
++#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
++		resources.probeStates = ProbeStates;
++#endif
 +	}
 +
 +    // Get irradiance from the DDGIVolume
@@ -234,7 +232,7 @@ index 00000000000..9e55ed57640
 +	float4 secondaryLightWeight = float4(0.0f, 0.0f, 0.0f, 0.0f);
 +	float4 lightWeight = float4(0.0f, 0.0f, 0.0f, 0.0f);
 +	#define VOLUME_ENTRY(x) \
-+	if (x < NumVolumes && primaryLightWeight.a < 1.0f && secondaryLightWeight.a == 0.0f && ApplyVolumeLightingContribution(lightWeight, DDGIVolume_##x##_ProbeIrradiance, DDGIVolume_##x##_ProbeDistance, DDGIVolume_##x##_ProbeOffsets, WorldPosition, Normal, CameraDirection, pixelLightingMask, \
++	if (x < NumVolumes && primaryLightWeight.a < 1.0f && secondaryLightWeight.a == 0.0f && ApplyVolumeLightingContribution(lightWeight, DDGIVolume_##x##_ProbeIrradiance, DDGIVolume_##x##_ProbeDistance, DDGIVolume_##x##_ProbeOffsets, DDGIVolume_##x##_ProbeStates, WorldPosition, Normal, CameraDirection, pixelLightingMask, \
 +		uint(DDGIVolume_##x##_LightingChannelMask), DDGIVolume_##x##_Radius, DDGIVolume_##x, albedo, DDGIVolume_##x##_BlendDistance, DDGIVolume_##x##_BlendDistanceBlack, DDGIVolume_##x##_ApplyLighting, DDGIVolume_##x##_IrradianceScalar)) \
 +		{ \
 +			if (primaryLightWeight.a == 0.0f) \
@@ -264,10 +262,10 @@ index 00000000000..9e55ed57640
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf
 new file mode 100644
-index 00000000000..aac11518c6c
+index 00000000000..056f6b294cf
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf
-@@ -0,0 +1,301 @@
+@@ -0,0 +1,313 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -309,8 +307,8 @@ index 00000000000..aac11518c6c
 +#define LTCMatSampler				RaytracingLightsDataPacked.LTCMatSampler
 +#define LTCAmpTexture				RaytracingLightsDataPacked.LTCAmpTexture
 +#define LTCAmpSampler				RaytracingLightsDataPacked.LTCAmpSampler
-+#define PreIntegratedGF				ReflectionStruct.PreIntegratedGF			
-+#define PreIntegratedGFSampler		ReflectionStruct.PreIntegratedGFSampler	
++#define PreIntegratedGF				ReflectionStruct.PreIntegratedGF
++#define PreIntegratedGFSampler		ReflectionStruct.PreIntegratedGFSampler
 +
 +#include "/Engine/Private/DeferredLightingCommon.ush"
 +#include "/Engine/Private/DeferredShadingCommon.ush"
@@ -341,7 +339,7 @@ index 00000000000..aac11518c6c
 +Texture2D<float4>   DDGIVolume_ProbeIrradiance;
 +Texture2D<float4>   DDGIVolume_ProbeDistance;
 +RWTexture2D<float4> DDGIVolume_ProbeOffsets;
-+RWTexture2D<uint>   DDGIVolume_ProbeStates;
++Texture2D<uint>     DDGIVolume_ProbeStates;
 +float3              DDGIVolume_Origin;
 +float3              DDGIVolume_ProbeGridSpacing;
 +float               DDGIVolume_ProbeMaxRayDistance;
@@ -374,14 +372,22 @@ index 00000000000..aac11518c6c
 +
 +void WriteRadianceOutput(uint2 DispatchIndex, float4 value)
 +{
++#if !RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
++	static const float c_threshold = 1.f / 255.f;
++	if (RTXGIMaxComponent(value.rgb) <= c_threshold) value.rgb = float3(0.f, 0.f, 0.f);
++#endif
++
 +	// Radiance / irradiance is multipled by this when stored, but divided by this when recalled.
 +	// This feature is to avoid clipping when using the 10 bit texture format.
 +	value.rgb *= DDGIVolume_IrradianceScalar;
 +
 +#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
++	// Use R32G32B32A32_FLOAT format. Store color components and hit distance as 32-bit float values.
 +	RadianceOutput[DispatchIndex.xy] = value;
 +#else
-+	RadianceOutput[DispatchIndex.xy] = float4(asfloat(RTXGIFloat3ToUint(clamp(value.xyz, 0.0f, 1.0f))), value.w, 0.f, 0.f);
++	// Use R32G32_FLOAT format (don't use R32G32_UINT since hit distance needs to be negative sometimes).
++	// Pack color as R10G10B10 in R32 and store hit distance in G32.
++	RadianceOutput[DispatchIndex.xy] = float4(asfloat(RTXGIFloat3ToUint(clamp(value.rgb, 0.0f, 1.0f))), value.w, 0.f, 0.f);
 +#endif
 +
 +#if DDGIVolumeUpdateDebug != 0
@@ -393,7 +399,7 @@ index 00000000000..aac11518c6c
 +{
 +	DDGIVolumeDescGPU DDGIVolume;
 +	DDGIVolume.origin = DDGIVolume_Origin;
-+	DDGIVolume.numRaysPerProbe = DDGIVolume_NumRaysPerProbe;	
++	DDGIVolume.numRaysPerProbe = DDGIVolume_NumRaysPerProbe;
 +	DDGIVolume.probeGridSpacing = DDGIVolume_ProbeGridSpacing;
 +	DDGIVolume.probeMaxRayDistance = DDGIVolume_ProbeMaxRayDistance;
 +	DDGIVolume.probeGridCounts = DDGIVolume_ProbeGridCounts;
@@ -429,7 +435,7 @@ index 00000000000..aac11518c6c
 +    int storageProbeIndex = probeIndex;
 +#endif
 +    int2 texelPosition = DDGIGetProbeTexelPosition(storageProbeIndex, DDGIVolume.probeGridCounts);
-+    int  probeState = DDGIVolume_ProbeStates[texelPosition];
++    int  probeState = DDGIVolume_ProbeStates.Load(int3(texelPosition, 0));
 +    if (probeState == PROBE_STATE_INACTIVE && rayIndex >= RTXGI_DDGI_NUM_FIXED_RAYS)
 +    {
 +       // if the probe is inactive, do not shoot rays, unless it is one of the fixed rays that could potentially reactivate the probe
@@ -558,7 +564,11 @@ index 00000000000..aac11518c6c
 +			resources
 +		);
 +
-+		probeLighting = irradiance * albedo / RTXGI_PI;
++		// Perfectly diffuse reflectors don't exist in the real world. Limit the BRDF
++		// albedo to a maximum value to account for the energy loss at each bounce.
++		float maxAlbedo = 0.9f;
++
++		probeLighting = irradiance * (min(albedo, maxAlbedo) / RTXGI_PI);
 +		probeLighting /= DDGIVolume_IrradianceScalar;
 +
 +		// don't apply volume lighting outside the volume
@@ -753,7 +763,7 @@ index 00000000000..ce2105e973e
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush
 new file mode 100644
-index 00000000000..c700808cd2e
+index 00000000000..e359719cfcf
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush
 @@ -0,0 +1,77 @@
@@ -812,12 +822,12 @@ index 00000000000..c700808cd2e
 +
 +/**
 +* Pack a float3 into a 32-bit unsigned integer.
-+* Red and green channels use 11 bits, the blue channel uses 10 bits.
++* All channels use 10 bits and 2 bits are unused.
 +* Compliment of RTXGIUintToFloat3().
 +*/
 +uint RTXGIFloat3ToUint(float3 input)
 +{
-+    return (RTXGIFloatToUint(input.r, 2047.f)) | (RTXGIFloatToUint(input.g, 2047) << 11) | (RTXGIFloatToUint(input.b, 1023) << 22);
++    return (RTXGIFloatToUint(input.r, 1023.f)) | (RTXGIFloatToUint(input.g, 1023.f) << 10) | (RTXGIFloatToUint(input.b, 1023.f) << 20);
 +}
 +
 +/**
@@ -827,9 +837,9 @@ index 00000000000..c700808cd2e
 +float3 RTXGIUintToFloat3(uint packed)
 +{
 +    float3 unpacked;
-+    unpacked.x = (float)(packed & 0x000007FF) / 2047.f;
-+    unpacked.y = (float)((packed >> 11) & 0x000007FF) / 2047.f;
-+    unpacked.z = (float)((packed >> 22) & 0x000003FF) / 1023.f;
++    unpacked.x = (float)(packed & 0x000003FF) / 1023.f;
++    unpacked.y = (float)((packed >> 10) & 0x000003FF) / 1023.f;
++    unpacked.z = (float)((packed >> 20) & 0x000003FF) / 1023.f;
 +    return unpacked;
 +}
 +
@@ -938,10 +948,10 @@ index 00000000000..a9044f93d76
 +#endif /* RTXGI_DDGI_VOLUME_DEFINES_H */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush
 new file mode 100644
-index 00000000000..f59da8e5466
+index 00000000000..a8c3ad04090
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush
-@@ -0,0 +1,209 @@
+@@ -0,0 +1,226 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -969,7 +979,7 @@ index 00000000000..f59da8e5466
 +    RWTexture2D<float4> probeOffsets;
 +#endif
 +#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-+    RWTexture2D<uint> probeStates;
++    Texture2D<uint> probeStates;
 +#endif
 +};
 +
@@ -983,14 +993,14 @@ index 00000000000..f59da8e5466
 +}
 +
 +/**
-+* Computes a blending weight for the given volume for blending between multiple volumes. 
++* Computes a blending weight for the given volume for blending between multiple volumes.
 +* Return value of 1.0 means full contribution from this volume while 0.0 means no contribution.
-+*/ 
++*/
 +float DDGIGetVolumeBlendWeight(float3 worldPosition, DDGIVolumeDescGPU volume)
 +{
 +    // Start fully weighted
 +    float volumeBlendWeight = 1.f;
-+    
++
 +    // Shift from [-n/2, n/2] to [0, n]
 +    float3 position = (worldPosition - volume.origin) + (volume.probeGridSpacing * (volume.probeGridCounts - 1)) * 0.5f;
 +    float3 probeCoords = (position / volume.probeGridSpacing);
@@ -1012,7 +1022,7 @@ index 00000000000..f59da8e5466
 +/**
 +* Samples irradiance from the given volume's probes using information about the surface, sampling direction, and volume.
 +*/
-+float3 DDGIGetVolumeIrradiance( 
++float3 DDGIGetVolumeIrradiance(
 +    float3 worldPosition,
 +    float3 surfaceBias,
 +    float3 direction,
@@ -1024,7 +1034,7 @@ index 00000000000..f59da8e5466
 +
 +    // Bias the world space position
 +    float3 biasedWorldPosition = (worldPosition + surfaceBias);
-+    
++
 +    // Get the 3D grid coordinates of the base probe (near the biased world position)
 +    int3   baseProbeCoords = DDGIGetBaseProbeGridCoords(biasedWorldPosition, volume.origin, volume.probeGridCounts, volume.probeGridSpacing);
 +
@@ -1059,6 +1069,21 @@ index 00000000000..f59da8e5466
 +        // Get the adjacent probe's index (used for texture lookups)
 +        int adjacentProbeIndex = DDGIGetProbeIndex(adjacentProbeCoords, volume.probeGridCounts);
 +
++#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
++        {
++            #if RTXGI_DDGI_PROBE_SCROLL
++                int probeIndex = DDGIGetProbeIndexOffset(adjacentProbeIndex, volume.probeGridCounts, volume.probeScrollOffsets);
++            #else
++                int probeIndex = adjacentProbeIndex;
++            #endif
++
++            // If the probe is marked as inactive, don't allow it to contribute to indirect lighting
++            int2 texelPosition = DDGIGetProbeTexelPosition(probeIndex, volume.probeGridCounts);
++            int  probeState = resources.probeStates.Load(int3(texelPosition, 0));
++            if(probeState == PROBE_STATE_INACTIVE) continue;
++        }
++#endif
++
 +        // Compute the distance and direction from the (biased and non-biased) shading point and the adjacent probe
 +        float3 worldPosToAdjProbe = normalize(adjacentProbeWorldPosition - worldPosition);
 +        float3 biasedPosToAdjProbe = normalize(adjacentProbeWorldPosition - biasedWorldPosition);
@@ -1074,7 +1099,7 @@ index 00000000000..f59da8e5466
 +        // A naive soft backface weight would ignore a probe when
 +        // it is behind the surface. That's good for walls, but for
 +        // small details inside of a room, the normals on the details
-+        // might rule out all of the probes that have mutual visibility 
++        // might rule out all of the probes that have mutual visibility
 +        // to the point. We instead use a "wrap shading" test. The small
 +        // offset at the end reduces the "going to zero" impact.
 +        float wrapShading = (dot(worldPosToAdjProbe, direction) + 1.f) * 0.5f;
@@ -1098,7 +1123,7 @@ index 00000000000..f59da8e5466
 +            // v must be greater than 0, which is guaranteed by the if condition above.
 +            float v = biasedPosToAdjProbeDist - meanDistanceToSurface;
 +            chebyshevWeight = variance / (variance + (v * v));
-+        
++
 +            // Increase the contrast in the weight
 +            chebyshevWeight = max((chebyshevWeight * chebyshevWeight * chebyshevWeight), 0.f);
 +        }
@@ -1139,6 +1164,8 @@ index 00000000000..f59da8e5466
 +        accumulatedWeights += weight;
 +    }
 +
++    if(accumulatedWeights == 0.f) return float3(0.f, 0.f, 0.f);
++
 +    irradiance *= (1.f / accumulatedWeights);   // Normalize by the accumulated weights
 +    irradiance *= irradiance;                   // Go back to linear irradiance
 +    irradiance *= RTXGI_2PI;                    // Multiply by the area of the integration domain (hemisphere) to complete the Monte Carlo Estimator equation
@@ -1153,10 +1180,10 @@ index 00000000000..f59da8e5466
 +#endif /* RTXGI_DDGI_IRRADIANCE_HLSL */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf
 new file mode 100644
-index 00000000000..36ef643325e
+index 00000000000..95f6ce9c8ff
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf
-@@ -0,0 +1,350 @@
+@@ -0,0 +1,364 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -1473,15 +1500,13 @@ index 00000000000..36ef643325e
 +    const float epsilon = 1e-9f * float(DDGIVolume.numRaysPerProbe);
 +    result.rgb *= 1.f / max(2.f * result.a, epsilon);
 +
-+#if RTXGI_DDGI_BLEND_RADIANCE
-+    // Tone-mapping gamma adjustment
-+    result.rgb = pow(result.rgb, DDGIVolume.probeInverseIrradianceEncodingGamma);
-+#endif
-+
 +    float  hysteresis = DDGIVolume.probeHysteresis;
 +    float3 previous = DDGIProbeUAV[probeTexCoords].rgb;
 +
 +#if RTXGI_DDGI_BLEND_RADIANCE
++    // Tone-mapping gamma adjustment
++    result.rgb = pow(result.rgb, DDGIVolume.probeInverseIrradianceEncodingGamma);
++
 +    if (RTXGIMaxComponent(previous.rgb - result.rgb) > DDGIVolume.probeChangeThreshold)
 +    {
 +        // Lower the hysteresis when a large lighting change is detected
@@ -1492,14 +1517,30 @@ index 00000000000..36ef643325e
 +    if (length(delta) > DDGIVolume.probeBrightnessThreshold)
 +    {
 +        // Clamp the maximum change in irradiance when a large brightness change is detected
-+        result.rgb = previous.rgb + (delta * 0.25f);
++        result.rgb = previous.rgb + (delta * 0.75f);
 +    }
-+#endif
 +
-+    // Interpolate the new blended irradiance (or filtered distance) with the existing 
-+    // irradiance (or filtered distance) in the probe. A high hysteresis value emphasizes
-+    // the existing probe irradiance (or filtered distance).
++    // Interpolate the new blended irradiance with the existing irradiance in the probe.
++    // A high hysteresis value emphasizes the existing probe irradiance.
++    //
++    // When using lower bit depth formats for irradiance, the difference between lerped values
++    // may be smaller than what the texture format can represent. This can stop progress towards
++    // the target value when going from high to low values. When darkening, step at least the minimum
++    // value the texture format can represent to ensure the target value is reached. The threshold value
++    // for 10-bit/channel formats is always used (even for 32-bit/channel formats) to speed up light to
++    // dark convergence.
++    static const float c_threshold = 1.f / 1024.f;
++    float3 lerpDelta = (1.f - hysteresis) * delta;
++    if (RTXGIMaxComponent(result.rgb) < RTXGIMaxComponent(previous.rgb))
++    {
++        lerpDelta = min(max(c_threshold, abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
++    }
++    result = float4(previous.rgb + lerpDelta, 1.f);
++#else
++    // Interpolate the new filtered distance with the existing filtered distance in the probe.
++    // A high hysteresis value emphasizes the existing probe filtered distance.
 +    result = float4(lerp(result.rgb, previous.rgb, hysteresis), 1.f);
++#endif
 +
 +    DDGIProbeUAV[probeTexCoords] = result;
 +
@@ -2769,10 +2810,10 @@ index 00000000000..d64c3818810
 +#endif
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp
 new file mode 100644
-index 00000000000..71002b3033e
+index 00000000000..d2b8fc3ff61
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp
-@@ -0,0 +1,915 @@
+@@ -0,0 +1,941 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -2811,6 +2852,7 @@ index 00000000000..71002b3033e
 +	SHADER_PARAMETER_TEXTURE(Texture2D, ProbeIrradiance)
 +	SHADER_PARAMETER_TEXTURE(Texture2D, ProbeDistance)
 +	SHADER_PARAMETER_UAV(RWTexture2D<float4>, ProbeOffsets)
++	SHADER_PARAMETER_TEXTURE(Texture2D<uint>, ProbeStates)
 +	SHADER_PARAMETER(FVector, Position)
 +	SHADER_PARAMETER(FVector, Radius)
 +	SHADER_PARAMETER(FVector, ProbeGridSpacing)
@@ -3012,9 +3054,8 @@ index 00000000000..71002b3033e
 +	FRDGBuilder& GraphBuilder,
 +	FSceneRenderTargets& SceneContext)
 +{
-+	// no DDGI if it's disabled
-+	if (!CVarUseDDGI.GetValueOnRenderThread())
-+		return;
++	// Early out if DDGI is disabled
++	if (!CVarUseDDGI.GetValueOnRenderThread())return;
 +
 +	// Let DDGIVolumeUpdate update all/any volumes as it sees fit.
 +	// Only update volumes when rendering a main view though. These other views can USE probe lighting, but shouldn't update it.
@@ -3030,7 +3071,7 @@ index 00000000000..71002b3033e
 +		RDG_GPU_STAT_SCOPE(GraphBuilder, RTXGI_ApplyLighting);
 +		RDG_EVENT_SCOPE(GraphBuilder, "RTXGI Apply Lighting");
 +
-+		// Get the volumes, sorted from densest to least dense
++		// DDGIVolume and useful metadata
 +		struct FProxyEntry
 +		{
 +			FVector Position;
@@ -3039,44 +3080,59 @@ index 00000000000..71002b3033e
 +			uint32 lightingChannelMask;
 +			const FDDGIVolumeSceneProxy* proxy;
 +		};
-+		TArray<FProxyEntry> proxyEntries;
++
++		// Find all the volumes that intersect the view frustum
++		TArray<FProxyEntry> volumes;
++		for (FDDGIVolumeSceneProxy* volumeProxy : AllProxiesReadyForRender_RenderThread)
 +		{
-+			for (FDDGIVolumeSceneProxy* proxy : AllProxiesReadyForRender_RenderThread)
-+			{
-+				if (proxy->OwningScene != &Scene)
-+					continue;
++			// Skip this volume if it belongs to another scene
++			if (volumeProxy->OwningScene != &Scene) continue;
 +
-+				FVector ProxyPosition = proxy->ComponentData.Transform.GetLocation();
-+				FVector ProxyScale = proxy->ComponentData.Transform.GetScale3D();
++			// Get the volume position and scale
++			FVector ProxyPosition = volumeProxy->ComponentData.Transform.GetLocation();
++			FVector ProxyScale = volumeProxy->ComponentData.Transform.GetScale3D();
 +
-+				// frustum culling
-+				FVector ProxyExtent = ProxyScale * 100.0f;
-+				if (!View.ViewFrustum.IntersectBox(ProxyPosition, ProxyExtent))
-+					continue;
++			// Skip this volume if it doesn't intersect the view frustum
++			FVector ProxyExtent = ProxyScale * 100.0f;
++			if (!View.ViewFrustum.IntersectBox(ProxyPosition, ProxyExtent)) continue;
 +
-+				float ProxyDensity = float(proxy->ComponentData.ProbeCounts.X * proxy->ComponentData.ProbeCounts.Y * proxy->ComponentData.ProbeCounts.Z) / (ProxyScale.X * ProxyScale.Y * ProxyScale.Z);
-+				uint32 ProxyLightingChannelMask =
-+					(proxy->ComponentData.LightingChannels.bChannel0 ? 1 : 0) |
-+					(proxy->ComponentData.LightingChannels.bChannel1 ? 2 : 0) |
-+					(proxy->ComponentData.LightingChannels.bChannel2 ? 4 : 0);
-+				proxyEntries.Add(FProxyEntry{ ProxyPosition, ProxyScale, ProxyDensity, ProxyLightingChannelMask, proxy });
++			float ProxyDensity = float(volumeProxy->ComponentData.ProbeCounts.X * volumeProxy->ComponentData.ProbeCounts.Y * volumeProxy->ComponentData.ProbeCounts.Z) / (ProxyScale.X * ProxyScale.Y * ProxyScale.Z);
++			uint32 ProxyLightingChannelMask =
++				(volumeProxy->ComponentData.LightingChannels.bChannel0 ? 1 : 0) |
++				(volumeProxy->ComponentData.LightingChannels.bChannel1 ? 2 : 0) |
++				(volumeProxy->ComponentData.LightingChannels.bChannel2 ? 4 : 0);
 +
-+				if (proxyEntries.Num() == FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_MAX_SHADING_VOLUMES)
-+					break;
-+			}
-+
-+			Algo::Sort(proxyEntries, [](const FProxyEntry& A, const FProxyEntry& B)
-+				{
-+					return A.Density > B.Density;
-+				}
-+			);
++			// Add the current volume to the list of in-frustum volumes
++			volumes.Add(FProxyEntry{ ProxyPosition, ProxyScale, ProxyDensity, ProxyLightingChannelMask, volumeProxy });
 +		}
 +
-+		// only do this pass if we have proxy entries that can contribute light to pixels
-+		if (proxyEntries.Num() == 0)
-+			return;
++		// Early out if no volumes contribute light to the current view
++		if (volumes.Num() == 0) return;
 +
-+		// get the textures we'll need
++		// TODO: manage in-frustum volumes in a more sophisticated way
++		// Support a large number of volumes by culling volumes based on spatial data, projected view area, and/or other heuristics
++
++		// Sort the in-frustum volumes by user specified priority
++		Algo::Sort(volumes, [](const FProxyEntry& A, const FProxyEntry& B)
++		{
++			if (A.proxy->ComponentData.LightingPriority < B.proxy->ComponentData.LightingPriority) return true;
++			if ((A.proxy->ComponentData.LightingPriority == B.proxy->ComponentData.LightingPriority) && (A.Density > B.Density)) return true;
++			return false;
++		});
++
++		// Get the number of relevant in-frustum volumes
++		int32 numVolumes = FMath::Min(volumes.Num(), FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_MAX_SHADING_VOLUMES);
++
++		// Truncate the in-frustum volumes list to the maximum number of volumes supported
++		volumes.SetNum(numVolumes, true);
++
++		// Sort the final volume list by descending probe density
++		Algo::Sort(volumes, [](const FProxyEntry& A, const FProxyEntry& B)
++		{
++			return (A.Density > B.Density);
++		});
++
++		// Get the GBuffer textures
 +		FRDGTextureRef GBufferATexture = GraphBuilder.RegisterExternalTexture(SceneContext.GBufferA);
 +		FRDGTextureRef GBufferBTexture = GraphBuilder.RegisterExternalTexture(SceneContext.GBufferB);
 +		FRDGTextureRef GBufferCTexture = GraphBuilder.RegisterExternalTexture(SceneContext.GBufferC);
@@ -3084,7 +3140,7 @@ index 00000000000..71002b3033e
 +		FRDGTextureRef LightingChannelsTexture = (View.bUsesLightingChannels && SceneContext.LightingChannels) ? GraphBuilder.RegisterExternalTexture(SceneContext.LightingChannels) : nullptr;
 +		FRDGTextureRef SceneColorTexture = GraphBuilder.RegisterExternalTexture(SceneContext.GetSceneColor());
 +
-+		// calculate some things we'll need
++		// Precompute the inverse view-projection transformation matrix
 +		FMatrix ScreenToTranslatedWorld = FMatrix(
 +			FPlane(1, 0, 0, 0),
 +			FPlane(0, 1, 0, 0),
@@ -3092,32 +3148,32 @@ index 00000000000..71002b3033e
 +			FPlane(0, 0, View.ProjectionMatrixUnadjustedForRHI.M[3][2], 0))
 +			* View.ViewMatrices.GetInvTranslatedViewProjectionMatrix();
 +
++		// Loop over the shader permutations to render indirect light from relevant volumes
 +		for (int permutationIndex = 0; permutationIndex < 4; ++permutationIndex)
 +		{
++			// Render with the current shader permutation if there one (or more) volume that matches the permutation settings
 +			bool enableRelocation = (permutationIndex & 1) != 0;
 +			bool enableScrolling = (permutationIndex & 2) != 0;
-+
-+			// only render this permutation if there is at least one volume that matches these settings
 +			bool foundAMatch = false;
-+			for (int32 i = 0; i < proxyEntries.Num(); ++i)
++			for (int32 i = 0; i < volumes.Num(); ++i)
 +			{
 +				foundAMatch = true;
-+				foundAMatch = foundAMatch && (enableRelocation == proxyEntries[i].proxy->ComponentData.EnableProbeRelocation);
-+				foundAMatch = foundAMatch && (enableScrolling == proxyEntries[i].proxy->ComponentData.EnableProbeScrolling);
-+				if (foundAMatch)
-+					break;
++				foundAMatch = foundAMatch && (enableRelocation == volumes[i].proxy->ComponentData.EnableProbeRelocation);
++				foundAMatch = foundAMatch && (enableScrolling == volumes[i].proxy->ComponentData.EnableProbeScrolling);
++				if (foundAMatch) break;
 +			}
-+			if (!foundAMatch)
-+				continue;
 +
-+			// get permuted vertex shader
++			// Skip this shader permutation if there are no volumes that match its feature set
++			if (!foundAMatch) continue;
++
++			// Get the vertex shader permutation
 +			FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(ERHIFeatureLevel::SM5);
 +			FApplyLightingDeferredShaderVS::FPermutationDomain PermutationVectorVS;
 +			PermutationVectorVS.Set<FApplyLightingDeferredShaderVS::FEnableRelocation>(enableRelocation);
 +			PermutationVectorVS.Set<FApplyLightingDeferredShaderVS::FEnableScrolling>(enableScrolling);
 +			TShaderMapRef<FApplyLightingDeferredShaderVS> VertexShader(GlobalShaderMap, PermutationVectorVS);
 +
-+			// get permuted pixel shader
++			// Get the pixel shader permutation
 +			bool highBitCount = (GetDefault<URTXGIPluginSettings>()->IrradianceBits == EDDGIIrradianceBits::n32);
 +			FApplyLightingDeferredShaderPS::FPermutationDomain PermutationVectorPS;
 +			PermutationVectorPS.Set<FApplyLightingDeferredShaderPS::FLightingChannelsDim>(LightingChannelsTexture != nullptr);
@@ -3126,7 +3182,7 @@ index 00000000000..71002b3033e
 +			PermutationVectorPS.Set<FApplyLightingDeferredShaderPS::FDebugFormatRadiance>(highBitCount);
 +			TShaderMapRef<FApplyLightingDeferredShaderPS> PixelShader(GlobalShaderMap, PermutationVectorPS);
 +
-+			// set parameters
++			// Set the shader parameters
 +			FApplyLightingDeferredShaderParameters DefaultPassParameters;
 +			FApplyLightingDeferredShaderParameters* PassParameters = GraphBuilder.AllocParameters<FApplyLightingDeferredShaderParameters>();
 +			*PassParameters = DefaultPassParameters;
@@ -3139,61 +3195,67 @@ index 00000000000..71002b3033e
 +			PassParameters->WorldCameraOrigin = View.ViewMatrices.GetViewOrigin();
 +			PassParameters->InvDeviceZToWorldZTransform = View.InvDeviceZToWorldZTransform;
 +			PassParameters->RenderTargets[0] = FRenderTargetBinding(SceneColorTexture, ERenderTargetLoadAction::ELoad);
-+
 +			PassParameters->LinearClampSampler = TStaticSamplerState<SF_Trilinear, AM_Clamp, AM_Clamp, AM_Clamp>::GetRHI();
-+
 +			PassParameters->ShouldUsePreExposure = View.Family->EngineShowFlags.Tonemapper;
-+			PassParameters->NumVolumes = proxyEntries.Num();
 +			PassParameters->PreExposure = View.PreExposure;
++			PassParameters->NumVolumes = numVolumes;
 +
-+			for (int32 i = 0; i < proxyEntries.Num(); ++i)
++			// Set the shader parameters for the relevant volumes
++			for (int32 volumeIndex = 0; volumeIndex < numVolumes; ++volumeIndex)
 +			{
-+				PassParameters->DDGIVolume[i].ProbeIrradiance = proxyEntries[i].proxy->ProbesIrradianceTex;
-+				PassParameters->DDGIVolume[i].ProbeDistance = proxyEntries[i].proxy->ProbesDistanceTex;
-+				PassParameters->DDGIVolume[i].ProbeOffsets = proxyEntries[i].proxy->ProbesOffsetsUAV ? proxyEntries[i].proxy->ProbesOffsetsUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
++				FProxyEntry volume = volumes[volumeIndex];
++				const FDDGIVolumeSceneProxy* volumeProxy = volume.proxy;
 +
-+				PassParameters->DDGIVolume[i].Position = proxyEntries[i].Position;
-+				PassParameters->DDGIVolume[i].Radius = proxyEntries[i].Scale * 100.0f;
-+				PassParameters->DDGIVolume[i].LightingChannelMask = proxyEntries[i].lightingChannelMask;
++				// Set the volume textures
++				PassParameters->DDGIVolume[volumeIndex].ProbeIrradiance = volumeProxy->ProbesIrradianceTex;
++				PassParameters->DDGIVolume[volumeIndex].ProbeDistance = volumeProxy->ProbesDistanceTex;
++				PassParameters->DDGIVolume[volumeIndex].ProbeOffsets = volumeProxy->ProbesOffsetsUAV ? volumeProxy->ProbesOffsetsUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
++				PassParameters->DDGIVolume[volumeIndex].ProbeStates = volumeProxy->ProbesStatesTex;
 +
-+				FVector volumeSize = proxyEntries[i].proxy->ComponentData.Transform.GetScale3D() * 200.0f;
++				// Set the volume parameters
++				PassParameters->DDGIVolume[volumeIndex].Position = volume.Position;
++				PassParameters->DDGIVolume[volumeIndex].Radius = volume.Scale * 100.0f;
++				PassParameters->DDGIVolume[volumeIndex].LightingChannelMask = volume.lightingChannelMask;
++
++				FVector volumeSize = volumeProxy->ComponentData.Transform.GetScale3D() * 200.0f;
 +				FVector probeGridSpacing;
-+				probeGridSpacing.X = volumeSize.X / float(proxyEntries[i].proxy->ComponentData.ProbeCounts.X);
-+				probeGridSpacing.Y = volumeSize.Y / float(proxyEntries[i].proxy->ComponentData.ProbeCounts.Y);
-+				probeGridSpacing.Z = volumeSize.Z / float(proxyEntries[i].proxy->ComponentData.ProbeCounts.Z);
-+				PassParameters->DDGIVolume[i].ProbeGridSpacing = probeGridSpacing;
++				probeGridSpacing.X = volumeSize.X / float(volumeProxy->ComponentData.ProbeCounts.X);
++				probeGridSpacing.Y = volumeSize.Y / float(volumeProxy->ComponentData.ProbeCounts.Y);
++				probeGridSpacing.Z = volumeSize.Z / float(volumeProxy->ComponentData.ProbeCounts.Z);
 +
-+				PassParameters->DDGIVolume[i].ProbeGridCounts = proxyEntries[i].proxy->ComponentData.ProbeCounts;
-+				PassParameters->DDGIVolume[i].ProbeNumIrradianceTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsIrradiance;
-+				PassParameters->DDGIVolume[i].ProbeNumDistanceTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsDistance;
-+				PassParameters->DDGIVolume[i].ProbeIrradianceEncodingGamma = proxyEntries[i].proxy->ComponentData.ProbeIrradianceEncodingGamma;
-+				PassParameters->DDGIVolume[i].NormalBias = proxyEntries[i].proxy->ComponentData.NormalBias;
-+				PassParameters->DDGIVolume[i].ViewBias = proxyEntries[i].proxy->ComponentData.ViewBias;
-+				PassParameters->DDGIVolume[i].BlendDistance = proxyEntries[i].proxy->ComponentData.BlendDistance;
-+				PassParameters->DDGIVolume[i].BlendDistanceBlack = proxyEntries[i].proxy->ComponentData.BlendDistanceBlack;
-+				PassParameters->DDGIVolume[i].ProbeScrollOffsets = proxyEntries[i].proxy->ComponentData.ProbeScrollOffsets;
++				PassParameters->DDGIVolume[volumeIndex].ProbeGridSpacing = probeGridSpacing;
++				PassParameters->DDGIVolume[volumeIndex].ProbeGridCounts = volumeProxy->ComponentData.ProbeCounts;
++				PassParameters->DDGIVolume[volumeIndex].ProbeNumIrradianceTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsIrradiance;
++				PassParameters->DDGIVolume[volumeIndex].ProbeNumDistanceTexels = FDDGIVolumeSceneProxy::FComponentData::c_NumTexelsDistance;
++				PassParameters->DDGIVolume[volumeIndex].ProbeIrradianceEncodingGamma = volumeProxy->ComponentData.ProbeIrradianceEncodingGamma;
++				PassParameters->DDGIVolume[volumeIndex].NormalBias = volumeProxy->ComponentData.NormalBias;
++				PassParameters->DDGIVolume[volumeIndex].ViewBias = volumeProxy->ComponentData.ViewBias;
++				PassParameters->DDGIVolume[volumeIndex].BlendDistance = volumeProxy->ComponentData.BlendDistance;
++				PassParameters->DDGIVolume[volumeIndex].BlendDistanceBlack = volumeProxy->ComponentData.BlendDistanceBlack;
++				PassParameters->DDGIVolume[volumeIndex].ProbeScrollOffsets = volumeProxy->ComponentData.ProbeScrollOffsets;
 +
-+				// Only apply lighting if this is the pass we should apply in.
-+				// The shader needs to know about all of the volumes though for blending purposes.
++				// Only apply lighting if this is the pass it should be applied in
++				// The shader needs data for all of the volumes for blending purposes
 +				bool applyLighting = true;
-+				applyLighting = applyLighting && (enableRelocation == proxyEntries[i].proxy->ComponentData.EnableProbeRelocation);
-+				applyLighting = applyLighting && (enableScrolling == proxyEntries[i].proxy->ComponentData.EnableProbeScrolling);
-+				PassParameters->DDGIVolume[i].ApplyLighting = applyLighting;
-+				PassParameters->DDGIVolume[i].IrradianceScalar = proxyEntries[i].proxy->ComponentData.IrradianceScalar;
++				applyLighting = applyLighting && (enableRelocation == volumeProxy->ComponentData.EnableProbeRelocation);
++				applyLighting = applyLighting && (enableScrolling == volumeProxy->ComponentData.EnableProbeScrolling);
++				PassParameters->DDGIVolume[volumeIndex].ApplyLighting = applyLighting;
++				PassParameters->DDGIVolume[volumeIndex].IrradianceScalar = volumeProxy->ComponentData.IrradianceScalar;
 +
-+				// apply the lighting multiplier to artificially lighten or darken the light applied
-+				PassParameters->DDGIVolume[i].IrradianceScalar /= proxyEntries[i].proxy->ComponentData.LightingMultiplier;
++				// Apply the lighting multiplier to artificially lighten or darken the indirect light from the volume
++				PassParameters->DDGIVolume[volumeIndex].IrradianceScalar /= volumeProxy->ComponentData.LightingMultiplier;
 +			}
 +
-+			// fill out the rest of the textures.
-+			for (int32 i = proxyEntries.Num(); i < FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_MAX_SHADING_VOLUMES; ++i)
++			// When there are fewer relevant volumes than the maximum supported, set the empty volume texture slots to dummy values
++			for (int32 volumeIndex = numVolumes; volumeIndex < FDDGIVolumeSceneProxy::FComponentData::c_RTXGI_DDGI_MAX_SHADING_VOLUMES; ++volumeIndex)
 +			{
-+				PassParameters->DDGIVolume[i].ProbeIrradiance = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
-+				PassParameters->DDGIVolume[i].ProbeDistance = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
-+				PassParameters->DDGIVolume[i].ProbeOffsets = FDDGIVolumeSceneProxy::GetDummyUAV();
++				PassParameters->DDGIVolume[volumeIndex].ProbeIrradiance = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
++				PassParameters->DDGIVolume[volumeIndex].ProbeDistance = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
++				PassParameters->DDGIVolume[volumeIndex].ProbeOffsets = FDDGIVolumeSceneProxy::GetDummyUAV();
++				PassParameters->DDGIVolume[volumeIndex].ProbeStates = GSystemTextures.BlackDummy->GetRenderTargetItem().TargetableTexture;
 +			}
 +
-+			// call the shader
++			// Dispatch the fullscreen shader
 +			FIntRect ViewRect = View.ViewRect;
 +			GraphBuilder.AddPass(
 +				Forward<FRDGEventName>(RDG_EVENT_NAME("DDGI Apply Lighting")),
@@ -3445,9 +3507,13 @@ index 00000000000..71002b3033e
 +			LoadFDDGITexturePixels(Ar, LoadContext.Offsets, FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatOffsets, loadFormat);
 +			LoadFDDGITexturePixels(Ar, LoadContext.States, FDDGIVolumeSceneProxy::FComponentData::c_pixelFormatStates, loadFormat);
 +			
-+			FlushRenderingCommands();
-+
-+			LoadContext.ReadyForLoad = true;
++			bool& ReadyForLoad = LoadContext.ReadyForLoad;
++			ENQUEUE_RENDER_COMMAND(DDGILoadReady)(
++				[&ReadyForLoad](FRHICommandListImmediate& RHICmdList)
++				{
++					ReadyForLoad = true;
++				}
++			);
 +		}
 +	}
 +}
@@ -3509,6 +3575,7 @@ index 00000000000..71002b3033e
 +		ComponentData.ProbeCounts = ProbeCounts;
 +		ComponentData.ProbeDistanceExponent = probeDistanceExponent;
 +		ComponentData.ProbeIrradianceEncodingGamma = probeIrradianceEncodingGamma;
++		ComponentData.LightingPriority = LightingPriority;
 +		ComponentData.UpdatePriority = UpdatePriority;
 +		ComponentData.ProbeHysteresis = ProbeHysteresis;
 +		ComponentData.ProbeChangeThreshold = probeChangeThreshold;
@@ -3690,7 +3757,7 @@ index 00000000000..71002b3033e
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp
 new file mode 100644
-index 00000000000..bf99455b5ca
+index 00000000000..406d029eb58
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp
 @@ -0,0 +1,1326 @@
@@ -3823,7 +3890,7 @@ index 00000000000..bf99455b5ca
 +		SHADER_PARAMETER_TEXTURE(Texture2D, ProbeIrradiance)
 +		SHADER_PARAMETER_TEXTURE(Texture2D, ProbeDistance)
 +		SHADER_PARAMETER_UAV(RWTexture2D<float4>, ProbeOffsets)
-+		SHADER_PARAMETER_UAV(RWTexture2D<uint>, ProbeStates)
++		SHADER_PARAMETER_TEXTURE(Texture2D<uint>, ProbeStates)
 +		SHADER_PARAMETER(FVector, Origin)
 +		SHADER_PARAMETER(FVector, ProbeGridSpacing)
 +		SHADER_PARAMETER(float, ProbeMaxRayDistance)
@@ -4550,7 +4617,7 @@ index 00000000000..bf99455b5ca
 +			PassParameters->DDGIVolume.ProbeIrradiance = VolProxy->ProbesIrradianceTex;
 +			PassParameters->DDGIVolume.ProbeDistance = VolProxy->ProbesDistanceTex;
 +			PassParameters->DDGIVolume.ProbeOffsets = VolProxy->ProbesOffsetsUAV ? VolProxy->ProbesOffsetsUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
-+			PassParameters->DDGIVolume.ProbeStates = VolProxy->ProbesStatesUAV ? VolProxy->ProbesStatesUAV : FDDGIVolumeSceneProxy::GetDummyUAV();
++			PassParameters->DDGIVolume.ProbeStates = VolProxy->ProbesStatesTex;
 +
 +			PassParameters->DDGIVolume.Origin = VolProxy->ComponentData.Transform.GetLocation();
 +			PassParameters->DDGIVolume.ProbeMaxRayDistance = VolProxy->ComponentData.ProbeMaxRayDistance;
@@ -5894,10 +5961,10 @@ index 00000000000..3d68d1a514e
 +};
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h
 new file mode 100644
-index 00000000000..6af26493f53
+index 00000000000..4581ccb8109
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h
-@@ -0,0 +1,362 @@
+@@ -0,0 +1,368 @@
 +/*
 +* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -6047,6 +6114,7 @@ index 00000000000..6af26493f53
 +		FIntVector ProbeCounts = FIntVector(0); // 0 = invalid, will be written with valid counts before use
 +		float ProbeDistanceExponent = 1.0f;
 +		float ProbeIrradianceEncodingGamma = 1.0f;
++		int   LightingPriority = 0;
 +		float UpdatePriority = 1.0f;
 +		float ProbeHysteresis = 0.0f;
 +		float ProbeChangeThreshold = 0.0f;
@@ -6100,7 +6168,7 @@ index 00000000000..6af26493f53
 +	static TSet<FDDGIVolumeSceneProxy*> AllProxiesReadyForRender_RenderThread;
 +	static TMap<const FSceneInterface*, float> SceneRoundRobinValue;
 +
-+	// to only render gi volumes in the scenes they are present in.
++	// Only render volumes in the scenes they are present in
 +	FSceneInterface* OwningScene;
 +
 +	static FTexture2DRHIRef GetDummyTex();
@@ -6153,9 +6221,14 @@ index 00000000000..6af26493f53
 +	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "1"));
 +	FIntVector ProbeCounts = FIntVector(8, 8, 8);
 +
-+	// Priority for scheduling updates to this volume's probes. Higher priority gets updated more often. Weighted round robin updating.
-+	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0.001", ClampMax = "10.0"));
-+	float UpdatePriority = 1.f;
++	// A priority value used to select volumes when applying lighting. The volume with the lowest priority value is selected.
++	// If volumes have the same priority, then volumes are selected based on probe density. The highest density volume is selected.
++	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0", ClampMax = "10"));
++	int32 LightingPriority = 0;
++
++	// A priority value for scheduling updates to this volume's probes. Volumes with higher priority values get updated more often. Weighted round robin updating.
++	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0.0001", ClampMax = "100.0"));
++	float UpdatePriority = 0.0f;
 +
 +	// Maximum distance a probe ray may travel. Shortening this can increase performance. If you shorten it too much, it can miss geometry.
 +	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0"));
@@ -6369,36 +6442,6 @@ index 00000000000..3bb307dbdca
 +		});
 +	}
 +}
-diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/UpdatingSDK.txt b/Engine/Plugins/Runtime/Nvidia/RTXGI/UpdatingSDK.txt
-new file mode 100644
-index 00000000000..4bd21306ac5
---- /dev/null
-+++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/UpdatingSDK.txt
-@@ -0,0 +1,23 @@
-+This is based on the RTXGI SDK hash below. Please update this text file if you update the SDK.
-+61bfad1326af0b525e14ef39e7ab529346249357
-+
-+Here are the instructions for updating the RTXGI SDK.
-+
-+The steps may change of course, if files are added, renamed, deleted from the SDK, so take this as a loose guide.
-+
-+Updating the SDK:
-+* copy C:\gitlab\rtxgi-sdk\shaders\ddgi\* to C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\SDK\ddgi\*
-+* rename those from hlsl to .ush and .usf as they were prior. (headers = ush, else = usf)
-+* copy C:\gitlab\rtxgi-sdk\shaders\Common.hlsl to C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\SDK\Common.ush
-+* copy C:\gitlab\rtxgi-sdk\include\RTXGI\ddgi\DDGIVolumeDefines.h and DDGIVolumeDescGPU.h to C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\SDK\ and rename them .ush
-+* copy C:\gitlab\rtxgi-sdk\include\RTXGI\defines.h to C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\SDKDefines.ush and make sure the settings are correct for unreal (like handedness)
-+
-+There are changes in those shaders to make unreal happy, like changing how shader constants and resources are declared and interacted with. Also shader include directories. Check the diffs.
-+
-+Files of likely interest:
-+* C:\ue4\Engine\Plugins\Runtime\Nvidia\RTXGI\Shaders\Private\
-+ * ApplyLightingDeferred.usf is where diffuse irradiance is injected into the scene
-+ * ProbeUpdateRGS.usf is where the rays for probe radiance and distance are shot.
-+ * VisualizeDDGIProbes.usf is where the probe visualization (spheres) are rendered.
-+* C:\UE4\Engine\Plugins\Runtime\Nvidia\RTXGI\Source\RTXGI\Private\
-+ * this is where the CPU side logic is.
-\ No newline at end of file
 diff --git a/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp b/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp
 index f6f908fba18..30b0f39cfb9 100644
 --- a/Engine/Source/Developer/Windows/ShaderFormatD3D/Private/D3DShaderCompiler.cpp

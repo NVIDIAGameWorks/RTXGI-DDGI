@@ -1,7 +1,7 @@
-.. _License:
-
 .. |reg| unicode:: U+000AE .. REGISTERED SIGN
    :ltrim:
+
+.. _License:
 
 ========
 License

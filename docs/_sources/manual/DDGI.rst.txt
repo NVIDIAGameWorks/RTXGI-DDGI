@@ -1,11 +1,11 @@
-.. _DDGI:
-
 .. |reg| unicode:: U+000AE .. REGISTERED SIGN
    :ltrim:
 
 .. |br| raw:: html
 
    <br/>
+
+.. _DDGI:
 
 ====================================
 Dynamic Diffuse Global Illumination

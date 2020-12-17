@@ -14,7 +14,7 @@ This repository contains the RTX Global Illumination (RTXGI) SDK v1.1, the "Test
 * CMake 3.14.5 or higher, [download here](https://cmake.org/download).
 * Latest drivers for your GPU. NVIDIA drivers are [available here](http://www.nvidia.com/drivers).
 * Any DXR enabled GPU. NVIDIA DXR enabled GPUs:
-	* RTX 3090, 3080, 3070
+	* RTX 3090, 3080, 3070, 3060 Ti
 	* RTX 2080 Ti, 2080 SUPER, 2080, 2070 SUPER, 2070, 2060 SUPER, 2060
 	* GTX 1660 Ti, 1660 SUPER, 1660
 	* GTX 1080 Ti, 1080, 1070, 1060 6GB (or higher)

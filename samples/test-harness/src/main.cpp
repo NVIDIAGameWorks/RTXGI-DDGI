@@ -93,8 +93,8 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
 
     // Create a window
     log << "Creating a window...";
-    HRESULT hr = Window::Create(d3d.width, d3d.height, hInstance, window, L"RTXGI SDK Test Harness");
-    if (!SUCCEEDED(hr))
+    bool result = Window::Create(d3d.width, d3d.height, hInstance, window, L"RTXGI SDK Test Harness");
+    if (!result)
     {
         log.close();
         return EXIT_FAILURE;
