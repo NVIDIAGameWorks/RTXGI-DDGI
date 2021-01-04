@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -135,9 +135,8 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
         log.close();
         return EXIT_FAILURE;
     }
-    log << "done.\n";
 
-    log << "Main loop...\n";
+    log << "Main loop..." << std::flush;
 
     // Main loop
     bool hotReload = false;
@@ -182,7 +181,7 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
                     input, inputOptions, rtOptions,
                     postOptions, vizOptions, log))
                 {
-                    log << "Error: hot reload failed!\n";
+                    log << "\nError: hot reload failed!\n";
                     log.close();
                     return EXIT_FAILURE;
                 }
@@ -323,7 +322,8 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
     D3D12::WaitForGPU(d3d);
     CloseHandle(d3d.fenceEvent);
 
-    log << "Shutting down and cleaning up.\n";
+    log << "done...\n";
+    log << "Shutting down and cleaning up...";
 
     // Release the volumes and their resources
     for (size_t volumeIndex = 0; volumeIndex < volumes.size(); volumeIndex++)
@@ -349,7 +349,7 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
     D3D12::Cleanup(d3d);
 
     DestroyWindow(window);
-    log << "Done\n";
+    log << "done.\n";
     log.close();
 
     return EXIT_SUCCESS;

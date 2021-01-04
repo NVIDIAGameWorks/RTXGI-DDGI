@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -86,6 +86,7 @@ bool Initialize(ConfigInfo &config, Scene &scene, D3D12Global &d3d, DXRGlobal &d
         log << "\nError: failed to initialize DXR!";
         return false;
     }
+    log << "done.\n";
 
     // Load additional textures
     log << "Loading additional textures...";
@@ -114,7 +115,6 @@ bool Initialize(ConfigInfo &config, Scene &scene, D3D12Global &d3d, DXRGlobal &d
     D3D12::WaitForGPU(d3d);
     D3D12::ResetCmdList(d3d);
 
-    log << "done.\n";
     return true;
 }
 
@@ -279,7 +279,7 @@ bool CreateVolumeResources(
     std::ofstream &log,
     size_t index)
 {
-    log << "Creating RTXGI DDGI Volume resources...";
+    log << "\nCreating RTXGI DDGI Volume resources...";
 
     // Create the volume's constant buffer and textures
     {
@@ -292,9 +292,8 @@ bool CreateVolumeResources(
 
         if (!D3D12::CreateTexture(d3d, &volumeResources.probeRTRadiance, width, height, format, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)) return false;
 #if RTXGI_NAME_D3D_OBJECTS
-        std::wstringstream ws;
-        ws << L"RTXGI DDGIVolume Probe RT Radiance " << index;
-        volumeResources.probeRTRadiance->SetName(ws.str().c_str());
+        std::wstring name = L"RTXGI DDGIVolume Probe RT Radiance " + index;
+        volumeResources.probeRTRadiance->SetName(name.c_str());
 #endif
 
         // Create the probe irradiance texture
@@ -303,10 +302,8 @@ bool CreateVolumeResources(
 
         if (!D3D12::CreateTexture(d3d, &volumeResources.probeIrradiance, width, height, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)) return false;
 #if RTXGI_NAME_D3D_OBJECTS
-        ws.str(L"");
-        ws.clear();
-        ws << L"RTXGI DDGIVolume Probe Irradiance " << index;
-        volumeResources.probeIrradiance->SetName(ws.str().c_str());
+        name = L"RTXGI DDGIVolume Probe Irradiance " + index;
+        volumeResources.probeIrradiance->SetName(name.c_str());
 #endif
 
         // Create the probe distance texture
@@ -315,10 +312,8 @@ bool CreateVolumeResources(
 
         if (!D3D12::CreateTexture(d3d, &volumeResources.probeDistance, width, height, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)) return false;
 #if RTXGI_NAME_D3D_OBJECTS
-        ws.str(L"");
-        ws.clear();
-        ws << L"RTXGI DDGIVolume Probe Distance " << index;
-        volumeResources.probeDistance->SetName(ws.str().c_str());
+        name = L"RTXGI DDGIVolume Probe Distance " + index;
+        volumeResources.probeDistance->SetName(name.c_str());
 #endif
 
 #if RTXGI_DDGI_PROBE_RELOCATION
@@ -352,24 +347,23 @@ bool CreateVolumeResources(
     {
         D3D12_CPU_DESCRIPTOR_HANDLE handle = volumeResources.descriptorHeap->GetCPUDescriptorHandleForHeapStart();
         handle.ptr += (volumeResources.descriptorHeapDescSize * volumeResources.descriptorHeapOffset);
-        log << std::hex;
-        log << "descriptors for volume " << index << " start " << handle.ptr << std::endl;
+        //log << std::hex;
+        //log << "descriptors for volume " << index << " start " << handle.ptr << std::endl;
 
         // Create the RT radiance UAV 
         D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
         uavDesc.Format = rtxgi::GetDDGIVolumeTextureFormat(rtxgi::EDDGITextureType::RTRadiance);
         uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
         d3d.device->CreateUnorderedAccessView(volumeResources.probeRTRadiance, nullptr, &uavDesc, handle);
-        log << "rt radiance " << handle.ptr << std::endl;
+        //log << "rt radiance " << handle.ptr << std::endl;
         handle.ptr += volumeResources.descriptorHeapDescSize;
-        
 
         // Create the irradiance UAV
         uavDesc = {};
         uavDesc.Format = rtxgi::GetDDGIVolumeTextureFormat(rtxgi::EDDGITextureType::Irradiance);
         uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
         d3d.device->CreateUnorderedAccessView(volumeResources.probeIrradiance, nullptr, &uavDesc, handle);
-        log << "rt irradiance " << handle.ptr << std::endl;
+        //log << "rt irradiance " << handle.ptr << std::endl;
         handle.ptr += volumeResources.descriptorHeapDescSize;
 
         // Create the distance UAV
@@ -377,8 +371,8 @@ bool CreateVolumeResources(
         uavDesc.Format = rtxgi::GetDDGIVolumeTextureFormat(rtxgi::EDDGITextureType::Distance);
         uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
         d3d.device->CreateUnorderedAccessView(volumeResources.probeDistance, nullptr, &uavDesc, handle);
-        log << "rt distance " << handle.ptr << std::endl;
-        log << std::dec;
+        //log << "rt distance " << handle.ptr << std::endl;
+        //log << std::dec;
 #if RTXGI_DDGI_PROBE_RELOCATION
         handle.ptr += volumeResources.descriptorHeapDescSize;
 
@@ -471,7 +465,7 @@ bool CreateVolumeResources(
 #endif
     }
 
-    log << "done\n";
+    log << "done.\n";
     return true;
 }
 
@@ -520,7 +514,7 @@ bool CreateVolume(
 {
     log << "Creating RTXGI DDGI Volume...";
 
-    assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.10.20") == 0);
+    assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.1.23") == 0);
 
     rtxgi::ERTXGIStatus status = rtxgi::ERTXGIStatus::OK;
 
@@ -560,7 +554,7 @@ bool CreateVolume(
         return false;
     }
 
-    log << "done\n";
+    log << "Creating RTXGI DDGI Volume...done.\n";
     return true;
 }
 
@@ -647,7 +641,7 @@ bool CreateDescriptors(D3D12Global &d3d, D3D12Resources &resources, rtxgi::DDGIV
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         d3d.device->CreateShaderResourceView(resources.textures[resources.blueNoiseIndex], &srvDesc, handle);
     }
-    log << "done\n";
+    log << "done.\n";
     return true;
 }
 
@@ -678,7 +672,7 @@ bool CreateProbeVisResources(D3D12Global &d3d, DXRGlobal &dxr, D3D12Resources &r
         log << "\nError: failed to create Vis TLAS!\n";
         return false;
     }
-    log << "done\n";
+    log << "done.\n";
 
     D3D12::SubmitCmdList(d3d);
     D3D12::WaitForGPU(d3d);
