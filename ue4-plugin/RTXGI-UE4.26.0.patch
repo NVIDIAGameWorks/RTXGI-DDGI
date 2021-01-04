@@ -38,7 +38,7 @@ index 00000000000..1df0119a68d
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf
 @@ -0,0 +1,223 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -267,7 +267,7 @@ index 00000000000..e3f61a22501
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf
 @@ -0,0 +1,312 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -585,7 +585,7 @@ index 00000000000..b9036fce058
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeViewRGS.usf
 @@ -0,0 +1,177 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -768,7 +768,7 @@ index 00000000000..e359719cfcf
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush
 @@ -0,0 +1,77 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -851,7 +851,7 @@ index 00000000000..a9044f93d76
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDefines.ush
 @@ -0,0 +1,96 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -953,7 +953,7 @@ index 00000000000..a8c3ad04090
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush
 @@ -0,0 +1,226 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -1185,7 +1185,7 @@ index 00000000000..e5f8f73e608
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf
 @@ -0,0 +1,364 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -1555,7 +1555,7 @@ index 00000000000..d21d5f01fc2
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf
 @@ -0,0 +1,129 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -1691,7 +1691,7 @@ index 00000000000..11091a4910d
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeCommon.ush
 @@ -0,0 +1,534 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -2231,7 +2231,7 @@ index 00000000000..c174f96137f
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf
 @@ -0,0 +1,158 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -2395,7 +2395,7 @@ index 00000000000..485a7b1ca18
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeStateClassifierCS.usf
 @@ -0,0 +1,105 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -2506,7 +2506,7 @@ index 00000000000..9f31b1cbc1d
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDKDefines.ush
 @@ -0,0 +1,31 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -2543,7 +2543,7 @@ index 00000000000..9f31be8264d
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/VisualizeDDGIProbes.usf
 @@ -0,0 +1,151 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -2700,7 +2700,7 @@ index 00000000000..e65f6661585
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIBlueprintLibrary.cpp
 @@ -0,0 +1,31 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -2737,7 +2737,7 @@ index 00000000000..d64c3818810
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolume.cpp
 @@ -0,0 +1,71 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -2814,7 +2814,7 @@ index 00000000000..dd06ba06bca
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp
 @@ -0,0 +1,941 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -3761,7 +3761,7 @@ index 00000000000..5adba91e0e3
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp
 @@ -0,0 +1,1315 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -5082,7 +5082,7 @@ index 00000000000..091de95b0ae
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.h
 @@ -0,0 +1,26 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -5114,7 +5114,7 @@ index 00000000000..6466eeba813
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeVisualize.cpp
 @@ -0,0 +1,545 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -5665,7 +5665,7 @@ index 00000000000..2b7d2860bf3
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPlugin.cpp
 @@ -0,0 +1,59 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -5730,7 +5730,7 @@ index 00000000000..0b46fd15306
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.cpp
 @@ -0,0 +1,47 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -5783,7 +5783,7 @@ index 00000000000..e8491787b18
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.h
 @@ -0,0 +1,76 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -5865,7 +5865,7 @@ index 00000000000..80cd5effbd7
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIBlueprintLibrary.h
 @@ -0,0 +1,27 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -5899,7 +5899,7 @@ index 00000000000..3d68d1a514e
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolume.h
 @@ -0,0 +1,42 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -5947,7 +5947,7 @@ index 00000000000..1c9fba5b377
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h
 @@ -0,0 +1,369 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -6322,7 +6322,7 @@ index 00000000000..533122e57c3
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/RTXGIPlugin.h
 @@ -0,0 +1,37 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
@@ -6365,7 +6365,7 @@ index 00000000000..83f7332e621
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/RTXGI.Build.cs
 @@ -0,0 +1,60 @@
 +/*
-+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
++* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
 +* NVIDIA CORPORATION and its licensors retain all intellectual property
 +* and proprietary rights in and to this software, related documentation
