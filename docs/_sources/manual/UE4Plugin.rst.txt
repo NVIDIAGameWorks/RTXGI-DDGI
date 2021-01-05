@@ -61,7 +61,7 @@ Minor engine changes are required for the RTXGI plugin to work with Unreal Engin
 
    #. Download the appropriate patch file from the **ue4-plugin** directory of the RTXGI GitHub repository. Select the patch that matches the engine branch you’ve chosen.
 
-   #. Instasll the RTXGI plugin:
+   #. Install the RTXGI plugin:
 
        - Apply the provided ``.patch`` file to install the plugin and necessary engine changes.
 
