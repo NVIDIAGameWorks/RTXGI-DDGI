@@ -6228,7 +6228,7 @@ index 00000000000..4581ccb8109
 +
 +	// A priority value for scheduling updates to this volume's probes. Volumes with higher priority values get updated more often. Weighted round robin updating.
 +	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0.0001", ClampMax = "100.0"));
-+	float UpdatePriority = 0.0f;
++	float UpdatePriority = 1.0f;
 +
 +	// Maximum distance a probe ray may travel. Shortening this can increase performance. If you shorten it too much, it can miss geometry.
 +	UPROPERTY(EditAnywhere, Category = "GI", meta = (ClampMin = "0"));
