@@ -33,7 +33,7 @@ index 00000000000..f820b0beeb7
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf
 new file mode 100644
-index 00000000000..1df0119a68d
+index 00000000000..43156dd5d4b
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ApplyLightingDeferred.usf
 @@ -0,0 +1,223 @@
@@ -262,7 +262,7 @@ index 00000000000..1df0119a68d
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf
 new file mode 100644
-index 00000000000..e3f61a22501
+index 00000000000..ce66cf07131
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeUpdateRGS.usf
 @@ -0,0 +1,312 @@
@@ -580,7 +580,7 @@ index 00000000000..e3f61a22501
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeViewRGS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeViewRGS.usf
 new file mode 100644
-index 00000000000..b9036fce058
+index 00000000000..a0979f0f17c
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/ProbeViewRGS.usf
 @@ -0,0 +1,177 @@
@@ -763,7 +763,7 @@ index 00000000000..b9036fce058
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush
 new file mode 100644
-index 00000000000..e359719cfcf
+index 00000000000..ab8e2030272
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/Common.ush
 @@ -0,0 +1,77 @@
@@ -846,7 +846,7 @@ index 00000000000..e359719cfcf
 +#endif /* RTXGI_COMMON_HLSL */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDefines.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDefines.ush
 new file mode 100644
-index 00000000000..a9044f93d76
+index 00000000000..da4d07575d1
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/DDGIVolumeDefines.ush
 @@ -0,0 +1,96 @@
@@ -948,7 +948,7 @@ index 00000000000..a9044f93d76
 +#endif /* RTXGI_DDGI_VOLUME_DEFINES_H */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush
 new file mode 100644
-index 00000000000..a8c3ad04090
+index 00000000000..07de813b1f5
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/Irradiance.ush
 @@ -0,0 +1,226 @@
@@ -1180,7 +1180,7 @@ index 00000000000..a8c3ad04090
 +#endif /* RTXGI_DDGI_IRRADIANCE_HLSL */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf
 new file mode 100644
-index 00000000000..e5f8f73e608
+index 00000000000..32488672a77
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBlendingCS.usf
 @@ -0,0 +1,364 @@
@@ -1550,7 +1550,7 @@ index 00000000000..e5f8f73e608
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf
 new file mode 100644
-index 00000000000..d21d5f01fc2
+index 00000000000..dfd2f45e6b9
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeBorderUpdateCS.usf
 @@ -0,0 +1,129 @@
@@ -1686,7 +1686,7 @@ index 00000000000..d21d5f01fc2
 \ No newline at end of file
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeCommon.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeCommon.ush
 new file mode 100644
-index 00000000000..11091a4910d
+index 00000000000..e7dd3643f72
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeCommon.ush
 @@ -0,0 +1,534 @@
@@ -2226,7 +2226,7 @@ index 00000000000..11091a4910d
 +#endif /* RTXGI_DDGI_PROBE_COMMON_HLSL */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf
 new file mode 100644
-index 00000000000..c174f96137f
+index 00000000000..8c70caf1d33
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeRelocationCS.usf
 @@ -0,0 +1,158 @@
@@ -2390,7 +2390,7 @@ index 00000000000..c174f96137f
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeStateClassifierCS.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeStateClassifierCS.usf
 new file mode 100644
-index 00000000000..485a7b1ca18
+index 00000000000..902f569362b
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDK/ddgi/ProbeStateClassifierCS.usf
 @@ -0,0 +1,105 @@
@@ -2501,7 +2501,7 @@ index 00000000000..485a7b1ca18
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDKDefines.ush b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDKDefines.ush
 new file mode 100644
-index 00000000000..9f31b1cbc1d
+index 00000000000..208cad10686
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/SDKDefines.ush
 @@ -0,0 +1,31 @@
@@ -2538,7 +2538,7 @@ index 00000000000..9f31b1cbc1d
 +#endif /* RTXGI_DEFINES_H */
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/VisualizeDDGIProbes.usf b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/VisualizeDDGIProbes.usf
 new file mode 100644
-index 00000000000..9f31be8264d
+index 00000000000..b0fa3986cb3
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Shaders/Private/VisualizeDDGIProbes.usf
 @@ -0,0 +1,151 @@
@@ -2695,7 +2695,7 @@ index 00000000000..9f31be8264d
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIBlueprintLibrary.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIBlueprintLibrary.cpp
 new file mode 100644
-index 00000000000..e65f6661585
+index 00000000000..b7785029d7c
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIBlueprintLibrary.cpp
 @@ -0,0 +1,31 @@
@@ -2732,10 +2732,10 @@ index 00000000000..e65f6661585
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolume.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolume.cpp
 new file mode 100644
-index 00000000000..d64c3818810
+index 00000000000..327de85c243
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolume.cpp
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,79 @@
 +/*
 +* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
 +*
@@ -2760,24 +2760,32 @@ index 00000000000..d64c3818810
 +	DDGIVolumeComponent->bHiddenInGame = false;
 +	RootComponent = DDGIVolumeComponent;
 +
-+	BoxComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("Volume"));
-+	BoxComponent->SetBoxExtent(FVector{ 100.0f, 100.0f, 100.0f });
-+	BoxComponent->SetupAttachment(RootComponent);
-+
 +#if WITH_EDITORONLY_DATA
++	BoxComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("Volume"));
 +	SpriteComponent = CreateEditorOnlyDefaultSubobject<UBillboardComponent>(TEXT("Sprite"));
-+	if (!IsRunningCommandlet() && (SpriteComponent != nullptr))
++	if (!IsRunningCommandlet())
 +	{
-+		static ConstructorHelpers::FObjectFinderOptional<UTexture2D> DecalTexture(TEXT("/Engine/EditorResources/EmptyActor"));
++		if(BoxComponent != nullptr)
++		{
++			BoxComponent->SetBoxExtent(FVector{ 100.0f, 100.0f, 100.0f });
++			BoxComponent->bHiddenInGame = true;
++			BoxComponent->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
++			BoxComponent->SetupAttachment(RootComponent);
++		}
 +
-+		SpriteComponent->Sprite = DecalTexture.Get();
-+		SpriteComponent->SetRelativeScale3D_Direct(FVector(0.5f, 0.5f, 0.5f));
-+		SpriteComponent->bHiddenInGame = true;
-+		SpriteComponent->SetUsingAbsoluteScale(true);
-+		SpriteComponent->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
-+		SpriteComponent->bIsScreenSizeScaled = true;
++		if(SpriteComponent != nullptr)
++		{
++			static ConstructorHelpers::FObjectFinderOptional<UTexture2D> DecalTexture(TEXT("/Engine/EditorResources/EmptyActor"));
 +
-+		SpriteComponent->SetupAttachment(RootComponent);
++			SpriteComponent->Sprite = DecalTexture.Get();
++			SpriteComponent->SetRelativeScale3D_Direct(FVector(0.5f, 0.5f, 0.5f));
++			SpriteComponent->bHiddenInGame = true;
++			SpriteComponent->SetUsingAbsoluteScale(true);
++			SpriteComponent->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
++			SpriteComponent->bIsScreenSizeScaled = true;
++
++			SpriteComponent->SetupAttachment(RootComponent);
++		}
 +	}
 +#endif // WITH_EDITORONLY_DATA
 +
@@ -2809,7 +2817,7 @@ index 00000000000..d64c3818810
 +#endif
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp
 new file mode 100644
-index 00000000000..dd06ba06bca
+index 00000000000..58f4ccb37f3
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeComponent.cpp
 @@ -0,0 +1,941 @@
@@ -3756,7 +3764,7 @@ index 00000000000..dd06ba06bca
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp
 new file mode 100644
-index 00000000000..b42f367241c
+index 00000000000..cbd98b03a50
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.cpp
 @@ -0,0 +1,1315 @@
@@ -5077,7 +5085,7 @@ index 00000000000..b42f367241c
 +#undef LOCTEXT_NAMESPACE
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.h
 new file mode 100644
-index 00000000000..091de95b0ae
+index 00000000000..65dd7e92e4f
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeUpdate.h
 @@ -0,0 +1,26 @@
@@ -5109,7 +5117,7 @@ index 00000000000..091de95b0ae
 +}
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeVisualize.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeVisualize.cpp
 new file mode 100644
-index 00000000000..6466eeba813
+index 00000000000..c5c09db9a0a
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/DDGIVolumeVisualize.cpp
 @@ -0,0 +1,545 @@
@@ -5660,7 +5668,7 @@ index 00000000000..6466eeba813
 +#endif  // !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPlugin.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPlugin.cpp
 new file mode 100644
-index 00000000000..2b7d2860bf3
+index 00000000000..1a9f994bc15
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPlugin.cpp
 @@ -0,0 +1,59 @@
@@ -5725,7 +5733,7 @@ index 00000000000..2b7d2860bf3
 +IMPLEMENT_MODULE(FRTXGIPlugin, RTXGI)
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.cpp b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.cpp
 new file mode 100644
-index 00000000000..0b46fd15306
+index 00000000000..6b0c96229d0
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.cpp
 @@ -0,0 +1,47 @@
@@ -5778,7 +5786,7 @@ index 00000000000..0b46fd15306
 +#undef LOCTEXT_NAMESPACE
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.h
 new file mode 100644
-index 00000000000..e8491787b18
+index 00000000000..7f01cecb45d
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Private/RTXGIPluginSettings.h
 @@ -0,0 +1,76 @@
@@ -5860,7 +5868,7 @@ index 00000000000..e8491787b18
 +};
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIBlueprintLibrary.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIBlueprintLibrary.h
 new file mode 100644
-index 00000000000..80cd5effbd7
+index 00000000000..0722b355db7
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIBlueprintLibrary.h
 @@ -0,0 +1,27 @@
@@ -5894,7 +5902,7 @@ index 00000000000..80cd5effbd7
 \ No newline at end of file
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolume.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolume.h
 new file mode 100644
-index 00000000000..3d68d1a514e
+index 00000000000..4891dab557c
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolume.h
 @@ -0,0 +1,42 @@
@@ -5924,13 +5932,13 @@ index 00000000000..3d68d1a514e
 +	GENERATED_UCLASS_BODY()
 +
 +public:
-+	UPROPERTY();
-+	UBoxComponent* BoxComponent;
-+
 +	UPROPERTY(EditAnywhere, Category = "GI");
 +	UDDGIVolumeComponent* DDGIVolumeComponent;
 +
 +#if WITH_EDITORONLY_DATA
++	UPROPERTY();
++	UBoxComponent* BoxComponent;
++
 +	UPROPERTY()
 +	UBillboardComponent* SpriteComponent;
 +#endif // WITH_EDITORONLY_DATA
@@ -5942,7 +5950,7 @@ index 00000000000..3d68d1a514e
 +};
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h
 new file mode 100644
-index 00000000000..1c9fba5b377
+index 00000000000..5ed44911c82
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/DDGIVolumeComponent.h
 @@ -0,0 +1,369 @@
@@ -6317,7 +6325,7 @@ index 00000000000..1c9fba5b377
 +};
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/RTXGIPlugin.h b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/RTXGIPlugin.h
 new file mode 100644
-index 00000000000..533122e57c3
+index 00000000000..12aefb596c3
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/Public/RTXGIPlugin.h
 @@ -0,0 +1,37 @@
@@ -6360,7 +6368,7 @@ index 00000000000..533122e57c3
 +};
 diff --git a/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/RTXGI.Build.cs b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/RTXGI.Build.cs
 new file mode 100644
-index 00000000000..83f7332e621
+index 00000000000..061aedc368e
 --- /dev/null
 +++ b/Engine/Plugins/Runtime/Nvidia/RTXGI/Source/RTXGI/RTXGI.Build.cs
 @@ -0,0 +1,60 @@
