@@ -24,7 +24,7 @@ To bring the advantages of RTXGI to as many developers as possible, all RTXGI 1.
 * Visual Studio 2017 or 2019
 * Windows SDK version 10.0.17763 or higher (can be installed using the Visual Studio Installer)
 * The latest drivers for your GPU. NVIDIA drivers `are available here <http://www.nvidia.com/drivers>`_
-* Unreal Engine version 4.26.0, 4.25.4, or 4.25.3 source code, available for free from `Epic Games <https://www.unrealengine.com/en-US/ue4-on-github>`_ or from the `NVIDIA NvRTX branch <https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.26>`_ of Unreal Engine. 
+* Unreal Engine version 4.26.1, 4.26.0, 4.25.4, or 4.25.3 source code, available for free from `Epic Games <https://www.unrealengine.com/en-US/ue4-on-github>`_ or from the `NVIDIA NvRTX branch <https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.26>`_ of Unreal Engine. 
 
 .. raw:: html
 
@@ -43,7 +43,7 @@ To bring the advantages of RTXGI to as many developers as possible, all RTXGI 1.
 Plugin Contents
 -------------------------------
 
-``RTXGI-UE4.26.0.patch``, ``RTXGI-UE4.25.4.patch``, ``RTXGI-UE4.25.3.patch``, ``RTXGI-NvRTX4.26.0.patch``, ``RTXGI-NvRTX4.25.4.patch``, and ``RTXGI-NvRTX4.25.3.patch`` are patch files to be applied to the appropriate engine branch.
+``RTXGI-UE4.26.1.patch``, ``RTXGI-UE4.26.0.patch``, ``RTXGI-UE4.25.4.patch``, ``RTXGI-UE4.25.3.patch``, ``RTXGI-NvRTX4.26.1.patch``, ``RTXGI-NvRTX4.26.0.patch``, ``RTXGI-NvRTX4.25.4.patch``, and ``RTXGI-NvRTX4.25.3.patch`` are patch files to be applied to the appropriate engine branch.
 
 .. note:: Patch files are available in the RTXGI SDK Github repository under the **ue4-plugin** directory.
 
@@ -55,9 +55,9 @@ Minor engine changes are required for the RTXGI plugin to work with Unreal Engin
 
 **Plugin Installation:** |br|
 
-   #. Clone Unreal Engine 4.26.0, 4.25.4, or 4.25.3 from Epic Games `Unreal Engine GitHub <https://www.unrealengine.com/en-US/ue4-on-github>`_.
+   #. Clone Unreal Engine 4.26.1, 4.26.0, 4.25.4, or 4.25.3 from Epic Games `Unreal Engine GitHub <https://www.unrealengine.com/en-US/ue4-on-github>`_.
       
-      #. Clone **NvRTX 4.26.0**, **NvRTX 4.25.4**, or **NvRTX 4.25.3** if using the NVIDIA NvRTX UE4 branch.
+      #. Clone **NvRTX 4.26.1**, **NvRTX 4.26.0**, **NvRTX 4.25.4**, or **NvRTX 4.25.3** if using the NVIDIA NvRTX UE4 branch.
 
    #. Download the appropriate patch file from the **ue4-plugin** directory of the RTXGI GitHub repository. Select the patch that matches the engine branch you’ve chosen.
 
