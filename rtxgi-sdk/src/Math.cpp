@@ -12,23 +12,105 @@
 
 #include <time.h>
 #include <stdlib.h>
-#include <math.h>
+#include <cmath>
 
+#include "rtxgi/Defines.h"
 #include "rtxgi/Math.h"
 
 namespace rtxgi
 {
-
-    float3 Normalize(float3 vector)
+    int AbsFloor(float f)
     {
-        float length = sqrtf(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
-        return (vector / length);
+        return f >= 0.f ? int(floor(f)) : int(ceil(f));
     }
 
-    int AbsFloor(float f)
-     {
-        return f >= 0.f ? int(floor(f)) : int(ceil(f));
-    };
+    float3 Normalize(const float3& v)
+    {
+        float length = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
+        return (v / length);
+    }
+
+    float3x3 EulerAnglesToRotationMatrixYXZ(const float3& eulerAngles)
+    {
+        float sx = std::sin(eulerAngles.x);
+        float cx = std::cos(eulerAngles.x);
+        float sy = std::sin(eulerAngles.y);
+        float cy = std::cos(eulerAngles.y);
+        float sz = std::sin(eulerAngles.z);
+        float cz = std::cos(eulerAngles.z);
+
+#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+        float3x3 rotYXZ = {
+            { cy * cz + sx * sy * sz, cz * sx * sy - cy * sz, cx * sy },
+            { cx * sz,                cx * cz,               -sx      },
+            {-cz * sy + cy * sx * sz, cy * cz * sx + sy * sz, cx * cy }
+        };
+#else // Swap signs of all sin()
+        float3x3 rotYXZ = {
+            { cy * cz - sx * sy * sz, cz * sx * sy + cy * sz,-cx * sy },
+            {-cx * sz,                cx * cz,                sx      },
+            { cz * sy + cy * sx * sz,-cy * cz * sx + sy * sz, cx * cy }
+        };
+#endif
+
+        return rotYXZ;
+    }
+
+    float4 QuaternionConjugate(const float4& q)
+    {
+        return { -q.x, -q.y, -q.z, q.w };
+    }
+
+    float4 RotationMatrixToQuaternion(const float3x3& m)
+    {
+        float4 q = { 0.f, 0.f, 0.f, 0.f };
+
+        float m00 = m.r0.x, m01 = m.r0.y, m02 = m.r0.z;
+        float m10 = m.r1.x, m11 = m.r1.y, m12 = m.r1.z;
+        float m20 = m.r2.x, m21 = m.r2.y, m22 = m.r2.z;
+        float diagSum = m00 + m11 + m22;
+
+        if (diagSum > 0.f)
+        {
+            q.w = std::sqrt(diagSum + 1.f) * 0.5f;
+            float f = 0.25f / q.w;
+            q.x = (m21 - m12) * f;
+            q.y = (m02 - m20) * f;
+            q.z = (m10 - m01) * f;
+        }
+        else if ((m00 > m11) && (m00 > m22))
+        {
+            q.x = std::sqrt(m00 - m11 - m22 + 1.f) * 0.5f;
+            float f = 0.25f / q.x;
+            q.y = (m10 + m01) * f;
+            q.z = (m02 + m20) * f;
+            q.w = (m21 - m12) * f;
+        }
+        else if (m11 > m22)
+        {
+            q.y = std::sqrt(m11 - m00 - m22 + 1.f) * 0.5f;
+            float f = 0.25f / q.y;
+            q.x = (m10 + m01) * f;
+            q.z = (m21 + m12) * f;
+            q.w = (m02 - m20) * f;
+        }
+        else
+        {
+            q.z = std::sqrt(m22 - m00 - m11 + 1.f) * 0.5f;
+            float f = 0.25f / q.z;
+            q.x = (m02 + m20) * f;
+            q.y = (m21 + m12) * f;
+            q.w = (m10 - m01) * f;
+        }
+
+#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
+        // By default, a quaternion rotation through a positive angle is counterclockwise when the axis points toward the viewer.
+        // It needs to be reversed (by conjugate), in case of left-hand coordinate system.
+        q = QuaternionConjugate(q);
+#endif
+
+        return q;
+    }
 
     //------------------------------------------------------------------------
     // Addition

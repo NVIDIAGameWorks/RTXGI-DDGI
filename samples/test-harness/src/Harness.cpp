@@ -514,7 +514,7 @@ bool CreateVolume(
 {
     log << "Creating RTXGI DDGI Volume...";
 
-    assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.1.23") == 0);
+    assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.1.30") == 0);
 
     rtxgi::ERTXGIStatus status = rtxgi::ERTXGIStatus::OK;
 

@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 namespace rtxgi
 {
 
@@ -17,6 +19,16 @@ namespace rtxgi
     {
         unsigned int x;
         unsigned int y;
+
+        unsigned int& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<unsigned int*>(this) + idx);
+        }
+
+        const unsigned int& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const unsigned int*>(this) + idx);
+        }
     };
 
     struct uint3
@@ -24,6 +36,16 @@ namespace rtxgi
         unsigned int x;
         unsigned int y;
         unsigned int z;
+
+        unsigned int& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<unsigned int*>(this) + idx);
+        }
+
+        const unsigned int& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const unsigned int*>(this) + idx);
+        }
     };
 
     struct uint4
@@ -32,12 +54,32 @@ namespace rtxgi
         unsigned int y;
         unsigned int z;
         unsigned int w;
+
+        unsigned int& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<unsigned int*>(this) + idx);
+        }
+
+        const unsigned int& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const unsigned int*>(this) + idx);
+        }
     };
 
     struct int2
     {
         int x;
         int y;
+
+        int& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<int*>(this) + idx);
+        }
+
+        const int& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const int*>(this) + idx);
+        }
     };
 
     struct int3
@@ -45,6 +87,16 @@ namespace rtxgi
         int x;
         int y;
         int z;
+
+        int& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<int*>(this) + idx);
+        }
+
+        const int& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const int*>(this) + idx);
+        }
     };
 
     struct int4
@@ -53,12 +105,32 @@ namespace rtxgi
         int y;
         int z;
         int w;
+
+        int& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<int*>(this) + idx);
+        }
+
+        const int& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const int*>(this) + idx);
+        }
     };
 
     struct float2
     {
         float x;
         float y;
+
+        float& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<float*>(this) + idx);
+        }
+
+        const float& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const float*>(this) + idx);
+        }
     };
 
     struct float3
@@ -66,6 +138,16 @@ namespace rtxgi
         float x;
         float y;
         float z;
+
+        float& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<float*>(this) + idx);
+        }
+
+        const float& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const float*>(this) + idx);
+        }
     };
 
     struct float4
@@ -74,6 +156,33 @@ namespace rtxgi
         float y;
         float z;
         float w;
+
+        float& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<float*>(this) + idx);
+        }
+
+        const float& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const float*>(this) + idx);
+        }
+    };
+
+    struct float3x3
+    {
+        float3 r0;
+        float3 r1;
+        float3 r2;
+
+        float3& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<float3*>(this) + idx);
+        }
+
+        const float3& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const float3*>(this) + idx);
+        }
     };
 
     struct float4x4
@@ -82,6 +191,16 @@ namespace rtxgi
         float4 r1;
         float4 r2;
         float4 r3;
+
+        float4& operator[](std::size_t idx)
+        {
+            return *(reinterpret_cast<float4*>(this) + idx);
+        }
+
+        const float4& operator[](std::size_t idx) const
+        {
+            return *(reinterpret_cast<const float4*>(this) + idx);
+        }
     };
 
     struct AABB
@@ -90,4 +209,10 @@ namespace rtxgi
         float3 max;
     };
 
+    struct OBB
+    {
+        float3 origin;
+        float4 rotation;    // Rotation quaternion with .xyz vector part and .w scalar part
+        float3 e;           // Positive halfwidth extends
+    };
 }

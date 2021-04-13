@@ -165,10 +165,11 @@ namespace rtxgi
         return true;
     }
 
-    DDGIVolumeDescGPU GetDDGIVolumeGPUDesc(DDGIVolumeDesc &desc)
+    DDGIVolumeDescGPU GetDDGIVolumeGPUDesc(DDGIVolumeDesc &desc, float4 rotation)
     {
         DDGIVolumeDescGPU descGPU = {};
         descGPU.origin = desc.origin;
+        descGPU.rotation = rotation;
         descGPU.probeGridCounts = desc.probeGridCounts;
         descGPU.probeGridSpacing = desc.probeGridSpacing;
         descGPU.numRaysPerProbe = static_cast<int>(desc.numRaysPerProbe);
@@ -379,7 +380,8 @@ namespace rtxgi
         m_desc = desc;
         m_resources = resources;
         m_origin = desc.origin;
-        m_boundingBox = GetBoundingBox();
+        m_rotationMatrix = EulerAnglesToRotationMatrixYXZ(desc.eulerAngles);
+        m_rotationQuaternion = RotationMatrixToQuaternion(m_rotationMatrix);
         m_name = desc.name;
 
         // Init the random seed and compute a rotation transform
@@ -451,8 +453,8 @@ namespace rtxgi
         ComputeRandomRotation();
 
         // Get the compact GPU descriptor
-        DDGIVolumeDescGPU gpuDesc = GetDDGIVolumeGPUDesc(m_desc);
-        gpuDesc.probeRayRotationTransform = m_rotationTransform;
+        DDGIVolumeDescGPU gpuDesc = GetDDGIVolumeGPUDesc(m_desc, m_rotationQuaternion);
+        gpuDesc.probeRayRotationTransform = m_probeRayRotationTransform;
 
         // Map the constant buffer and update it
         UINT8* pData = nullptr;
@@ -720,10 +722,20 @@ namespace rtxgi
 
         m_desc = {};
         m_resources = {};
-        m_boundingBox = {};
         m_origin = {};
+        m_rotationMatrix = {
+            { 1.f, 0.f, 0.f },
+            { 0.f, 1.f, 0.f },
+            { 0.f, 0.f, 1.f }
+        };
+        m_rotationQuaternion = { 0.f, 0.f, 0.f, 1.f };
         m_rootSignatureDesc = {};
-        m_rotationTransform = {};
+        m_probeRayRotationTransform = {
+            { 1.f, 0.f, 0.f, 0.f },
+            { 0.f, 1.f, 0.f, 0.f },
+            { 0.f, 0.f, 1.f, 0.f },
+            { 0.f, 0.f, 0.f, 1.f }
+        };
 #if RTXGI_DDGI_PROBE_SCROLL
         m_probeScrollOffsets = {};
 #endif
@@ -775,6 +787,13 @@ namespace rtxgi
 #endif;
     }
 
+    void DDGIVolume::SetEulerAngles(float3 eulerAngles)
+    {
+        m_desc.eulerAngles = eulerAngles;
+        m_rotationMatrix = EulerAnglesToRotationMatrixYXZ(eulerAngles);
+        m_rotationQuaternion = RotationMatrixToQuaternion(m_rotationMatrix);
+    }
+
     //------------------------------------------------------------------------
     // Accessors
     //------------------------------------------------------------------------
@@ -789,11 +808,48 @@ namespace rtxgi
         return (m_desc.origin + probeGridWorldPosition - probeGridShift);
     }
 
-    AABB DDGIVolume::GetBoundingBox() const
+    AABB DDGIVolume::GetAxisAlignedBoundingBox() const
     {
         float3 origin = m_desc.origin;
         float3 extent = float3(m_desc.probeGridSpacing * (m_desc.probeGridCounts - 1)) / 2.f;
-        return { (origin - extent), (origin + extent) };
+        AABB a = { (origin - extent), (origin + extent) };
+
+        if (m_desc.eulerAngles == float3{ 0.f, 0.f, 0.f })
+        {
+            return a;
+        }
+        else
+        {
+            // Real-Time Collision Detection by Christer Ericson
+            // 4.2.6 AABB Recomputed from Rotated AABB
+            AABB b = {};
+            for (int i = 0; i < 3; ++i)
+            {
+                for (int j = 0; j < 3; j++) {
+                    float e = m_rotationMatrix[i][j] * a.min[j];
+                    float f = m_rotationMatrix[i][j] * a.max[j];
+                    if (e < f) {
+                        b.min[i] += e;
+                        b.max[i] += f;
+                    }
+                    else {
+                        b.min[i] += f;
+                        b.max[i] += e;
+                    }
+                }
+            }
+            return b;
+        }
+    }
+
+    OBB DDGIVolume::GetOrientedBoundingBox() const
+    {
+        OBB obb = {};
+        obb.origin = m_origin;
+        obb.rotation = m_rotationQuaternion;
+        obb.e = float3(m_desc.probeGridSpacing * (m_desc.probeGridCounts - 1)) / 2.f;
+
+        return obb;
     }
 
     //------------------------------------------------------------------------
@@ -1051,8 +1107,8 @@ namespace rtxgi
         transform.r1 = { _21, _22, _23, 0.f };
         transform.r2 = { _31, _32, _33, 0.f };
         transform.r3 = { 0.f, 0.f, 0.f, 1.f };
-    
-        m_rotationTransform = transform;
+
+        m_probeRayRotationTransform = transform;
     }
 
     int3 DDGIVolume::GetProbeGridCoords(int probeIndex) const

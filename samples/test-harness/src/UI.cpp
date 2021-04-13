@@ -160,8 +160,25 @@ void CreateDebugWindow(
                     ImGui::Text("Probe Grid Spacing: (%.2f, %.2f, %.2f)", desc.probeGridSpacing.x, desc.probeGridSpacing.y, desc.probeGridSpacing.z);
                     ImGui::NewLine();
 
-                    float probeMaxRayDistance = volume->GetProbeMaxRayDistance();
+                    float3 eulerAngles = volume->GetEulerAngles();
+                    eulerAngles = RadiansToDegrees(eulerAngles);
                     std::stringstream label;
+                    label << "###pitch" << i;
+                    ImGui::DragFloat(label.str().c_str(), &eulerAngles.x, 1.0f, -360.f, 360.f, "Volume X Angle: %.1f");
+                    label.clear();
+                    label.str("");
+                    label << "###yaw" << i;
+                    ImGui::DragFloat(label.str().c_str(), &eulerAngles.y, 1.0f, -360.f, 360.f, "Volume Y Angle: %.1f");
+                    label.clear();
+                    label.str("");
+                    label << "###roll" << i;
+                    ImGui::DragFloat(label.str().c_str(), &eulerAngles.z, 1.0f, -360.f, 360.f, "Volume Z Angle: %.1f");
+                    eulerAngles = DegreesToRadians(eulerAngles);
+                    volume->SetEulerAngles(eulerAngles);
+
+                    float probeMaxRayDistance = volume->GetProbeMaxRayDistance();
+                    label.clear();
+                    label.str("");
                     label << "###probeMaxRayDistance" << i;
 
                     ImGui::DragFloat(label.str().c_str(), &probeMaxRayDistance, 0.1f, 0.f, 10000.f, "Probe Max Ray Distance: %.1f");

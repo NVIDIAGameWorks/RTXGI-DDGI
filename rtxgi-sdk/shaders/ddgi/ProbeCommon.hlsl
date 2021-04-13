@@ -340,10 +340,13 @@ int3 DDGIGetProbeCoords(int probeIndex, int3 probeGridCounts)
 * cube that surrounds the given world space position. The other seven probes are offset 
 * by 0 or 1 in grid space along each axis.
 */
-int3 DDGIGetBaseProbeGridCoords(float3 worldPosition, float3 origin, int3 probeGridCounts, float3 probeGridSpacing)
+int3 DDGIGetBaseProbeGridCoords(float3 worldPosition, float3 origin, float4 rotation, int3 probeGridCounts, float3 probeGridSpacing)
 {
+    float3 position = worldPosition - origin;
+    position = RTXGIQuaternionRotate(position, RTXGIQuaternionConjugate(rotation));
+
     // Shift from [-n/2, n/2] to [0, n]
-    float3 position = (worldPosition - origin) + (probeGridSpacing * (probeGridCounts - 1)) * 0.5f;
+    position += (probeGridSpacing * (probeGridCounts - 1)) * 0.5f;
 
     int3 probeCoords = int3(position / probeGridSpacing);
 
@@ -357,7 +360,7 @@ int3 DDGIGetBaseProbeGridCoords(float3 worldPosition, float3 origin, int3 probeG
 /**
 * Computes the world space position of a probe at the given 3D grid coordinates.
 */
-float3 DDGIGetProbeWorldPosition(int3 probeCoords, float3 origin, int3 probeGridCounts, float3 probeGridSpacing)
+float3 DDGIGetProbeWorldPosition(int3 probeCoords, float3 origin, float4 rotation, int3 probeGridCounts, float3 probeGridSpacing)
 {
     // Multiply the grid coordinates by the grid spacing
     float3 probeGridWorldPosition = (probeCoords * probeGridSpacing);
@@ -365,17 +368,21 @@ float3 DDGIGetProbeWorldPosition(int3 probeCoords, float3 origin, int3 probeGrid
     // Shift the grid by half of each axis extent to center the volume about its origin
     float3 probeGridShift = (probeGridSpacing * (probeGridCounts - 1)) * 0.5f;
 
+    float3 probeWorldPosition = probeGridWorldPosition - probeGridShift;
+    probeWorldPosition = RTXGIQuaternionRotate(probeWorldPosition, rotation);
+    probeWorldPosition += origin;
+
     // Compute the probe's world position
-    return (origin + probeGridWorldPosition - probeGridShift);
+    return probeWorldPosition;
 }
 
 /*
 * Computes the world space position of the probe at the given probe index (without the probe offsets).
 */
-float3 DDGIGetProbeWorldPosition(int probeIndex, float3 origin, int3 probeGridCounts, float3 probeGridSpacing)
+float3 DDGIGetProbeWorldPosition(int probeIndex, float3 origin, float4 rotation, int3 probeGridCounts, float3 probeGridSpacing)
 {
     float3 probeCoords = DDGIGetProbeCoords(probeIndex, probeGridCounts);
-    return DDGIGetProbeWorldPosition(probeCoords, origin, probeGridCounts, probeGridSpacing);
+    return DDGIGetProbeWorldPosition(probeCoords, origin, rotation, probeGridCounts, probeGridSpacing);
 }
 
 //------------------------------------------------------------------------
@@ -404,7 +411,7 @@ void DDGIEncodeProbeOffset(int2 probeOffsetTexcoord, float3 probeGridSpacing, fl
 /*
 * Computes the world space position of a probe at the given probe index, including the probe's offset value.
 */
-float3 DDGIGetProbeWorldPositionWithOffset(int probeIndex, float3 origin, int3 probeGridCounts, float3 probeGridSpacing, RWTexture2D<float4> probeOffsets)
+float3 DDGIGetProbeWorldPositionWithOffset(int probeIndex, float3 origin, float4 rotation, int3 probeGridCounts, float3 probeGridSpacing, RWTexture2D<float4> probeOffsets)
 {
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     int textureWidth = (probeGridCounts.x * probeGridCounts.y);
@@ -416,16 +423,16 @@ float3 DDGIGetProbeWorldPositionWithOffset(int probeIndex, float3 origin, int3 p
 
     // Find the texture coords of the probe in the offsets texture
     int2 offsetTexcoords = int2(probeIndex % textureWidth, probeIndex / textureWidth);
-    return DDGIDecodeProbeOffset(offsetTexcoords, probeGridSpacing, probeOffsets) + DDGIGetProbeWorldPosition(probeIndex, origin, probeGridCounts, probeGridSpacing);
+    return DDGIDecodeProbeOffset(offsetTexcoords, probeGridSpacing, probeOffsets) + DDGIGetProbeWorldPosition(probeIndex, origin, rotation, probeGridCounts, probeGridSpacing);
 }
 
 /**
 * Compute the world space position from the 3D grid coordinates, including the probe's offset value.
 */
-float3 DDGIGetProbeWorldPositionWithOffset(int3 probeCoords, float3 origin, int3 probeGridCounts, float3 probeGridSpacing, RWTexture2D<float4> probeOffsets)
+float3 DDGIGetProbeWorldPositionWithOffset(int3 probeCoords, float3 origin, float4 rotation, int3 probeGridCounts, float3 probeGridSpacing, RWTexture2D<float4> probeOffsets)
 {
     int probeIndex = DDGIGetProbeIndex(probeCoords, probeGridCounts);
-    return DDGIGetProbeWorldPositionWithOffset(probeIndex, origin, probeGridCounts, probeGridSpacing, probeOffsets);
+    return DDGIGetProbeWorldPositionWithOffset(probeIndex, origin, rotation, probeGridCounts, probeGridSpacing, probeOffsets);
 }
 
 #endif /* RTXGI_DDGI_PROBE_RELOCATION */
@@ -464,7 +471,7 @@ int DDGIGetProbeIndexOffset(int baseProbeIndex, int3 probeGridCounts, int3 probe
 /*
 * Computes the world space position of a probe at the given probe index, including the probe's offset value.
 */
-float3 DDGIGetProbeWorldPositionWithOffset(int probeIndex, float3 origin, int3 probeGridCounts, float3 probeGridSpacing, int3 probeScrollOffsets, RWTexture2D<float4> probeOffsets)
+float3 DDGIGetProbeWorldPositionWithOffset(int probeIndex, float3 origin, float4 rotation, int3 probeGridCounts, float3 probeGridSpacing, int3 probeScrollOffsets, RWTexture2D<float4> probeOffsets)
 {
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     int textureWidth = (probeGridCounts.x * probeGridCounts.y);
@@ -479,16 +486,16 @@ float3 DDGIGetProbeWorldPositionWithOffset(int probeIndex, float3 origin, int3 p
     int2 offsetTexcoords = int2(storageProbeIndex % textureWidth, storageProbeIndex / textureWidth);
     // the key observation here is that the probe offset lookup needs to compensate for the scroll offset, but GetProbeWorldPosition should use the original probeIndex
     // this requirement prevents us from just passing in a compensated probeIndex to the normalGetProbeWorldPositionWithOffset function
-    return DDGIDecodeProbeOffset(offsetTexcoords, probeGridSpacing, probeOffsets) + DDGIGetProbeWorldPosition(probeIndex, origin, probeGridCounts, probeGridSpacing);
+    return DDGIDecodeProbeOffset(offsetTexcoords, probeGridSpacing, probeOffsets) + DDGIGetProbeWorldPosition(probeIndex, origin, rotation, probeGridCounts, probeGridSpacing);
 }
 
 /**
 * Compute the world space position from the 3D grid coordinates, including the probe's offset value.
 */
-float3 DDGIGetProbeWorldPositionWithOffset(int3 probeCoords, float3 origin, int3 probeGridCounts, float3 probeGridSpacing, int3 probeScrollOffsets, RWTexture2D<float4> probeOffsets)
+float3 DDGIGetProbeWorldPositionWithOffset(int3 probeCoords, float3 origin, float4 rotation, int3 probeGridCounts, float3 probeGridSpacing, int3 probeScrollOffsets, RWTexture2D<float4> probeOffsets)
 {
     int probeIndex = DDGIGetProbeIndex(probeCoords, probeGridCounts);
-    return DDGIGetProbeWorldPositionWithOffset(probeIndex, origin, probeGridCounts, probeGridSpacing, probeScrollOffsets, probeOffsets);
+    return DDGIGetProbeWorldPositionWithOffset(probeIndex, origin, rotation, probeGridCounts, probeGridSpacing, probeScrollOffsets, probeOffsets);
 }
 #endif
 

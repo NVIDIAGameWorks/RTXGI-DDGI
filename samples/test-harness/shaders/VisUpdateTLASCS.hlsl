@@ -19,12 +19,12 @@ void VisUpdateTLASCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint GroupInd
 #if RTXGI_DDGI_PROBE_RELOCATION
     RWTexture2D<float4> DDGIProbeOffsets = GetDDGIProbeOffsetsUAV(volumeSelect);
 #if RTXGI_DDGI_PROBE_SCROLL
-    float3 probeWorldPosition = DDGIGetProbeWorldPositionWithOffset(DispatchThreadID.x, DDGIVolume.origin, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing, DDGIVolume.probeScrollOffsets, DDGIProbeOffsets);
+    float3 probeWorldPosition = DDGIGetProbeWorldPositionWithOffset(DispatchThreadID.x, DDGIVolume.origin, DDGIVolume.rotation, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing, DDGIVolume.probeScrollOffsets, DDGIProbeOffsets);
 #else
-    float3 probeWorldPosition = DDGIGetProbeWorldPositionWithOffset(DispatchThreadID.x, DDGIVolume.origin, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing, DDGIProbeOffsets);
+    float3 probeWorldPosition = DDGIGetProbeWorldPositionWithOffset(DispatchThreadID.x, DDGIVolume.origin, DDGIVolume.rotation, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing, DDGIProbeOffsets);
 #endif
 #else
-    float3 probeWorldPosition = DDGIGetProbeWorldPosition(DispatchThreadID.x, DDGIVolume.origin, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing);
+    float3 probeWorldPosition = DDGIGetProbeWorldPosition(DispatchThreadID.x, DDGIVolume.origin, DDGIVolume.rotation, DDGIVolume.probeGridCounts, DDGIVolume.probeGridSpacing);
 #endif
 
     VisTLASInstances[volumeSelect][DispatchThreadID.x].transform = float3x4(

@@ -72,6 +72,7 @@ void RayGen()
                 DDGIGetProbeWorldPositionWithOffset(
                     payload.instanceIndex,
                     DDGIVolume.origin,
+                    DDGIVolume.rotation,
                     DDGIVolume.probeGridCounts,
                     DDGIVolume.probeGridSpacing,
 #if RTXGI_DDGI_PROBE_SCROLL
@@ -83,6 +84,7 @@ void RayGen()
                 DDGIGetProbeWorldPosition(
                     payload.instanceIndex,
                     DDGIVolume.origin,
+                    DDGIVolume.rotation,
                     DDGIVolume.probeGridCounts,
                     DDGIVolume.probeGridSpacing);
 #endif

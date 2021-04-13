@@ -75,23 +75,22 @@ void DDGIProbeRelocationCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Gr
 
             // Negate the hit distance on a backface hit and scale back to the full distance
             hitDistance = hitDistance * -5.f;
-            if (hitDistance < closestBackfaceDistance) 
+            if (hitDistance < closestBackfaceDistance)
             {
                 // Make up for the shortening of backfaces
                 closestBackfaceDistance = hitDistance;
                 closestBackfaceIndex = rayIndex;
             }
         }
-
-        // Found a frontface
-        if (hitDistance > 0.f)
+        else if (hitDistance >= 0.f)
         {
-            if (hitDistance < closestFrontfaceDistance) 
+            // Found a frontface
+            if (hitDistance < closestFrontfaceDistance)
             {
                 closestFrontfaceDistance = hitDistance;
                 closestFrontfaceIndex = rayIndex;
             }
-            else if (hitDistance > farthestFrontfaceDistance) 
+            else if (hitDistance > farthestFrontfaceDistance)
             {
                 farthestFrontfaceDistance = hitDistance;
                 farthestFrontfaceIndex = rayIndex;
@@ -131,9 +130,11 @@ void DDGIProbeRelocationCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Gr
         fullOffset = currentOffset + (moveBackMargin * moveBackDirection);
     }
 
-    // Absolute maximum distance probe could be moved is 0.5 * probeSpacing
+    // Absolute maximum distance that probe could be moved should satisfy ellipsoid equation:
+    // x^2 / probeGridSpacing.x^2 + y^2 / probeGridSpacing.y^2 + z^2 / probeGridSpacing.y^2 < (0.5)^2
     // Clamp to less than maximum distance to avoid degenerate cases
-    if (all(abs(fullOffset) < 0.45f * DDGIVolume.probeGridSpacing))
+    float3 normalizedOffset = fullOffset / DDGIVolume.probeGridSpacing;
+    if (dot(normalizedOffset, normalizedOffset) < 0.2025f) // 0.45 * 0.45 == 0.2025
     {
         currentOffset = fullOffset;
     }

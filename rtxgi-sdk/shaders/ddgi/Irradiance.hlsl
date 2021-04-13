@@ -43,9 +43,12 @@ float DDGIGetVolumeBlendWeight(float3 worldPosition, DDGIVolumeDescGPU volume)
 {
     // Start fully weighted
     float volumeBlendWeight = 1.f;
-    
+
+    float3 position = worldPosition - volume.origin;
+    position = RTXGIQuaternionRotate(position, RTXGIQuaternionConjugate(volume.rotation));
+
     // Shift from [-n/2, n/2] to [0, n]
-    float3 position = (worldPosition - volume.origin) + (volume.probeGridSpacing * (volume.probeGridCounts - 1)) * 0.5f;
+    position += (volume.probeGridSpacing * (volume.probeGridCounts - 1)) * 0.5f;
     float3 probeCoords = (position / volume.probeGridSpacing);
 
     // Map numbers over the max to the range 0 to 1 for blending
@@ -79,13 +82,14 @@ float3 DDGIGetVolumeIrradiance(
     float3 biasedWorldPosition = (worldPosition + surfaceBias);
     
     // Get the 3D grid coordinates of the base probe (near the biased world position)
-    int3   baseProbeCoords = DDGIGetBaseProbeGridCoords(biasedWorldPosition, volume.origin, volume.probeGridCounts, volume.probeGridSpacing);
+    int3   baseProbeCoords = DDGIGetBaseProbeGridCoords(biasedWorldPosition, volume.origin, volume.rotation, volume.probeGridCounts, volume.probeGridSpacing);
 
     // Get the world space position of the base probe
-    float3 baseProbeWorldPosition = DDGIGetProbeWorldPosition(baseProbeCoords, volume.origin, volume.probeGridCounts, volume.probeGridSpacing);
+    float3 baseProbeWorldPosition = DDGIGetProbeWorldPosition(baseProbeCoords, volume.origin, volume.rotation, volume.probeGridCounts, volume.probeGridSpacing);
 
     // Clamp the distance between the given point and the base probe's world position (on each axis) to [0, 1]
-    float3 alpha = clamp(((biasedWorldPosition - baseProbeWorldPosition) / volume.probeGridSpacing), float3(0.f, 0.f, 0.f), float3(1.f, 1.f, 1.f));
+    float3 distanceVolumeSpace = RTXGIQuaternionRotate(biasedWorldPosition - baseProbeWorldPosition, RTXGIQuaternionConjugate(volume.rotation));
+    float3 alpha = clamp((distanceVolumeSpace / volume.probeGridSpacing), float3(0.f, 0.f, 0.f), float3(1.f, 1.f, 1.f));
 
     // Iterate over the 8 closest probes and accumulate their contributions
     for(int probeIndex = 0; probeIndex < 8; probeIndex++)
@@ -101,12 +105,12 @@ float3 DDGIGetVolumeIrradiance(
         // Get the adjacent probe's world position
 #if RTXGI_DDGI_PROBE_RELOCATION
 #if RTXGI_DDGI_PROBE_SCROLL
-        float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPositionWithOffset(adjacentProbeCoords, volume.origin, volume.probeGridCounts, volume.probeGridSpacing, volume.probeScrollOffsets, resources.probeOffsets);
+        float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPositionWithOffset(adjacentProbeCoords, volume.origin, volume.rotation, volume.probeGridCounts, volume.probeGridSpacing, volume.probeScrollOffsets, resources.probeOffsets);
 #else
-        float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPositionWithOffset(adjacentProbeCoords, volume.origin, volume.probeGridCounts, volume.probeGridSpacing, resources.probeOffsets);
+        float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPositionWithOffset(adjacentProbeCoords, volume.origin, volume.rotation, volume.probeGridCounts, volume.probeGridSpacing, resources.probeOffsets);
 #endif
 #else
-        float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPosition(adjacentProbeCoords, volume.origin, volume.probeGridCounts, volume.probeGridSpacing);
+        float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPosition(adjacentProbeCoords, volume.origin, volume.rotation, volume.probeGridCounts, volume.probeGridSpacing);
 #endif
 
         // Get the adjacent probe's index (used for texture lookups)

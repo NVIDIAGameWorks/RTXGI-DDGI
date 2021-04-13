@@ -314,6 +314,11 @@ bool ParseVolumes(std::string &configString, std::vector<DDGIVolumeDesc> &descs,
             if (line.find_first_of("#") == 0) continue;     // comment line, skip it
 
             if (ParseIfExists("origin=", desc.origin, line, status, log)) continue;
+            if (ParseIfExists("eulerAngles=", desc.eulerAngles, line, status, log))
+            {
+                desc.eulerAngles = desc.eulerAngles * RTXGI_PI / 180.0f;
+                continue;
+            }
             if (ParseIfExists("probeGridCounts=", desc.probeGridCounts, line, status, log)) continue;
             if (ParseIfExists("probeGridSpacing=", desc.probeGridSpacing, line, status, log)) continue;
             if (ParseIfExists("viewBias=", desc.viewBias, line, status, log)) continue;

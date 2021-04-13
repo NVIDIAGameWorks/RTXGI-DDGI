@@ -105,6 +105,7 @@ namespace rtxgi
     {
         std::string     name;                                   // Name for the volume
         float3          origin = { 0.f, 0.f, 0.f };             // World-space origin of the volume.
+        float3          eulerAngles = { 0.f, 0.f, 0.f };        // Euler angles XYZ (radians).
         float3          probeGridSpacing = { 0.f, 0.f, 0.f };   // World-space distance between probes.
 
         int3            probeGridCounts = { -1, -1, -1 };       // Number of probes on each axis.
@@ -363,6 +364,8 @@ namespace rtxgi
 
         void SetProbeBrightnessThreshold(float value) { m_desc.probeBrightnessThreshold = value; }
 
+        void SetEulerAngles(float3 eulerAngles);
+
 #if RTXGI_DDGI_PROBE_SCROLL
         void SetMovementType(EDDGIVolumeMovementType value) { m_desc.movementType = value; }
 #endif
@@ -387,6 +390,8 @@ namespace rtxgi
 
         float GetProbeBrightnessThreshold() const { return m_desc.probeBrightnessThreshold; }
 
+        float3 GetEulerAngles() const { return m_desc.eulerAngles; }
+
         float3 GetProbeGridSpacing() const { return m_desc.probeGridSpacing; }
 
         int3 GetProbeGridCounts() const { return m_desc.probeGridCounts; }
@@ -403,11 +408,13 @@ namespace rtxgi
 
         int GetNumRaysPerProbe() const { return static_cast<int>(m_desc.numRaysPerProbe); }
 
-        float4x4 GetRotationTransform() const { return m_rotationTransform; }
+        float4x4 GetProbeRayRotationTransform() const { return m_probeRayRotationTransform; }
 
         float3 GetProbeWorldPosition(int probeIndex) const;
 
-        AABB GetBoundingBox() const;
+        AABB GetAxisAlignedBoundingBox() const;
+
+        OBB GetOrientedBoundingBox() const;
 
         //------------------------------------------------------------------------
         // Event Handlers
@@ -422,7 +429,12 @@ namespace rtxgi
         DDGIVolumeDesc              m_desc;                                             // Properties of the volume provided by the client
         DDGIVolumeResources         m_resources;                                        // Resources passed in by the host application
         float3                      m_origin;                                           // Origin of the volume
-        AABB                        m_boundingBox;                                      // Axis aligned bounding box of the volume, centered on the origin
+        float3x3                    m_rotationMatrix = {                                // Matrix defining the orientation of the volume
+                                        { 1.f, 0.f, 0.f },
+                                        { 0.f, 1.f, 0.f },
+                                        { 0.f, 0.f, 1.f }
+                                    };
+        float4                      m_rotationQuaternion = { 0.f, 0.f, 0.f, 1.f };      // Quaternion defining the orientation of the volume (constructed directly from m_rotationMatrix)
 
         ID3D12Resource*             m_volumeCB;                                         // Constant data for the DDGIVolume
         UINT64                      m_volumeCBOffsetInBytes;                            // Offset into the constant buffer, in bytes
@@ -460,7 +472,13 @@ namespace rtxgi
         UINT                        m_descriptorDescSize = 0;                           // Size of each descriptor heap entry
         UINT                        m_descriptorHeapOffset = 0;                         // Offset to the first available slot in the descriptor heap
 
-        float4x4                    m_rotationTransform;                                // A random rotation transform, updated each frame for computing probe ray directions
+        float4x4                    m_probeRayRotationTransform = {                     // A random rotation transform, updated each frame for computing probe ray directions
+                                        { 1.f, 0.f, 0.f, 0.f },
+                                        { 0.f, 1.f, 0.f, 0.f },
+                                        { 0.f, 0.f, 1.f, 0.f },
+                                        { 0.f, 0.f, 0.f, 1.f }
+                                    };
+
         
 #if RTXGI_DDGI_SDK_MANAGED_RESOURCES
         void CreateDescriptors(ID3D12Device* device);

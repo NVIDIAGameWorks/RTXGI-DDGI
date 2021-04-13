@@ -19,6 +19,14 @@ static const float RTXGI_2PI = 6.2831853071795864f;
 //------------------------------------------------------------------------
 
 /**
+* Finds the smallest component of the vector.
+*/
+float RTXGIMinComponent(float3 a)
+{
+    return min(a.x, min(a.y, a.z));
+}
+
+/**
 * Finds the largest component of the vector.
 */
 float RTXGIMaxComponent(float3 a)
@@ -72,6 +80,26 @@ float3 RTXGIUintToFloat3(uint packed)
     unpacked.y = (float)((packed >> 10) & 0x000003FF) / 1023.f;
     unpacked.z = (float)((packed >> 20) & 0x000003FF) / 1023.f;
     return unpacked;
+}
+
+/**
+* Rotate vector v with quaternion q.
+*/
+float3 RTXGIQuaternionRotate(float3 v, float4 q)
+{
+    float3 b = q.xyz;
+    float b2 = dot(b, b);
+    return (v * (q.w * q.w - b2) + b * (dot(v, b) * 2.f) + cross(b, v) * (q.w * 2.f));
+}
+
+/**
+* Quaternion conjugate.
+* For unit quaternions, conjugate equals inverse.
+* Use this to create a quaternion that rotates in the opposite direction.
+*/
+float4 RTXGIQuaternionConjugate(float4 q)
+{
+    return float4(-q.xyz, q.w);
 }
 
 #endif /* RTXGI_COMMON_HLSL */
