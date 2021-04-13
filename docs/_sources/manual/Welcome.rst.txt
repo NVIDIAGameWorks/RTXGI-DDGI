@@ -7,7 +7,7 @@
 Welcome
 =========
 
-Welcome to the NVIDIA |reg| RTX Global Illumination (RTXGI) SDK version 1.1. The RTXGI SDK is a software development kit that leverages the power of GPU ray tracing to provide scalable solutions for the computation of Global Illumination (GI) in real-time graphics applications.
+Welcome to the NVIDIA |reg| RTX Global Illumination (RTXGI) SDK version 1.1.30. The RTXGI SDK is a software development kit that leverages the power of GPU ray tracing to provide scalable solutions for the computation of Global Illumination (GI) in real-time graphics applications.
 
 A primary goal of this SDK is to maintain optimized implementations of global lighting algorithms that are flexible enough to be useful in both real-time and pre-computed lighting scenarios. This scalable design allows RTXGI to be an effective tool across a wide range of platforms of varying computational capability. Algorithm implementations provided in this SDK require support for Microsoft's DirectX |reg| Raytracing (DXR) API since the ability to trace arbitrary rays is an essential component that provides the flexibly to dynamically update lighting information at runtime. It is also possible to use RTXGI on development machines with DXR support, and load pre-computed RTXGI data for runtime use on platforms without DXR support.
 

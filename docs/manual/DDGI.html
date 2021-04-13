@@ -1,40 +1,43 @@
 
 
 <!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
   <title>Dynamic Diffuse Global Illumination &mdash; RTXGI SDK 1.1  documentation</title>
   
 
   
+  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
   
     <link rel="shortcut icon" href="../_static/favicon.ico"/>
   
+
   
   
 
   
-  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
   
     
       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
         <script src="../_static/jquery.js"></script>
         <script src="../_static/underscore.js"></script>
         <script src="../_static/doctools.js"></script>
-        <script src="../_static/language_data.js"></script>
     
     <script type="text/javascript" src="../_static/js/theme.js"></script>
 
     
-
-  
-  <link rel="stylesheet" href="../_static/css/nvidia_theme.css" type="text/css" />
-  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Unreal Engine 4 Plugin" href="UE4Plugin.html" />
@@ -78,6 +81,7 @@
           
         </div>
 
+        
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
             
@@ -87,9 +91,10 @@
             
               <ul class="current">
 <li class="toctree-l1 current"><a class="reference internal" href="Index.html">User’s Guide</a><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="License.html">License</a></li>
 <li class="toctree-l2"><a class="reference internal" href="Welcome.html">Welcome</a></li>
+<li class="toctree-l2"><a class="reference internal" href="License.html">License</a></li>
 <li class="toctree-l2"><a class="reference internal" href="QuickStart.html">Quick Start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="Changelog.html">Change Log</a></li>
 <li class="toctree-l2"><a class="reference internal" href="Harness.html">Test Harness</a></li>
 <li class="toctree-l2"><a class="reference internal" href="SDKOverview.html">RTXGI SDK Overview</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Dynamic Diffuse Global Illumination</a><ul>
@@ -133,6 +138,7 @@
             
           
         </div>
+        
       </div>
     </nav>
 
@@ -167,11 +173,13 @@
 
 
 
+
+
 <div role="navigation" aria-label="breadcrumbs navigation">
 
   <ul class="wy-breadcrumbs">
     
-      <li><a href="../index.html">Docs</a> &raquo;</li>
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
         
           <li><a href="Index.html">User’s Guide</a> &raquo;</li>
         
@@ -180,7 +188,7 @@
     
       <li class="wy-breadcrumbs-aside">
         
-            
+          
         
       </li>
     
@@ -360,7 +368,7 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
 </div>
 <div class="section" id="volumes">
 <span id="ddgi-volumes"></span><h2>Volumes<a class="headerlink" href="#volumes" title="Permalink to this headline">¶</a></h2>
-<p>A <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is a volume of space within which irradiance queries at arbitrary world-space points are supported. The underlying data structure of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is a regular grid of probes (see the note below) that spans a volume’s extent, and is centered about a user defined volume origin. A <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> may cover the entire scene or some sub-volume of the scene, depending on the desired effect. Each probe is represented by an unwrapped octahedral texture map of irradiance and distance values for the set of directions  around that probe (also referred to as an irradiance field). At a high level, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> provides the ability to:</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is a volume of space within which irradiance queries at arbitrary world-space points are supported. The underlying data structure of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is a regular grid of probes (see the note below) that spans a volume’s extent, and is positioned with a user defined volume origin and orientation. A <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> may cover the entire scene or some sub-volume of the scene, depending on the desired effect. Each probe is represented by an unwrapped octahedral texture map of irradiance and distance values for the set of directions  around that probe (also referred to as an irradiance field). At a high level, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> provides the ability to:</p>
 <ol class="arabic simple">
 <li><p>Update the per-probe irradiance and filtered distance values</p></li>
 <li><p>Compute the irradiance for arbitrary world-space locations within the volume</p></li>
@@ -396,71 +404,75 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
 <td><p><code class="docutils literal notranslate"><span class="pre">float3</span></code></p></td>
 <td><p>The world-space origin of the volume.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridSpacing</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">eulerAngles</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float3</span></code></p></td>
+<td><p>The Euler angles of the volume orientation (yxz), in radians.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridSpacing</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float3</span></code></p></td>
 <td><p>The world-space distance between probes.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridCounts</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeGridCounts</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int3</span></code></p></td>
 <td><p>The number of probes on each axis (x, y, z).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeMaxRayDistance</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeMaxRayDistance</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>The maximum distance a ray cast from a probe may travel.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeHysteresis</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeHysteresis</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>Controls the influence of new rays when updating probes. A value close to 1.0 slowly changes probe data, improving stability but reducing accuracy when objects move in the scene. Values of 0.9 or lower will rapidly react to scene changes, but may cause flickering or other instabilities in lighting.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeChangeThreshold</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeChangeThreshold</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A ratio used during probe radiance blending. Specifies a threshold to identify when large lighting changes occur. When the difference in the maximum color components between the previous and current irradiance is larger than this threshold, the hysteresis will be reduced.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeBrightnessThreshold</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeBrightnessThreshold</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A threshold value used during probe radiance blending that determines the maximum allowed difference in brightness between the previous and current irradiance values. This prevents impulses from drastically changing a texel’s irradiance in a single update cycle.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeDistanceExponent</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeDistanceExponent</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
-<td><p>The exponent used during visibility testing. A high value rapidly reacts to depth discontinuities, but may cause banding.</p></td>
+<td><p>An exponent used during visibility testing. A high value rapidly reacts to depth discontinuities but may cause banding.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeIrradianceEncodingGamma</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeIrradianceEncodingGamma</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>An exponent that perceptually encodes irradiance for faster light-to-dark convergence. (See <a class="reference internal" href="#probe-irradiance-gamma">Probe Irradiance Gamma</a>).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">numIrradianceTexels</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">numIrradianceTexels</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>The number of texels in one dimension of the probe irradiance texture (octahedral maps are square), not including the 1-texel border.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">numDistanceTexels</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">numDistanceTexels</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>The number of texels in one dimension of the probe distance texture (octahedral maps are square), not including the 1-texel border.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">numRaysPerProbe</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">numRaysPerProbe</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
 <td><p>The number of rays to cast per probe. When using <code class="docutils literal notranslate"><span class="pre">RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY</span></code>, set this value to a multiple of the irradiance/distance probe texel resolution for best behavior.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">viewBias</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">viewBias</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A small offset along the camera view ray applied to the shaded surface point to avoid numerical instabilities when determining visibility.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">normalBias</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">normalBias</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>A small offset along the surface normal applied to the shaded surface point to avoid numerical instabilities when determining visibility.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeMinFrontfaceDistance</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeMinFrontfaceDistance</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>The minimum distance allowed to a front facing triangle before Probe Relocation moves the probe (see <a class="reference internal" href="#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a>).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeBackfaceThreshold</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeBackfaceThreshold</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
 <td><p>The ratio of rays cast for a probe that may hit back facing triangles before Probe Relocation and State Classification assume the probes is inside of geometry (used by <a class="reference internal" href="#probe-relocation-and-position-optimization">Probe Relocation and Position Optimization</a> and <a class="reference internal" href="#probe-state-classification">Probe State Classification</a>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">movementType</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">movementType</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">EDDGIVolumeMovementType</span></code></p></td>
 <td><p>The mode of movement used for the volume. Can be either <code class="docutils literal notranslate"><span class="pre">Default</span></code> or <code class="docutils literal notranslate"><span class="pre">Scrolling</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">probeScrollOffsets</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probeScrollOffsets</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">int3</span></code></p></td>
 <td><p>The probe grid-space offsets used for scrolling movement.</p></td>
 </tr>
@@ -818,11 +830,7 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
 </div>
 <div class="section" id="volume-movement">
 <span id="ddgi-volumemovement"></span><h2>Volume Movement<a class="headerlink" href="#volume-movement" title="Permalink to this headline">¶</a></h2>
-<p>For general use, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is designed to be stationary, and placed in a fixed scene location. However, for the best results in scenarios where the space that requires global illumination is itself not stationary, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> may also need to move. Examples of this include elevators, trains, cars, and spaceships. To achieve consistent global lighting results for moving spaces, a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> can be attached to the moving space’s frame of reference and translated with the <code class="docutils literal notranslate"><span class="pre">DDGIVolume-&gt;Move(...)</span></code> function.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Since <code class="docutils literal notranslate"><span class="pre">volume-&gt;Move(...)</span></code> <em>translates</em> a volume, the transformation is only correct for frames of reference undergoing translation only (i.e. not rotation also). As a result, the axis-aligned bounding box of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> needs to be large enough to cover the desired space when the space is under rotation.</p>
-</div>
+<p>For general use, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> is designed to be stationary, and placed in a fixed scene location. However, for the best results in scenarios where the space that requires global illumination is itself not stationary, the <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> may also need to move. Examples of this include elevators, trains, cars, and spaceships. To achieve consistent global lighting results for moving spaces, a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> can be attached to the moving space’s frame of reference and translated with the <code class="docutils literal notranslate"><span class="pre">DDGIVolume-&gt;Move(...)</span></code> function. The orientation of a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> can also be dynamically changed with the <code class="docutils literal notranslate"><span class="pre">DDGIVolume-&gt;SetEulerAngles(...)</span></code> function.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">DDGIVolume-&gt;Move(...)</span></code> functionality is also useful for debugging purposes, so that one may visualize how a set of probes function in different locations of a scene without creating multiple volumes.</p>
@@ -861,26 +869,26 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
 <span id="ddgi-volumeblending"></span><h3>Volume Blending<a class="headerlink" href="#volume-blending" title="Permalink to this headline">¶</a></h3>
 <p>The SDK provides a separate HLSL shader function, <code class="docutils literal notranslate"><span class="pre">DDGIGetVolumeBlendWeight(...)</span></code>, to enable blending between multiple <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code> and regions <strong>not</strong> covered by a <code class="docutils literal notranslate"><span class="pre">DDGIVolume</span></code>. This use case may arise if there is a region of the scene that needs dynamic diffuse irradiance and another part that strictly does not (for example, due to artistic or performance reasons), or if a scene has multiple overlapping volumes.</p>
 <p id="ddgi-multipleblending">To see how to use this function to blend between multiple volumes, see <code class="docutils literal notranslate"><span class="pre">samples/test-haress/shaders/Indirect.hlsl</span></code>. The test harness implementation takes an array of volumes (in order of descending priority) and blends together their contributions until it either finishes iterating through all volumes, or the total contribution reaches an acceptable threshold (1 by default). In the case of blending between a volume and a non-volume region, the example provided in the <code class="docutils literal notranslate"><span class="pre">samples/test-haress/shaders/Indirect.hlsl</span></code> shader can be modified as shown below:</p>
-<div class="highlight-hlsl notranslate"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20</pre></div></td><td class="code"><div class="highlight"><pre><span></span><span class="c1">// Hard coded ambient term (black), might be passed in</span>
+<div class="highlight-hlsl notranslate"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal"> 1</span>
+<span class="normal"> 2</span>
+<span class="normal"> 3</span>
+<span class="normal"> 4</span>
+<span class="normal"> 5</span>
+<span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span></pre></div></td><td class="code"><div class="highlight"><pre><span></span><span class="c1">// Hard coded ambient term (black), might be passed in</span>
 <span class="kt">float3</span> <span class="n">ambient</span> <span class="o">=</span> <span class="mf">0.f</span><span class="p">;</span>
 
 <span class="c1">// Get the volume blend weight (0-1)</span>
@@ -983,29 +991,29 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
            
           </div>
           <footer>
-  
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-      
-        <a href="UE4Plugin.html" class="btn btn-neutral float-right" title="Unreal Engine 4 Plugin" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
-      
-      
-        <a href="SDKOverview.html" class="btn btn-neutral float-left" title="RTXGI SDK Overview" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
-      
+        <a href="UE4Plugin.html" class="btn btn-neutral float-right" title="Unreal Engine 4 Plugin" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="SDKOverview.html" class="btn btn-neutral float-left" title="RTXGI SDK Overview" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
     </div>
-  
 
   <hr/>
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2019-2020, NVIDIA
+        &#169; Copyright 2019-2021, NVIDIA.
 
     </p>
   </div>
-  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
-
         </div>
       </div>
 
@@ -1013,7 +1021,6 @@ Line 295: <code class="docutils literal notranslate"><span class="pre">Harness::
 
   </div>
   
-
 
   <script type="text/javascript">
       jQuery(function () {

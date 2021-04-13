@@ -156,7 +156,7 @@ In addition to host side source code, the necessary DDGI shader code is provided
 Volumes
 ------------------------
 
-A ``DDGIVolume`` is a volume of space within which irradiance queries at arbitrary world-space points are supported. The underlying data structure of a ``DDGIVolume`` is a regular grid of probes (see the note below) that spans a volume's extent, and is centered about a user defined volume origin. A ``DDGIVolume`` may cover the entire scene or some sub-volume of the scene, depending on the desired effect. Each probe is represented by an unwrapped octahedral texture map of irradiance and distance values for the set of directions  around that probe (also referred to as an irradiance field). At a high level, the ``DDGIVolume`` provides the ability to: 
+A ``DDGIVolume`` is a volume of space within which irradiance queries at arbitrary world-space points are supported. The underlying data structure of a ``DDGIVolume`` is a regular grid of probes (see the note below) that spans a volume's extent, and is positioned with a user defined volume origin and orientation. A ``DDGIVolume`` may cover the entire scene or some sub-volume of the scene, depending on the desired effect. Each probe is represented by an unwrapped octahedral texture map of irradiance and distance values for the set of directions  around that probe (also referred to as an irradiance field). At a high level, the ``DDGIVolume`` provides the ability to: 
 
 1. Update the per-probe irradiance and filtered distance values
 2. Compute the irradiance for arbitrary world-space locations within the volume
@@ -188,6 +188,9 @@ This structure is defined in ``rtxgi-sdk/include/rtxgi/ddgi/DDGIVolume.h`` and e
    * - ``origin``
      - ``float3``
      - The world-space origin of the volume.
+   * - ``eulerAngles``
+     - ``float3``
+     - The Euler angles of the volume orientation (yxz), in radians.
    * - ``probeGridSpacing``
      - ``float3``
      - The world-space distance between probes.
@@ -208,7 +211,7 @@ This structure is defined in ``rtxgi-sdk/include/rtxgi/ddgi/DDGIVolume.h`` and e
      - A threshold value used during probe radiance blending that determines the maximum allowed difference in brightness between the previous and current irradiance values. This prevents impulses from drastically changing a texel's irradiance in a single update cycle.
    * - ``probeDistanceExponent``
      - ``float``
-     - The exponent used during visibility testing. A high value rapidly reacts to depth discontinuities, but may cause banding.
+     - An exponent used during visibility testing. A high value rapidly reacts to depth discontinuities but may cause banding.
    * - ``probeIrradianceEncodingGamma``
      - ``float``
      - An exponent that perceptually encodes irradiance for faster light-to-dark convergence. (See `Probe Irradiance Gamma`_).
@@ -548,9 +551,7 @@ During the probe update process, performance markers are inserted into the GPU c
 Volume Movement
 ------------------
 
-For general use, the ``DDGIVolume`` is designed to be stationary, and placed in a fixed scene location. However, for the best results in scenarios where the space that requires global illumination is itself not stationary, the ``DDGIVolume`` may also need to move. Examples of this include elevators, trains, cars, and spaceships. To achieve consistent global lighting results for moving spaces, a ``DDGIVolume`` can be attached to the moving space's frame of reference and translated with the ``DDGIVolume->Move(...)`` function. 
-
-.. note:: Since ``volume->Move(...)`` *translates* a volume, the transformation is only correct for frames of reference undergoing translation only (i.e. not rotation also). As a result, the axis-aligned bounding box of a ``DDGIVolume`` needs to be large enough to cover the desired space when the space is under rotation.
+For general use, the ``DDGIVolume`` is designed to be stationary, and placed in a fixed scene location. However, for the best results in scenarios where the space that requires global illumination is itself not stationary, the ``DDGIVolume`` may also need to move. Examples of this include elevators, trains, cars, and spaceships. To achieve consistent global lighting results for moving spaces, a ``DDGIVolume`` can be attached to the moving space's frame of reference and translated with the ``DDGIVolume->Move(...)`` function. The orientation of a ``DDGIVolume`` can also be dynamically changed with the ``DDGIVolume->SetEulerAngles(...)`` function.
 
 .. note:: The ``DDGIVolume->Move(...)`` functionality is also useful for debugging purposes, so that one may visualize how a set of probes function in different locations of a scene without creating multiple volumes.
 

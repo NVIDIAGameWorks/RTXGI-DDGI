@@ -13,9 +13,7 @@ The core of the RTXGI SDK is designed as a container for a number of different g
 Versioning
 ---------------------------------------------------
 
-``rtxgi-sdk/include/Common.h`` contains the ``RTXGI_VERSION`` struct, which defines the current version of the SDK. Applications can check the SDK version using either the static ``major``, ``minor``, and ``revision`` values or by comparing against the result of ``getVersionString()``. 
-
-This documentation is for version 1.10.00 of the SDK.
+``rtxgi-sdk/include/Common.h`` contains the ``RTXGI_VERSION`` struct, which defines the current version of the SDK. Applications can check the SDK version using either the static ``major``, ``minor``, and ``revision`` values or by comparing against the result of ``getVersionString()``.
 
 ---------------------------------------------------
 Types

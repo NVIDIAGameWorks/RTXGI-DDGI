@@ -10,9 +10,10 @@ Built |today|
 .. toctree::
    :maxdepth: 3
 
-   License
    Welcome
+   License
    QuickStart
+   Changelog
    Harness
    SDKOverview
    DDGI

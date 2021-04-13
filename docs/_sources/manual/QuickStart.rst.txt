@@ -34,7 +34,7 @@ This fastest way to start learning RTXGI is to build and run the Test Harness sa
 
 * Any DXR enabled GPU. NVIDIA DXR enabled GPUs:
 
-    * RTX 3090, 3080, 3070
+    * RTX 3090, 3080, 3070, 3060 Ti, 3060
     * RTX 2080 Ti, 2080 SUPER, 2080, 2070 SUPER, 2070, 2060 SUPER, 2060
     * GTX 1660 Ti, 1660 SUPER, 1660
     * GTX 1080 Ti, 1080, 1070, 1060 with at least 6GB of memory

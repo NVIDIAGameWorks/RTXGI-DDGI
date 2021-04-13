@@ -14,7 +14,7 @@
 Test Harness
 ===============
 
-The Test Harness sample application is designed to demonstrate the basic functionality provided by the RTXGI SDK. The Test Harness does not attempt to mimic the complexities of a full game engine, and instead substantially simplifies its scope to be a straightforward guide demonstrating how a renderer may use the RTXGI SDK. To achieve this goal, the minimal renderer design implemented in the Test Harness doesn't include a graphics API abstraction, and DXR and Direct3D 12 API functions are called directly.
+The Test Harness sample application is designed to demonstrate the basic functionality provided by the RTXGI SDK. The Test Harness does not attempt to mimic the complexities of a full game engine and instead substantially simplifies its scope to be a straightforward guide demonstrating how a renderer may use the RTXGI SDK. To achieve this goal, the minimal renderer design implemented in the Test Harness doesn't include a graphics API abstraction and DXR and Direct3D 12 API functions are called directly.
 
 .. _Harness-Features:
 
@@ -33,13 +33,13 @@ The RTXGI SDK Test Harness includes the following features, most of which are de
 * DXR implementation
 * Deferred rendering
 * Primary ray tracing
+* Ray Traced Ambient Occlusion (RTAO) & Basic Denoising
 * Probe Ray Tracing (interoperates with the RTXGI SDK)
 * Indirect Lighting (interoperates with the RTXGI SDK)
 * User Interface with ImGui
 * Visualizations
 * Display Adaptation
-* Ray Traced Ambient Occlusion (RTAO) & Denoising
-* Reference Path Tracer
+* Reference Path Tracer (diffuse only)
 
 The Test Harness main loop (found in ``rtxgi-sdk/samples/test-harness/src/harness/main.cpp``) represents one way to use the :ref:`DDGI` implementation provided in the RTXGI SDK. The remainder of this document describes the ways in which the Test Harness configures test scenes, sets up ``DDGIVolumes``, visualizes run-time behavior, and uses additional features to demonstrate interoperability with other rendering effects.
 
@@ -249,6 +249,9 @@ Volume Configuration
   * - ``origin``
     - ``float3``
     - The world-space origin of the ``DDGIVolume``.
+  * - ``eulerAngles``
+    - ``float3``
+    - The Euler angles of the volume orientation (yxz), in degrees.
   * - ``probeGridCounts``
     - ``int3``
     - The number of probes along each axis (x, y, z).
@@ -575,7 +578,7 @@ The size that the textures appear on screen can be configured through the corres
 Camera and Volume Movement
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-As described in `Mouse and Keyboard`_, the camera and ``DDGIVolume`` can be translated with keyboard commands. Both camera and volume translation are provided to aid in visualizing and debugging the scene and volume. The mouse can be used to rotate the camera by holding the left mouse button, and pan the camera by holding the right mouse button.
+As described in `Mouse and Keyboard`_, the camera and ``DDGIVolume`` can be translated with keyboard commands. Both camera and volume translation are provided to aid in visualizing and debugging the scene and volume. The mouse can be used to rotate the camera by holding the left mouse button, and pan the camera by holding the right mouse button. Furthermore, the ``DDGIVolume`` can also be rotated with a set of slides from volume's GUI as shown in `Graphical User Interface (GUI)`_.
 
 .. _Harness-Input:
 

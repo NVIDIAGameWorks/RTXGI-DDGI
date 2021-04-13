@@ -1,0 +1,152 @@
+.. |reg| unicode:: U+000AE .. REGISTERED SIGN
+   :ltrim:
+
+.. _Changelog:
+
+============
+Change Log
+============
+
+-------------------------------
+v1.1.30 (April 14, 2021)
+-------------------------------
+
+.. raw:: html
+
+   <b>SDK:</b> <br>
+
+* Adds the ability to rotate DDGIVolumes.
+* Adds a control flow fix in the probe classification compute shader that stops back face hits from being treated as front faces hits.
+* Adds changes that fix compilation errors on non-windows platforms.
+
+.. raw:: html
+
+   <b>UE4 Plugin:</b> <br>
+
+* Updates host and shader code to match SDK v1.1.30.
+* Updates engine-to-plugin interface and delegate callbacks. Use r.GlobalIllumination.ExperimentalPlugin [0|1] to enable or disable the plugin from the engine side.
+* Adds the ability to rotate DDGIVolumes in the editor and in-game.
+* Adds the ability to enable or disable individual DDGIVolumes in the editor and in-game.
+* Adds several improvements for infinite scrolling volumes.
+* Adds a GPU stat for RTXGI visualization passes.
+* Adds a fix for resource transition issues.
+* Adds a fix for RTXGI not running in shipping builds.
+* Adds a fix for RTXGI running even when r.RayTracing.ForceRayTracingEffects=0.
+* Adds fixes for compilation errors on non-windows platforms.
+* Vulkan: adds a fix for loaded DDGIVolume textures not being copied to the GPU.
+* Vulkan: adds a fix for a crash on shutdown.
+
+-------------------------------
+v1.1.23 (December 17, 2020)
+-------------------------------
+
+.. raw:: html
+
+   <b>SDK:</b> <br>
+
+* Swaps packed irradiance textures to R10G10B10 format. Using 10-bits for all channels prevents numerical precision issues from causing discoloration artifacts in some cases.
+* Adds a fix for numerical precision issues preventing radiance from reaching black when using 10-bit texture formats in some cases.
+* Adds a fix that prevents inactive probes from contributing to indirect lighting.
+
+.. raw:: html
+
+   <b>Test Harness:</b> <br>
+
+* Adds a fix that includes a BRDF absorption factor. Perfect diffuse reflectors don't exist in the real world!
+* Minor change to normal transformation for rigor. No functional change.
+* Other minor fixes.
+
+.. raw:: html
+
+   <b>UE4 Plugin:</b> <br>
+
+* Updates plugin patches for 4.25.3 and 4.25.4 (Epic and NvRTX).
+* Adds support for 4.26.0 (Epic and NvRTX).
+* Updates SDK and Probe Trace code to match SDK v1.1.23.
+* Adds a "LightingPriority" property to DDGIVolumes that allow a user to specify priority when volumes are being selected for application to lighting.
+* Cleans up the volume culling and sorting code. Volumes are sorted by light priority, density, and then again by density across all light priorities after the final truncated list is determined.
+* Swaps the probe states resource to an SRV to avoid the UAV limitations UE4 imposes to enable the inactive probes contribution fix from the SDK.
+* Adds a fix for Issue #30: a crash when running a packaged build from projects that have the async loading thread feature enabled (contributed by Robert Kihl, Embark Studios).
+* Updates resource barriers to the new 4.26 transition API (4.26 plugins only).
+* Corrects and updates the plugin metadata.
+* Updates documentation.
+
+
+-------------------------------
+v1.1.22 (October 30, 2020)
+-------------------------------
+
+Improves probe visualization in the Test Harness.
+
+.. raw:: html
+
+   <b>SDK:</b> <br>
+
+* Fixes sRGB conversion issues in probe visualization
+* Adds irradiance boost in probe visualization
+* Removes duplicate application of tonemapping in probe visualization
+* Removes dead and duplicate code
+
+-------------------------------
+v1.1.20 (October 23, 2020)
+-------------------------------
+
+Improvements to DDGI math and fixes to Test Harness functionality.
+
+.. raw:: html
+
+   <b>SDK:</b> <br>
+
+* Fixes probe blending and irradiance reconstruction to properly account for summing the cosine weights (was previously off by a factor of 2).
+* Adds a 9% boost to the final irradiance estimate due to energy loss from precision issues caused by the R10G10B10A2_UNORM's lower bit depth.
+* Adds define to swap the probe distance texture format.
+* Makes FP16 the default probe distance format. The blending math change makes FP16 viable.
+* Adds and uses 2PI static constant.
+* Bumps revision number.
+
+.. raw:: html
+
+   <b>Test Harness:</b> <br>
+
+* Updates probe irradiance and distance reconstruction to account for math changes in the SDK.
+* Updates random hemisphere sampling code. Adds cosine distribution version.
+* Fixes broken shading normals in CHS.
+* Updates the Path Tracer to use new random sampling and throughput computation.
+* Improves ProbeTraceRGS and PrimaryTraceRGS logic.
+* Adds SkyIntensity term. Sky (miss) lighting is no longer hardcoded in the Miss shader. Exposes this value to Config files.
+* Exposes AOPower setting to Config files.
+* "BaseColor" renamed "Albedo" to match PBRT terminology.
+* Adds Furnace Test scene.
+* Updates probe configuration in Sponza.
+* Updates Two Rooms ground material to have less of a red hue. With the sampling improvements, the red gets very intense with many bounces.
+
+-------------------------------
+v1.1.0 (September 2, 2020)
+-------------------------------
+
+.. raw:: html
+
+   <b>SDK:</b> <br>
+
+* Support for multiple coordinate systems improved.
+
+.. raw:: html
+
+   <b>Test Harness:</b> <br>
+
+* Asset loading refactor. Moves to GLTF2 interchange format.
+* Other substantial infrastructure improvements.
+* Path tracer improvements.
+
+.. raw:: html
+
+   <b>UE4 Plugin:</b> <br>
+
+* Initial release!
+* Mainline UE4.25.3 and NVIDIA RTX 4.25.3 (NvRTX) supported.
+
+-------------------------------
+v1.0.0 (March 23, 2020)
+-------------------------------
+
+Initial SDK release!

@@ -4,7 +4,7 @@
    :ltrim:
 
 
-NVIDIA RTXGI SDK 1.1 Documentation
+NVIDIA RTXGI SDK 1.1.30 Documentation
 ===============================================
 
 Built |today|
