@@ -7,7 +7,7 @@ index 00000000000..0116354bcdb
 +{
 +    "FileVersion": 3,
 +    "Version": 1,
-+    "VersionName": "1.1.30",
++    "VersionName": "1.1.31",
 +    "FriendlyName": "NVIDIA RTX Global Illumination",
 +    "Description": "Real-Time Ray Traced Global Illumination",
 +    "Category": "Rendering",
@@ -199,7 +199,7 @@ index 00000000000..1cc39e068c5
 +    float SceneDepth = ConvertFromDeviceZ(DeviceZ);
 +    float3 WorldPosition = InScreenVector * SceneDepth + WorldCameraOrigin;
 +    float3 Normal = normalize(Normals.Load(int3(PixelPos, 0)).xyz * 2.0f - 1.0f);
-+    float3 baseColor = sRGBToLinear(BaseColor.Load(int3(PixelPos, 0)).rgb);
++    float3 baseColor = BaseColor.Load(int3(PixelPos, 0)).rgb;
 +    float metallic = Metallic.Load(int3(PixelPos, 0)).r;
 +    float3 CameraDirection = normalize(InScreenVector);
 +
