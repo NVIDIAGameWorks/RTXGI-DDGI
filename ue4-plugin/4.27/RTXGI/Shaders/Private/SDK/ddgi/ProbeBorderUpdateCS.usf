@@ -1,0 +1,135 @@
+/*
+* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+*
+* NVIDIA CORPORATION and its licensors retain all intellectual property
+* and proprietary rights in and to this software, related documentation
+* and any modifications thereto.  Any use, reproduction, disclosure or
+* distribution of this software and related documentation without an express
+* license agreement from NVIDIA CORPORATION is strictly prohibited.
+*/
+
+// REQUIRED SHADER DEFINES ---------------------------------------------------------------
+
+// PROBE_NUM_TEXELS must be passed in as a define at shader compilation time.
+// This define specifies the number of texels of a single dimension of a probe.
+// #define PROBE_NUM_TEXELS 6   // probe irradiance is 6x6 texels
+// #define PROBE_NUM_TEXELS 14  // probe distance data is 14x14 texels
+
+// PROBE_DATA_REGISTER must be passed in as a define at shader compilation time.
+// This define specifies what register the DDGIVolume's probe data is bound to (matching the root signature).
+// #define PROBE_DATA_REGISTER u2
+
+// For example usage, see Harness.cpp::CompileVolumeShaders() in the Test Harness.
+
+// --------------------------------------------------------------------------------------
+
+#include "/Engine/Private/Common.ush"
+#include "../DDGIVolumeDefines.ush"
+
+// Probe irradiance or filtered distance
+RWTexture2D<float4> DDGIVolumeProbeDataUAV;
+
+[numthreads(8, 8, 1)]
+void DDGIProbeBorderRowUpdateCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    uint probeSideLength = (PROBE_NUM_TEXELS + 2);
+    uint probeSideLengthMinusOne = (probeSideLength - 1);
+
+    // Map thread index to border row texel coordinates
+    uint2 threadCoordinates = DispatchThreadID.xy;
+    threadCoordinates.y *= probeSideLength;
+
+    // Ignore the corner texels
+    int mod = (DispatchThreadID.x % probeSideLength);
+    if (mod == 0 || mod == probeSideLengthMinusOne)
+    {
+        return;
+    }
+
+    // Compute the interior texel coordinates to copy (top row)
+    uint probeStart = uint(threadCoordinates.x / probeSideLength) * probeSideLength;
+    uint offset = probeSideLengthMinusOne - (threadCoordinates.x % probeSideLength);
+
+    uint2 copyCoordinates = uint2(probeStart + offset, (threadCoordinates.y + 1));
+
+#if RTXGI_DDGI_DEBUG_BORDER_COPY_INDEXING && (RTXGI_DDGI_FORMAT_IRRADIANCE == 1)
+    DDGIVolumeProbeDataUAV[threadCoordinates] = float4(threadCoordinates, copyCoordinates);
+    threadCoordinates.y += probeSideLengthMinusOne;
+    copyCoordinates = uint2(probeStart + offset, threadCoordinates.y - 1);
+    DDGIVolumeProbeDataUAV[threadCoordinates] = float4(threadCoordinates, copyCoordinates);
+    return;
+#endif
+
+    // Top row
+    DDGIVolumeProbeDataUAV[threadCoordinates] = DDGIVolumeProbeDataUAV[copyCoordinates];
+
+    // Compute the interior texel coordinate to copy (bottom row)
+    threadCoordinates.y += probeSideLengthMinusOne;
+    copyCoordinates = uint2(probeStart + offset, threadCoordinates.y - 1);
+
+    // Bottom row
+    DDGIVolumeProbeDataUAV[threadCoordinates] = DDGIVolumeProbeDataUAV[copyCoordinates];
+}
+
+[numthreads(8, 8, 1)]
+void DDGIProbeBorderColumnUpdateCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    uint probeSideLength = (PROBE_NUM_TEXELS + 2);
+    uint probeSideLengthMinusOne = (probeSideLength - 1);
+
+    // Map thread index to border row texel coordinates
+    uint2 threadCoordinates = DispatchThreadID.xy;
+    threadCoordinates.x *= probeSideLength;
+
+    uint2 copyCoordinates = uint2(0, 0);
+
+    // Handle the corner texels
+    int mod = (threadCoordinates.y % probeSideLength);
+    if (mod == 0 || mod == probeSideLengthMinusOne)
+    {
+        // Left corner
+        copyCoordinates.x = threadCoordinates.x + PROBE_NUM_TEXELS;
+        copyCoordinates.y = threadCoordinates.y - sign(mod - 1) * PROBE_NUM_TEXELS;
+
+    #if RTXGI_DDGI_DEBUG_BORDER_COPY_INDEXING && (RTXGI_DDGI_FORMAT_IRRADIANCE == 1)
+        DDGIVolumeProbeDataUAV[threadCoordinates] = float4(threadCoordinates, copyCoordinates);
+    #else
+        DDGIVolumeProbeDataUAV[threadCoordinates] = DDGIVolumeProbeDataUAV[copyCoordinates];
+    #endif
+
+        // Right corner
+        threadCoordinates.x += probeSideLengthMinusOne;
+        copyCoordinates.x = threadCoordinates.x - PROBE_NUM_TEXELS;
+
+    #if RTXGI_DDGI_DEBUG_BORDER_COPY_INDEXING & (RTXGI_DDGI_FORMAT_IRRADIANCE == 1)
+        DDGIVolumeProbeDataUAV[threadCoordinates] = float4(threadCoordinates, copyCoordinates);
+    #else
+        DDGIVolumeProbeDataUAV[threadCoordinates] = DDGIVolumeProbeDataUAV[copyCoordinates];
+    #endif
+        return;
+    }
+
+    // Compute the interior texel coordinates to copy (left column)
+    uint probeStart = uint(threadCoordinates.y / probeSideLength) * probeSideLength;
+    uint offset = probeSideLengthMinusOne - (threadCoordinates.y % probeSideLength);
+
+    copyCoordinates = uint2(threadCoordinates.x + 1, probeStart + offset);
+
+#if RTXGI_DDGI_DEBUG_BORDER_COPY_INDEXING && (RTXGI_DDGI_FORMAT_IRRADIANCE == 1)
+    DDGIVolumeProbeDataUAV[threadCoordinates] = float4(threadCoordinates, copyCoordinates);
+    threadCoordinates.x += probeSideLengthMinusOne;
+    copyCoordinates = uint2(threadCoordinates.x - 1, probeStart + offset);
+    DDGIVolumeProbeDataUAV[threadCoordinates] = float4(threadCoordinates, copyCoordinates);
+    return;
+#endif
+
+    // Left column
+    DDGIVolumeProbeDataUAV[threadCoordinates] = DDGIVolumeProbeDataUAV[copyCoordinates];
+
+    // Compute the interior texel coordinate to copy (right column)
+    threadCoordinates.x += probeSideLengthMinusOne;
+    copyCoordinates = uint2(threadCoordinates.x - 1, probeStart + offset);
+
+    // Right column
+    DDGIVolumeProbeDataUAV[threadCoordinates] = DDGIVolumeProbeDataUAV[copyCoordinates];
+}

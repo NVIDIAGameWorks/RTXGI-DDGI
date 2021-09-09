@@ -1,0 +1,149 @@
+/*
+* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+*
+* NVIDIA CORPORATION and its licensors retain all intellectual property
+* and proprietary rights in and to this software, related documentation
+* and any modifications thereto.  Any use, reproduction, disclosure or
+* distribution of this software and related documentation without an express
+* license agreement from NVIDIA CORPORATION is strictly prohibited.
+*/
+
+#include "/Engine/Public/Platform.ush"
+
+#include "/Plugin/RTXGI/Private/SDK/ddgi/ProbeCommon.ush"
+
+Texture2D<float4> ProbeIrradianceTexture;
+Texture2D<float4> ProbeDistanceTexture;
+Texture2D<float4> ProbeOffsets;
+Texture2D<uint> ProbeStates;
+SamplerState ProbeSampler;
+
+int Mode;
+float ProbeRadius;
+float DepthScale;
+int VolumeProbeNumIrradianceTexels;
+int VolumeProbeNumDistanceTexels;
+float VolumeProbeIrradianceEncodingGamma;
+float3 VolumePosition;
+float4 VolumeRotation;
+float3 VolumeProbeGridSpacing;
+int3   VolumeProbeGridCounts;
+float4x4 WorldToClip;
+float3 CameraPosition;
+float PreExposure;
+uint ShouldUsePreExposure;
+int3 VolumeProbeScrollOffsets;
+float IrradianceScalar;
+
+struct FVisualizeDDGIProbesVSToPS
+{
+    nointerpolation float3 ProbeOrigin : TEXCOORD0;
+    nointerpolation uint InstanceId : TEXCOORD1;
+    float4 WorldPosition : TEXCOORD2;
+};
+
+void VisualizeDDGIProbesVS(
+    in float4 InPosition : ATTRIBUTE0,
+    uint InstanceId : SV_InstanceID,
+    out FVisualizeDDGIProbesVSToPS Output,
+    out float4 OutPosition : SV_POSITION
+)
+{
+#if RTXGI_DDGI_PROBE_RELOCATION
+    #if RTXGI_DDGI_INFINITE_SCROLLING_VOLUME
+        float3 Translation = DDGIGetProbeWorldPositionWithOffset(InstanceId, VolumePosition, VolumeRotation, VolumeProbeGridCounts, VolumeProbeGridSpacing, VolumeProbeScrollOffsets, ProbeOffsets);
+    #else
+        float3 Translation = DDGIGetProbeWorldPositionWithOffset(InstanceId, VolumePosition, VolumeRotation, VolumeProbeGridCounts, VolumeProbeGridSpacing, ProbeOffsets);
+    #endif
+#else
+    float3 Translation = DDGIGetProbeWorldPosition(InstanceId, VolumePosition, VolumeRotation, VolumeProbeGridCounts, VolumeProbeGridSpacing);
+#endif
+
+    float4x4 Transform = {	ProbeRadius, 0.f, 0.f, 0.f,
+                            0.f, ProbeRadius, 0.f, 0.f,
+                            0.f, 0.f, ProbeRadius, 0.f,
+                            Translation.x, Translation.y, Translation.z, 1.f};
+
+    Output.ProbeOrigin = Translation;
+    Output.InstanceId = InstanceId;
+    Output.WorldPosition = float4(InPosition.xyz, 1.f);
+    Output.WorldPosition = mul(Output.WorldPosition, Transform);
+
+    OutPosition = mul(Output.WorldPosition, WorldToClip);
+}
+
+void VisualizeDDGIProbesPS(
+    in FVisualizeDDGIProbesVSToPS Input,
+    out float4 OutColor : SV_Target0)
+{
+    // Compute UVs based on ProbeID and direction of the fragment on the sphere
+    float3 WorldPos = Input.WorldPosition.xyz;
+    float3 Direction = normalize(Input.WorldPosition.xyz - Input.ProbeOrigin);
+    float2 OctantCoordinates = DDGIGetOctahedralCoordinates(Direction);
+
+    float3 Output = float3(0.0f, 0.0f, 0.0f);
+
+    #if RTXGI_DDGI_INFINITE_SCROLLING_VOLUME
+        float2 ProbeUVDistance = DDGIGetProbeUV(Input.InstanceId, OctantCoordinates, VolumeProbeGridCounts, VolumeProbeNumDistanceTexels, VolumeProbeScrollOffsets);
+        float2 ProbeUVIrradiance = DDGIGetProbeUV(Input.InstanceId, OctantCoordinates, VolumeProbeGridCounts, VolumeProbeNumIrradianceTexels, VolumeProbeScrollOffsets);
+    #else
+        float2 ProbeUVDistance = DDGIGetProbeUV(Input.InstanceId, OctantCoordinates, VolumeProbeGridCounts, VolumeProbeNumDistanceTexels);
+        float2 ProbeUVIrradiance = DDGIGetProbeUV(Input.InstanceId, OctantCoordinates, VolumeProbeGridCounts, VolumeProbeNumIrradianceTexels);
+    #endif
+
+    if (Mode == 1)
+    {
+        // Decode the tone curve
+        Output = ProbeIrradianceTexture.SampleLevel(ProbeSampler, ProbeUVIrradiance, 0).rgb;
+        Output = pow(Output.rgb, VolumeProbeIrradianceEncodingGamma * 0.5f);
+
+        // Go back to linear irradiance
+        Output *= Output;
+
+        // Multiply by the area of the integration domain (2PI) to complete the irradiance estimate. Divide by PI to normalize for the display.
+        Output *= 2.f;
+
+        #if !RTXGI_DDGI_FORMAT_IRRADIANCE
+            Output *= 1.0989f;    // Adjust for energy loss due to reduced precision in the R10G10B10A2 irradiance texture format
+        #endif
+
+        Output /= IrradianceScalar;
+    }
+    else if (Mode == 2)
+    {
+        float Distance = ProbeDistanceTexture.SampleLevel(ProbeSampler, ProbeUVDistance, 0).r;
+        Output = float3(Distance / DepthScale, Distance / DepthScale, Distance / DepthScale);
+    }
+    else if (Mode == 3)
+    {
+        float Distance = ProbeDistanceTexture.SampleLevel(ProbeSampler, ProbeUVDistance, 0).g;
+        Output = float3(Distance / DepthScale, Distance / DepthScale, Distance / DepthScale);
+    }
+    else
+    {
+        discard;
+    }
+
+    Output *= ShouldUsePreExposure ? PreExposure : 1.0f;
+
+#if RTXGI_DDGI_PROBE_CLASSIFICATION
+    {
+        #if RTXGI_DDGI_INFINITE_SCROLLING_VOLUME
+            int probeIndex = DDGIGetProbeIndexOffset(Input.InstanceId, VolumeProbeGridCounts, VolumeProbeScrollOffsets);
+        #else
+            int probeIndex = Input.InstanceId;
+        #endif
+
+        int2 texelPosition = DDGIGetProbeTexelPosition(probeIndex, VolumeProbeGridCounts);
+        int  probeState = ProbeStates[texelPosition];
+        if (probeState == PROBE_STATE_INACTIVE)
+        {
+            float3 SurfaceToCamera = normalize(CameraPosition - Input.WorldPosition);
+            if (dot(SurfaceToCamera, Direction) < 0.5f)
+                Output = float3(1.0f, 0.0f, 0.0f);
+        }
+    }
+#endif
+
+    OutColor = float4(Output, 1.f);
+}

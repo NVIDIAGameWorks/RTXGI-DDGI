@@ -1,0 +1,174 @@
+/*
+* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+*
+* NVIDIA CORPORATION and its licensors retain all intellectual property
+* and proprietary rights in and to this software, related documentation
+* and any modifications thereto.  Any use, reproduction, disclosure or
+* distribution of this software and related documentation without an express
+* license agreement from NVIDIA CORPORATION is strictly prohibited.
+*/
+
+/*
+This shader shoots a viewport of rays so you can see what the volume sees, copying the logic of ProbeUpdateRGS.usf.
+
+r.RTXGI.DDGI.ProbesTextureVis 0 - turn it off
+r.RTXGI.DDGI.ProbesTextureVis 1 - render the scene color.  (VOLUME_DEBUG_VIEW == 0)
+r.RTXGI.DDGI.ProbesTextureVis 2 - render misses (blue), hits (green), back face hits (red).  (VOLUME_DEBUG_VIEW == 1)
+
+then "vis DDGIProbesTexure" to see the texture
+*/
+
+#include "/Engine/Private/HairStrands/HairStrandsVoxelPageCommonStruct.ush"
+#include "/Engine/Private/Common.ush"
+
+// needed by DeferredLightingCommon included indirectly
+#define SUPPORT_CONTACT_SHADOWS 0
+
+//macro to deal with parameter not used by miss shaders
+#define OcclusionCullDirection 0
+
+// from RayTracingPrimaryRays.usf - see that .cpp for how to pass all these params properly
+#define LTCMatTexture               RaytracingLightsDataPacked.LTCMatTexture
+#define LTCMatSampler               RaytracingLightsDataPacked.LTCMatSampler
+#define LTCAmpTexture               RaytracingLightsDataPacked.LTCAmpTexture
+#define LTCAmpSampler               RaytracingLightsDataPacked.LTCAmpSampler
+#define PreIntegratedGF             ReflectionStruct.PreIntegratedGF
+#define PreIntegratedGFSampler      ReflectionStruct.PreIntegratedGFSampler
+
+#include "/Engine/Private/DeferredLightingCommon.ush"
+#include "/Engine/Private/DeferredShadingCommon.ush"
+#include "/Engine/Private/PathTracing/Utilities/PathTracingRandomSequence.ush"
+#include "/Engine/Private/SceneTextureParameters.ush"
+#include "/Engine/Private/RayTracing/RayTracingCommon.ush"
+#include "/Engine/Private/RayTracing/RayTracingDeferredShadingCommon.ush"
+#include "/Engine/Private/RayTracing/RayTracingHitGroupCommon.ush"
+#include "/Engine/Private/RayTracing/RayTracingDirectionalLight.ush"
+#include "/Engine/Private/RayTracing/RayTracingRectLight.ush"
+#include "/Engine/Private/RayTracing/RayTracingSphereLight.ush"
+#include "/Engine/Private/RayTracing/RayTracingSpotLight.ush"
+#include "/Engine/Private/RayTracing/RayTracingPointLight.ush"
+#include "/Engine/Private/RayTracing/RayTracingLightingCommon.ush"
+#include "/Engine/Private/ReflectionEnvironmentShared.ush"
+#include "/Engine/Private/Montecarlo.ush"
+#include "/Engine/Private/HeightFogCommon.ush"
+#include "/Engine/Private/SobolRandom.ush"
+
+// START RGS PARAMS
+RaytracingAccelerationStructure TLAS;
+
+uint        FrameRandomSeed;
+
+float3      CameraPos;
+float4x4    CameraMatrix;
+
+float       DDGIVolume_PreExposure;
+uint        DDGIVolume_ShouldUsePreExposure;
+
+float3              Sky_Color;
+TextureCube<float4> Sky_Texture;
+SamplerState        Sky_TextureSampler;
+
+RWTexture2D<float4> RadianceOutput;
+
+// END RGS PARAMS
+
+float3 GetEnvironmentalRadiance(in float3 direction)
+{
+    return Sky_Color * TextureCubeSampleLevel(Sky_Texture, Sky_TextureSampler, direction, 0).rgb;
+}
+
+// This should match the logic of ProbeUpdateRGS above, for best results.
+// It isn't sampling DDGI volumes though so is only direct lighting.
+RAY_TRACING_ENTRY_RAYGEN(ProbeViewRGS)
+{
+    uint2 DispatchIndex = DispatchRaysIndex().xy;
+
+    // This is to make the radiance be in a viewable range
+    float radianceMultiplier = DDGIVolume_ShouldUsePreExposure ? DDGIVolume_PreExposure : 1.0f;
+
+    RayDesc Ray;
+    Ray.Origin = CameraPos;
+    float3 rayTarget = float3(float2(DispatchIndex.xy) / float2(DispatchRaysDimensions().xy) * 2.0f - 1.0f, 1.0f);
+    rayTarget.y *= -1.0f;
+    float3 rayDir = mul(float4(normalize(rayTarget), 0.0f), CameraMatrix).xyz;
+    Ray.Direction = rayDir;
+    Ray.TMin = 0.f;
+    Ray.TMax = 10000.0f;
+
+    const int ReflectedShadowsType = 1; // = hard shadows.  make configurable?
+    const uint RayFlags = 0;
+    const uint InstanceInclusionMask = RAY_TRACING_MASK_ALL;
+    const bool bShouldDoDirectLighting = true;
+    const bool bShouldDoEmissiveAndIndirectLighting = true;
+    const bool bRayTraceSkyLightContribution = false;
+    const bool bDecoupleSampleGeneration = true;
+    const bool bEnableSkyLightContribution = false;
+    float3 PathVertexRadiance = float3(0, 0, 0);
+    FRayCone RayCone = (FRayCone)0;
+    float MaxNormalBias = 0.01f;
+
+    // Trace
+    uint linear_rand = DispatchIndex.x + DispatchIndex.y * 9973;
+    RandomSequence RandSequence;
+    RandomSequence_Initialize(RandSequence, linear_rand, FrameRandomSeed);
+    uint2 PixelCoord = DispatchRaysIndex().xy;
+
+    FMaterialClosestHitPayload Payload = TraceRayAndAccumulateResults(
+        Ray,
+        TLAS,
+        RayFlags,
+        InstanceInclusionMask,
+        RandSequence,
+        PixelCoord,
+        MaxNormalBias,
+        ReflectedShadowsType,
+        bShouldDoDirectLighting,
+        bShouldDoEmissiveAndIndirectLighting,
+        bRayTraceSkyLightContribution,
+        bDecoupleSampleGeneration,
+        RayCone,
+        bEnableSkyLightContribution,
+        PathVertexRadiance);
+
+    float4 result = float4(PathVertexRadiance.xyz, Payload.HitT);
+
+    // show ray miss / hit / back face hit
+    #if VOLUME_DEBUG_VIEW == 1
+    {
+        if (Payload.IsMiss())
+        {
+            RadianceOutput[DispatchIndex.xy] = float4(0.0f, 0.0f, 100.0f, 1e27f);
+        }
+        else
+        {
+            if (Payload.IsFrontFace() || Payload.ShadingModelID == SHADINGMODELID_TWOSIDED_FOLIAGE)
+                RadianceOutput[DispatchIndex.xy] = float4(0.0f, 100.0f, 0.0f, Payload.HitT);
+            else
+                RadianceOutput[DispatchIndex.xy] = float4(100.0f, 0.0f, 0.0f, Payload.HitT);
+        }
+        return;
+    }
+    #endif
+
+    // Ray miss. Set hit distance to a large value and exit early.
+    if (Payload.IsMiss())
+    {
+        result.rgb += GetEnvironmentalRadiance(Ray.Direction);
+        result.rgb *= radianceMultiplier;
+
+        result.w = 1e27f;
+        RadianceOutput[DispatchIndex.xy] = result;
+        return;
+    }
+
+    // Hit a surface backface. Set the radiance to black and exit early.
+    if (!Payload.IsFrontFace() && Payload.ShadingModelID != SHADINGMODELID_TWOSIDED_FOLIAGE)
+    {
+        // Shorten the hit distance on a backface hit by 20%
+        // Make distance negative to encode backface for the probe position preprocess.
+        RadianceOutput[DispatchIndex.xy] = float4(0.f, 0.f, 0.f, -Payload.HitT * 0.2f);
+        return;
+    }
+
+    RadianceOutput[DispatchIndex.xy] = float4(PathVertexRadiance.xyz * radianceMultiplier, Payload.HitT);
+}

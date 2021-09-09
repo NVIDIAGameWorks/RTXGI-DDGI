@@ -1,0 +1,144 @@
+/*
+* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+*
+* NVIDIA CORPORATION and its licensors retain all intellectual property
+* and proprietary rights in and to this software, related documentation
+* and any modifications thereto.  Any use, reproduction, disclosure or
+* distribution of this software and related documentation without an express
+* license agreement from NVIDIA CORPORATION is strictly prohibited.
+*/
+
+#include "/Engine/Public/Platform.ush"
+#include "/Engine/Private/DeferredShadingCommon.ush"
+
+Texture2D<float4>   InputGITexture;
+Texture2D<float4>   NormalTexture;
+Texture2D<float>    DepthTexture;
+Texture2D<float4>   BaseColorTexture;
+Texture2D<float4>   MetallicTexture;
+
+RWTexture2D<float4> SceneColorOutput;
+
+SamplerState        PointClampSampler;
+SamplerState        LinearClampSampler;
+
+float4              InputViewSizeAndInvSize;
+float               RelativeDistanceThreshold;
+float               NormalPower;
+
+struct BilinearFilter
+{
+    int2 Origin;
+    float2 Weights;
+};
+
+BilinearFilter GetBilinearFilter(float2 UV, float2 TexSize)
+{
+    float2 T = UV * TexSize - 0.5;
+
+    BilinearFilter Result;
+    Result.Origin = int2(floor(T));
+    Result.Weights = T - Result.Origin;
+
+    return Result;
+}
+
+float ApplyBilinearFilter(float S00, float S10, float S01, float S11, BilinearFilter Filter)
+{
+    return lerp(lerp(S00, S10, Filter.Weights.x), lerp(S01, S11, Filter.Weights.x), Filter.Weights.y);
+}
+
+float4 ApplyBilinearFilter(float4 S00, float4 S10, float4 S01, float4 S11, BilinearFilter Filter)
+{
+    return lerp(lerp(S00, S10, Filter.Weights.x), lerp(S01, S11, Filter.Weights.x), Filter.Weights.y);
+}
+
+float4 BilinearWithCustomWeightsFloat4(Texture2D<float4> Tex, BilinearFilter Filter, float4 CustomWeights, float InterpolatedCustomWeight)
+{
+    float4 S00 = Tex[Filter.Origin + int2(0, 0)].rgba;
+    float4 S10 = Tex[Filter.Origin + int2(1, 0)].rgba;
+    float4 S01 = Tex[Filter.Origin + int2(0, 1)].rgba;
+    float4 S11 = Tex[Filter.Origin + int2(1, 1)].rgba;
+    S00 *= CustomWeights.x;
+    S10 *= CustomWeights.y;
+    S01 *= CustomWeights.z;
+    S11 *= CustomWeights.w;
+
+    float4 Result = ApplyBilinearFilter(S00, S10, S01, S11, Filter);
+    Result /= InterpolatedCustomWeight;
+    return Result;
+}
+
+float GetGeometryWeight(float SceneDepth, float3 WorldPosition, float3 Normal, float3 SampleWorldPosition, float3 SampleNormal)
+{
+    float PlaneDistance = dot(Normal, WorldPosition - SampleWorldPosition);
+    float RelativePlaneDistance = PlaneDistance / (RelativeDistanceThreshold * SceneDepth);
+
+    float PlaneDistanceWeight = smoothstep(0.f, 1.f, 1.f - RelativePlaneDistance);
+    float NormalWeight = NormalPower == 0.f ? 1.f : pow(saturate(dot(Normal, SampleNormal)), NormalPower);
+
+    return PlaneDistanceWeight * NormalWeight;
+}
+
+float GetTapWeight(int2 PixelIndex, float SceneDepth, float3 WorldPosition, float3 Normal)
+{
+    float2 TapScreenUV = (float2(PixelIndex) + 0.5f) * float2(InputViewSizeAndInvSize.zw);
+    int2 GBufferNearestPixelIndex = int2(floor(TapScreenUV * View.ViewSizeAndInvSize.xy));
+    float2 GBufferNearestUV = (GBufferNearestPixelIndex + .5f) * float2(View.ViewSizeAndInvSize.zw);
+    float4 GBufferNearestPosition = float4(GBufferNearestUV * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f), 0.0f, 1.0f);
+    float3 GBufferNearestInScreenVector = mul(float4(GBufferNearestPosition.xy, 1, 0), View.ScreenToTranslatedWorld).xyz;
+
+    float2 TapBufferUV = TapScreenUV * View.ViewSizeAndInvSize.xy * View.BufferSizeAndInvSize.zw;
+    float TapDeviceZ = DepthTexture.SampleLevel(PointClampSampler, TapBufferUV, 0.f).r;
+    float TapSceneDepth = ConvertFromDeviceZ(TapDeviceZ);
+    float3 TapWorldPosition = GBufferNearestInScreenVector * TapSceneDepth + View.WorldCameraOrigin;
+    float3 TapNormal = normalize(DecodeNormal(NormalTexture.SampleLevel(PointClampSampler, TapBufferUV, 0.f).xyz));
+
+    return GetGeometryWeight(SceneDepth, WorldPosition, Normal, TapWorldPosition, TapNormal);
+}
+
+float3 GetAlbedo(int2 PixelIndex)
+{
+    float3 BaseColor = DecodeBaseColor(BaseColorTexture.Load(int3(PixelIndex, 0)).rgb);
+    float Metallic = MetallicTexture.Load(int3(PixelIndex, 0)).r;
+    return BaseColor - BaseColor * Metallic;
+}
+
+#define THGP_DIM 8
+
+[numthreads(THGP_DIM, THGP_DIM, 1)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    int2 PixelIndex = (DispatchThreadID.xy);
+    float2 ScreenUV = (float2(PixelIndex) + .5f) * float2(View.ViewSizeAndInvSize.zw);
+    float4 Position = float4(ScreenUV * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f), 0.0f, 1.0f);
+    float3 InScreenVector = mul(float4(Position.xy, 1, 0), View.ScreenToTranslatedWorld).xyz;
+
+    float DeviceZ = DepthTexture.Load(int3(PixelIndex, 0)).r;
+    float SceneDepth = ConvertFromDeviceZ(DeviceZ);
+    float3 WorldPosition = InScreenVector * SceneDepth + View.WorldCameraOrigin;
+    float3 Normal = normalize(DecodeNormal(NormalTexture.Load(int3(PixelIndex, 0)).xyz));
+
+    float3 Albedo = GetAlbedo(PixelIndex);
+
+    BilinearFilter InputBilinearFilter = GetBilinearFilter(ScreenUV, InputViewSizeAndInvSize.xy);
+    float4 InputBilinearTapWeights = false;
+
+    InputBilinearTapWeights.x = GetTapWeight(InputBilinearFilter.Origin + int2(0, 0), SceneDepth, WorldPosition, Normal);
+    InputBilinearTapWeights.y = GetTapWeight(InputBilinearFilter.Origin + int2(1, 0), SceneDepth, WorldPosition, Normal);
+    InputBilinearTapWeights.z = GetTapWeight(InputBilinearFilter.Origin + int2(0, 1), SceneDepth, WorldPosition, Normal);
+    InputBilinearTapWeights.w = GetTapWeight(InputBilinearFilter.Origin + int2(1, 1), SceneDepth, WorldPosition, Normal);
+
+    float InterpolatedTapWeight = ApplyBilinearFilter(InputBilinearTapWeights.x, InputBilinearTapWeights.y, InputBilinearTapWeights.z, InputBilinearTapWeights.w, InputBilinearFilter);
+    if (InterpolatedTapWeight > 0.01f)
+    {
+        float4 UpscaledGI = BilinearWithCustomWeightsFloat4(InputGITexture, InputBilinearFilter, InputBilinearTapWeights, InterpolatedTapWeight);
+        SceneColorOutput[PixelIndex] += float4(UpscaledGI.rgb * Albedo, UpscaledGI.a);
+    }
+    else
+    {
+        // Didn't find matching surface. Simply use bilinear filter (typically better than fallback to black).
+        float4 GISample = InputGITexture.SampleLevel(LinearClampSampler, ScreenUV, 0.f);
+        SceneColorOutput[PixelIndex] += float4(GISample.rgb * Albedo, GISample.a);
+    }
+}

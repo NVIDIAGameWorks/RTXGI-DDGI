@@ -1,0 +1,132 @@
+/*
+* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+*
+* NVIDIA CORPORATION and its licensors retain all intellectual property
+* and proprietary rights in and to this software, related documentation
+* and any modifications thereto.  Any use, reproduction, disclosure or
+* distribution of this software and related documentation without an express
+* license agreement from NVIDIA CORPORATION is strictly prohibited.
+*/
+
+#ifndef RTXGI_DDGI_VOLUME_DEFINES_H
+#define RTXGI_DDGI_VOLUME_DEFINES_H
+
+// --- Resources -------------------------------------
+
+// Define RTXGI_DDGI_RESOURCE_MANAGEMENT before including DDGIVolume.h to specify the resource
+// management mode.
+// 0: "Unmanaged", the application creates, allocates, deallocates, and destroys all graphics resources.
+// 1: "Managed", the SDK creates, allocates, deallocates, and destroys all graphics
+// resources - except for the Descriptor Heap (D3D12) or Descriptor Set (Vulkan).
+// UE4 integration - unused
+//#ifndef RTXGI_DDGI_RESOURCE_MANAGEMENT
+//#define RTXGI_DDGI_RESOURCE_MANAGEMENT 1
+//#endif
+
+// Define RTXGI_DDGI_FORMAT_RADIANCE before including DDGIVolume.h and compiling SDK HLSL shaders
+// to specify the storage format for radiance results.
+// 0: Uses the R32G32_FLOAT format (default). Radiance is packed into R32, stored as R10G10B10_UNORM. TODO: pack classification flags into last two bits.
+// 1: Uses the R32G32B32A32_FLOAT format. Useful for extended radiance ranges and debugging.
+// UE4 integration - plugin setting (shader permutation)
+//#ifndef RTXGI_DDGI_FORMAT_RADIANCE
+//#define RTXGI_DDGI_FORMAT_RADIANCE 0
+//#endif
+
+// Define RTXGI_DDGI_FORMAT_IRRADIANCE before including DDGIVolume.h and compiling SDK HLSL shaders
+// to specify the storage format for probe irradiance.
+// 0: Uses the R10G10B10A2_FLOAT format (default).
+// 1: Uses the R32G32B32A32_FLOAT format. Useful for extended irradiance ranges and debugging.
+// UE4 integration - plugin setting (shader permutation)
+//#ifndef RTXGI_DDGI_FORMAT_IRRADIANCE
+//#define RTXGI_DDGI_FORMAT_IRRADIANCE 0
+//#endif
+
+// Define RTXGI_DDGI_FORMAT_DISTANCE before including DDGIVolume.h and compiling SDK HLSL shaders
+// to specify the storage format for probe distance.
+// 0: Uses the R16G16_FLOAT format (default).
+// 1: Uses the R32G32_FLOAT format. Useful when debugging.
+// UE4 integration - unused
+//#ifndef RTXGI_DDGI_FORMAT_DISTANCE
+//#define RTXGI_DDGI_FORMAT_DISTANCE 0
+//#endif
+
+// Define RTXGI_DDGI_FORMAT_OFFSETS before including DDGIVolume.h and compiling SDK HLSL shaders
+// to specify the storage format for probe offsets.
+// 0: Uses the R16G16B16A16_FLOAT format (default).
+// 1: Uses the R32G32B32A32_FLOAT format. Useful when debugging.
+// UE4 integration - unused
+//#ifndef RTXGI_DDGI_FORMAT_OFFSETS
+//#define RTXGI_DDGI_FORMAT_OFFSETS 0
+//#endif
+
+// --- Probe Update ----------------------------------
+
+// Define RTXGI_DDGI_SHARED_MEMORY_MODE before including DDGIVolume.h and compiling SDK HLSL shaders
+// to use shared memory during probe irradiance and distance blending. Shared memory substantially
+// increases performance, so using it is strongly recommended.
+// 0: Disabled.
+// 1: Enabled (default).
+#ifndef RTXGI_DDGI_SHARED_MEMORY
+#define RTXGI_DDGI_SHARED_MEMORY 1
+#endif
+
+// Define RTXGI_DDGI_DEBUG_PROBE_INDEXING before including DDGIVolume.h and compiling SDK HLSL shaders
+// to toggle a visualization mode that outputs probe indices as probe color. Useful when debugging.
+// 0: Disabled (default).
+// 1: Enabled.
+#ifndef RTXGI_DDGI_DEBUG_PROBE_INDEXING
+#define RTXGI_DDGI_DEBUG_PROBE_INDEXING 0
+#endif
+
+// Define RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING before including DDGIVolume.h and compiling SDK HLSL shaders
+// to toggle a visualization mode that outputs directions (as colors) in probe irradiance texels. Useful when debugging.
+// 0: Disabled (default).
+// 1: Enabled.
+#ifndef RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING
+#define RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING 0
+#endif
+
+// Define RTXGI_DDGI_DEBUG_BORDER_COPY_INDEXING before including DDGIVolume.h and compiling SDK HLSL shaders
+// to toggle a visualization mode that shows how probe border texels are written to. Useful when debugging.
+// 0: Disabled (default).
+// 1: Enabled.
+#ifndef RTXGI_DDGI_DEBUG_BORDER_COPY_INDEXING
+#define RTXGI_DDGI_DEBUG_BORDER_COPY_INDEXING 0
+#endif
+
+// --- Probe Relocation -------------------------
+
+// Define RTXGI_DDGI_PROBE_RELOCATION before including DDGIVolume.h and compiling SDK HLSL shaders
+// to toggle probe relocation functionality.
+// 0: Disabled.
+// 1: Enabled (default).
+// UE4 integration - a per volume setting (shader permutation)
+//#ifndef RTXGI_DDGI_PROBE_RELOCATION
+//#define RTXGI_DDGI_PROBE_RELOCATION 1
+//#endif
+
+// --- Probe Classification -------------------------
+
+// Define RTXGI_DDGI_PROBE_CLASSIFICATION before including DDGIVolume.h and compiling SDK HLSL shaders
+// to toggle probe classification functionality.
+// 0: Disabled.
+// 1: Enabled (default).
+// UE4 integration - always on, but defined to be 1 in code
+//#ifndef RTXGI_DDGI_PROBE_CLASSIFICATION
+//#define RTXGI_DDGI_PROBE_CLASSIFICATION 1
+//#endif
+
+// --- Probe Movement (Early Access) --------------------------------
+
+// Define RTXGI_DDGI_INFINITE_SCROLLING_VOLUME before including DDGIVolume.h and compiling SDK HLSL shaders
+// to toggle infinite scrolling volume functionality.
+// 0: Disabled.
+// 1: Enabled (default).
+// UE4 integration - a per volume setting (shader permutation)
+//#ifndef RTXGI_DDGI_INFINITE_SCROLLING_VOLUME
+//#define RTXGI_DDGI_INFINITE_SCROLLING_VOLUME 1
+//#endif
+
+// ---------------------------------------------------
+
+#endif // RTXGI_DDGI_VOLUME_DEFINES_H
