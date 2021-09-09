@@ -9,8 +9,19 @@ software and hardware requirements:
 
 <b>Software:</b> <br>
 -   Windows 10 v1809 or higher.
+-   Visual Studio 2017 or 2019.
+-   Windows SDK version 10.0.17763 or higher (can be installed using the Visual Studio Installer).
 -   The latest drivers for your GPU. NVIDIA drivers [are available here](http://www.nvidia.com/drivers).
--   Unreal Engine version 4.27
+-   Unreal Engine version 4.26.2 source code, available for free from
+    [Epic Games](https://www.unrealengine.com/en-US/ue4-on-github) or from the
+    [NVIDIA RTX branch](https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.26) of Unreal Engine.
+
+
+| **Note** |
+| -------- |
+| **RTXGI v1.1.40 (and later) is available in UE4.26.2+** |
+| Use RTXGI v1.1.30 with earlier versions of UE4.26.
+| Use RTXGI v1.1.23 with UE4.25. |
 
 <b>Hardware:</b> <br>
 
@@ -25,9 +36,18 @@ software and hardware requirements:
 | -------- |
 | **Problems, Feedback, and Bugs** If you encounter any problems, have feedback, or would like to report a bug, please contact: <rtxgi-support-service@nvidia.com> |
 
-## Getting Started
+## Getting Started in NvRTX
 
-**Set your project's default RHI to DirectX 12 and enable Ray Tracing** in the project settings. At this time, ray tracing requires DirectX 12 in Unreal Engine 4.
+The fastest and easiest way to get started with RTXGI in UE4 is to download the latest version of the [NVIDIA RTX branch of UE4](https://github.com/NvRTX/UnrealEngine/tree/rtx-dlss-4.26) (also known as NvRTX).
+
+**The latest RTXGI plugin comes pre-installed in NvRTX 4.26.2 (goodbye patches!)**.
+
+| **Note** |
+| -------- |
+|**Access to NvRTX is available to everyone!** To use NvRTX, you'll need a GitHub account and an Epic Games account that are linked. Instructions to do this are available at <https://www.unrealengine.com/en-US/ue4-on-github>. Once that process is complete, you will be able to access the NvRTX GitHub repository at <https://github.com/NvRTX/UnrealEngine>.|
+
+After downloading, compiling, and running NvRTX UE4 **set your project's
+default RHI to DirectX 12 and enable Ray Tracing** in the project settings. At this time, ray tracing requires DirectX 12 in Unreal Engine 4.
 
 -   Go to *Project Settings-&gt;Platforms-&gt;Windows-&gt;Targeted
     RHIs-&gt;Default RHI* and select DirectX 12.
