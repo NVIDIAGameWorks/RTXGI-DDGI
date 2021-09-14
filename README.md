@@ -62,7 +62,7 @@ If you want to build just the RTXGI SDK library, follow these steps:
 - A progressive path tracing mode is included for reference and can be toggled at runtime.
 - A user interface is implemented with ImGui. It displays information that is useful when debugging and setting up new scenes / probe configurations.
 
-## UE4 Plugin
+# UE4 Plugin
 
 To bring the benefits of RTXGI to as many developers as possible, all RTXGI 1.1 features are now available in Unreal Engine 4 through the RTXGI UE4 plugin.
 
