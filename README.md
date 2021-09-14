@@ -73,6 +73,12 @@ A binary version of the latest RTXGI plugin is available from [the plugin's Unre
 
 **We strongly recommend you upgrade to 4.27 and use the latest plugin code**.
 
+| **Version Recommendations** |
+| -------- |
+| **Use Plugin v1.1.40 (and later) with UE4.26.2 (and later)** |
+| Use Plugin v1.1.30 with earlier versions of UE4.26
+| Use Plugin v1.1.23 with UE4.25 |
+
 #### Vanilla UE4 and Custom Engine Branches
 * Source code and [documentation](https://github.com/NVIDIAGameWorks/RTXGI/blob/main/ue4-plugin/4.27/RTXGI/README.md) for the latest RTXGI plugin is available in the `ue4-plugin/4.27/` directory. 
 * If you are using the 4.26.1 engine version, either backport the latest plugin source or apply the v1.1.30 plugin patch.
