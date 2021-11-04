@@ -8,29 +8,89 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#include "include/RTCommon.hlsl"
-#include "include/RTGlobalRS.hlsl"
-#include "include/RTLocalRS.hlsl"
-
- // ---[ Any Hit Shader ]---
+#include "include/Descriptors.hlsl"
+#include "include/RayTracing.hlsl"
 
 [shader("anyhit")]
-void AHS(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes attrib)
+void AHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttributes attrib)
 {
-    float alpha = opacity;
+    // Load the material
+    Material material = Materials[GetMaterialIndex(InstanceID())];
 
-    if (alphaMode == 2)
+    float alpha = material.opacity;
+    if (material.alphaMode == 2)
     {
         // Load and interpolate the triangle's texture coordinates
-        float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);        
-        float2 uv0 = GetInterpolatedUV0(PrimitiveIndex(), barycentrics);
-
-        if (albedoTexIdx > -1)
+        float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
+        float2 uv0 = LoadAndInterpolateUV0(InstanceID(), PrimitiveIndex(), barycentrics);
+        if (material.albedoTexIdx > -1)
         {
-            alpha = Textures[albedoTexIdx].SampleLevel(BilinearSampler, uv0, 0).a;
+            alpha = Tex2D[material.albedoTexIdx].SampleLevel(BilinearWrapSampler, uv0, 0).a;
         }
     }
 
-    if (alpha < alphaCutoff) IgnoreHit();
+    if (alpha < material.alphaCutoff) IgnoreHit();
 }
 
+[shader("anyhit")]
+void AHS_PRIMARY(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes attrib)
+{
+    // Load the material
+    Material material = Materials[GetMaterialIndex(InstanceID())];
+
+    float alpha = material.opacity;
+    if (material.alphaMode == 2)
+    {
+        // Load the vertices
+        Vertex vertices[3];
+        LoadVerticesPosUV0(InstanceID(), PrimitiveIndex(), vertices);
+
+        // Compute texture coordinate differentials
+        float2 dUVdx, dUVdy;
+        ComputeUV0Differentials(vertices, WorldRayDirection(), RayTCurrent(), dUVdx, dUVdy);
+
+        // Interpolate the triangle's texture coordinates
+        float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
+        Vertex v = InterpolateVertexUV0(vertices, barycentrics);
+
+        // Sample the texture
+        if (material.albedoTexIdx > -1)
+        {
+            alpha = Tex2D[material.albedoTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy).a;
+        }
+    }
+
+    if (alpha < material.alphaCutoff) IgnoreHit();
+}
+
+[shader("anyhit")]
+void AHS_GI(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes attrib)
+{
+    // Load the surface material
+    Material material = Materials[GetMaterialIndex(InstanceID())];
+
+    float alpha = material.opacity;
+    if (material.alphaMode == 2)
+    {
+        // Load the vertices
+        Vertex vertices[3];
+        LoadVerticesPosUV0(InstanceID(), PrimitiveIndex(), vertices);
+
+        // Interpolate the triangle's texture coordinates
+        float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
+        Vertex v = InterpolateVertexUV0(vertices, barycentrics);
+
+        // Sample the texture
+        if (material.albedoTexIdx > -1)
+        {
+            // Get the number of mip levels
+            uint width, height, numLevels;
+            Tex2D[material.albedoTexIdx].GetDimensions(0, width, height, numLevels);
+
+            // Sample the texture
+            alpha = Tex2D[material.albedoTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, numLevels * 0.6667f).a;
+        }
+    }
+
+    if (alpha < material.alphaCutoff) IgnoreHit();
+}

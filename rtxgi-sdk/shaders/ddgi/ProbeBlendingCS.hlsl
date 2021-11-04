@@ -8,37 +8,331 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#include "ProbeCommon.hlsl"
+// For example usage, see DDGI_[D3D12|VK].cpp::CompileDDGIVolumeShaders() function.
 
-// Note: PROBE_UAV_INDEX must be passed in as a define at shader compilation time
-// See Harness.cpp::CompileShaders() in the Test Harness
-// Index 0 cooresponds with the Probe Irradiance UAV
-// Index 1 cooresponds with the Probe Distance UAV
-// #define PROBE_UAV_INDEX [0|1]
+// -------- CONFIG FILE ---------------------------------------------------------------------------
 
-// Note: PROBE_NUM_TEXELS must be passed in as a define at shader compilation time
-// See Harness.cpp::CompileShaders() in the Test Harness application
-//#define PROBE_NUM_TEXELS [6|14]
-
-ConstantBuffer<DDGIVolumeDescGPU> DDGIVolume    : register(b1, space1);
-
-// Probe ray traced radiance and hit distance
-RWTexture2D<float4> DDGIProbeRTRadianceUAV      : register(u0, space1);
-
-// Probe irradiance or filtered distance
-RWTexture2D<float4> DDGIProbeUAV[2]             : register(u1, space1);
-
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-// Probe states
-RWTexture2D<uint>   DDGIProbeStates             : register(u4, space1);
+#if RTXGI_DDGI_USE_SHADER_CONFIG_FILE
+#include <DDGIShaderConfig.h>
 #endif
 
-#if RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY
-// Note: When using shared memory, RAYS_PER_PROBE must be passed in as a define at shader compilation time 
-// See Harness.cpp::CompileShaders() in the Test Harness application
-// #define RAYS_PER_PROBE 144
+// -------- MANAGED RESOURCES DEFINES -------------------------------------------------------------
 
-// Shared Memory (example for default settings):
+#ifndef RTXGI_DDGI_RESOURCE_MANAGEMENT
+#error Required define RTXGI_DDGI_RESOURCE_MANAGEMENT is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#if RTXGI_DDGI_RESOURCE_MANAGEMENT && !RTXGI_DDGI_SHADER_REFLECTION
+#if SPIRV
+    #define VOLUME_CONSTS_REGISTER 0
+    #define VOLUME_CONSTS_SPACE 0
+    #define RAY_DATA_REGISTER 1
+    #define RAY_DATA_SPACE 0
+    #if RTXGI_DDGI_BLEND_RADIANCE
+    #define OUTPUT_REGISTER 2
+    #else
+    #define OUTPUT_REGISTER 3
+    #endif
+    #define OUTPUT_SPACE 0
+    #define PROBE_DATA_REGISTER 4
+    #define PROBE_DATA_SPACE 0
+#else
+    #define CONSTS_REGISTER b0
+    #define CONSTS_SPACE space1
+    #define VOLUME_CONSTS_REGISTER t0
+    #define VOLUME_CONSTS_SPACE space1
+    #define RAY_DATA_REGISTER u0
+    #define RAY_DATA_SPACE space1
+    #if RTXGI_DDGI_BLEND_RADIANCE
+    #define OUTPUT_REGISTER u1
+    #else
+    #define OUTPUT_REGISTER u2
+    #endif
+    #define OUTPUT_SPACE space1
+    #define PROBE_DATA_REGISTER u3
+    #define PROBE_DATA_SPACE space1
+#endif // SPIRV
+#endif // RTXGI_DDGI_RESOURCE_MANAGEMENT && !RTXGI_DDGI_SHADER_REFLECTION
+
+// -------- SHADER REFLECTION DEFINES -------------------------------------------------------------
+
+// RTXGI_DDGI_SHADER_REFLECTION must be passed in as a define at shader compilation time.
+// This define specifies if the shader resources will be determined using shader reflection.
+// Ex: RTXGI_DDGI_SHADER_REFLECTION [0|1]
+
+#ifndef RTXGI_DDGI_SHADER_REFLECTION
+#error Required define RTXGI_DDGI_SHADER_REFLECTION is not defined for ProbeBlendingCS.hlsl!
+#else
+
+#if !RTXGI_DDGI_SHADER_REFLECTION
+
+// REGISTERs AND SPACEs (SHADER REFLECTION DISABLED)
+
+#if !SPIRV
+// CONSTS_REGISTER and CONSTS_SPACE must be passed in as defines at shader compilation time *when not using reflection*.
+// These defines specify the shader register and space used for root / push DDGI constants.
+// Ex: CONSTS_REGISTER b0
+// Ex: CONSTS_SPACE space1
+
+#ifndef CONSTS_REGISTER
+#error Required define CONSTS_REGISTER is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#ifndef CONSTS_SPACE
+#error Required define CONSTS_SPACE is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#endif // !SPIRV
+
+// VOLUME_CONSTS_REGISTER and VOLUME_CONSTS_SPACE must be passed in as defines at shader compilation time *when not using reflection*.
+// These defines specify the shader register and space used for the DDGIVolume constants structured buffer.
+// Ex: VOLUME_CONSTS_REGISTER t5
+// Ex: VOLUME_CONSTS_SPACE space0
+
+#ifndef VOLUME_CONSTS_REGISTER
+#error Required define VOLUME_CONSTS_REGISTER is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#ifndef VOLUME_CONSTS_SPACE
+#error Required define VOLUME_CONSTS_SPACE is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#endif // !RTXGI_DDGI_SHADER_REFLECTION
+
+#endif // #ifndef RTXGI_DDGI_SHADER_REFLECTION
+
+// -------- RESOURCE BINDING DEFINES --------------------------------------------------------------
+
+// RTXGI_DDGI_BINDLESS_RESOURCES must be passed in as a define at shader compilation time.
+// This define specifies whether resources will be accessed bindlessly or not.
+// Ex: RTXGI_DDGI_BINDLESS_RESOURCES [0|1]
+
+#ifndef RTXGI_DDGI_BINDLESS_RESOURCES
+#error Required define RTXGI_DDGI_BINDLESS_RESOURCES is not defined for ProbeBlendingCS.hlsl!
+#else
+
+#if !RTXGI_DDGI_SHADER_REFLECTION
+
+#if RTXGI_DDGI_BINDLESS_RESOURCES
+
+// BINDLESS RESOURCE DEFINES (SHADER REFLECTION DISABLED)
+
+// RWTEX2D_REGISTER and RWTEX2D_SPACE must be passed in as defines at shader compilation time *when not using reflection*.
+// These defines specify the shader register and space used for the DDGIVolume constants structured buffer.
+// Ex: RWTEX2D_REGISTER t5
+// Ex: RWTEX2D_SPACE space0
+
+#ifndef RWTEX2D_REGISTER
+#error Required bindless mode define RWTEX2D_REGISTER is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#ifndef RWTEX2D_SPACE
+#error Required bindless mode define RWTEX2D_SPACE is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#else
+
+// BOUND RESOURCE DEFINES (SHADER REFLECTION DISABLED)
+
+// RAY_DATA_REGISTER and RAY_DATA_SPACE must be passed in as defines at shader compilation time *when not using reflection*.
+// These defines specify the shader register and space used for the DDGIVolume ray data texture.
+// Ex: RAY_DATA_REGISTER u0
+// Ex: RAY_DATA_SPACE space1
+
+#ifndef RAY_DATA_REGISTER
+#error Required define RAY_DATA_REGISTER is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#ifndef RAY_DATA_SPACE
+#error Required define RAY_DATA_SPACE is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+// OUTPUT_REGISTER and OUTPUT_SPACE must be passed in as defines at shader compilation time *when not using reflection*.
+// These defines specify the shader register and space used for the DDGIVolume irradiance or distance texture.
+// Ex: OUTPUT_REGISTER u1
+// Ex: OUTPUT_SPACE space1
+
+#ifndef OUTPUT_REGISTER
+#error Required define OUTPUT_REGISTER is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#ifndef OUTPUT_SPACE
+#error Required define OUTPUT_SPACE is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+// PROBE_DATA_REGISTER and PROBE_DATA_SPACE must be passed in as defines at shader compilation time *when not using reflection*
+// and when probe classification is enabled.
+// These defines specify the shader register and space used for the DDGIVolume probe data texture.
+// Ex: PROBE_DATA_REGISTER u2
+// Ex: PROBE_DATA_SPACE space1
+
+#ifndef PROBE_DATA_REGISTER
+#error Required define PROBE_DATA_REGISTER is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#ifndef PROBE_DATA_SPACE
+#error Required define PROBE_DATA_SPACE is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#endif // RTXGI_DDGI_BINDLESS_RESOURCES
+
+#endif // !RTXGI_DDGI_SHADER_REFLECTION
+
+#endif // #ifndef RTXGI_DDGI_BINDLESS_RESOURCES
+
+// -------- CONFIGURATION DEFINES -----------------------------------------------------------------
+
+// RTXGI_DDGI_BLEND_SHARED_MEMORY must be passed in as a define at shader compilation time.
+// This define specifies if probe blending will use shared memory to improve performance.
+// Shared memory substantially increases performance, so using it is strongly recommended.
+// Ex: RTXGI_DDGI_BLEND_SHARED_MEMORY [0|1]
+#ifndef RTXGI_DDGI_BLEND_SHARED_MEMORY
+#error Required define RTXGI_DDGI_BLEND_SHARED_MEMORY is not defined for ProbeBlendingCS.hlsl!
+#else
+
+#if RTXGI_DDGI_BLEND_SHARED_MEMORY
+
+// RTXGI_DDGI_BLEND_RAYS_PER_PROBE must be passed in as a define at shader compilation time *when using shared memory*.
+// This define specifies the number of rays that are traced per probe and determines how data
+// is cooperatively loaded, computed, and stored in shared memory.
+// Ex: RTXGI_DDGI_BLEND_RAYS_PER_PROBE 144 => 144 rays are traced per probe
+#ifndef RTXGI_DDGI_BLEND_RAYS_PER_PROBE
+#error Required define RTXGI_DDGI_BLEND_RAYS_PER_PROBE is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+#endif // RTXGI_DDGI_BLEND_SHARED_MEMORY
+
+#endif
+
+// RTXGI_DDGI_BLEND_RADIANCE must be passed in as a define at shader compilation time.
+// This define specifies whether the shader blends radiance or distance values.
+// Ex: RTXGI_DDGI_BLEND_RADIANCE [0|1]
+#ifndef RTXGI_DDGI_BLEND_RADIANCE
+#error Required define RTXGI_DDGI_BLEND_RADIANCE is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+// RTXGI_DDGI_PROBE_NUM_TEXELS must be passed in as a define at shader compilation time.
+// This define specifies the number of texels of a single dimension of a probe.
+// Ex: RTXGI_DDGI_PROBE_NUM_TEXELS 6  => irradiance data is 6x6 texels for a single probe
+// Ex: RTXGI_DDGI_PROBE_NUM_TEXELS 14 => distance data is 14x14 texels for a single probe
+#ifndef RTXGI_DDGI_PROBE_NUM_TEXELS
+#error Required define RTXGI_DDGI_PROBE_NUM_TEXELS is not defined for ProbeBlendingCS.hlsl!
+#endif
+
+// -------- OPTIONAL DEFINES -----------------------------------------------------------------
+
+// Define RTXGI_DDGI_DEBUG_PROBE_INDEXING before compiling SDK HLSL shaders to toggle
+// a visualization mode that outputs probe indices as probe color. Useful when debugging.
+// 0: Disabled (default).
+// 1: Enabled.
+#ifndef RTXGI_DDGI_DEBUG_PROBE_INDEXING
+#pragma message "Optional define RTXGI_DDGI_DEBUG_PROBE_INDEXING is not defined, defaulting to 0." 
+#define RTXGI_DDGI_DEBUG_PROBE_INDEXING 0
+#endif
+
+// Define RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING before compiling SDK HLSL shaders to toggle
+// a visualization mode that outputs directions (as colors) in probe irradiance texels. Useful when debugging.
+// 0: Disabled (default).
+// 1: Enabled.
+#ifndef RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING
+#pragma message "Optional define RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING is not defined, defaulting to 0." 
+#define RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING 0
+#endif
+
+// -------------------------------------------------------------------------------------------
+
+#include "include/ProbeCommon.hlsl"
+
+#if RTXGI_DDGI_SHADER_REFLECTION || SPIRV
+#define CONSTS_REG_DECL 
+#define VOLUME_CONSTS_REG_DECL 
+#if RTXGI_DDGI_BINDLESS_RESOURCES
+    #define RWTEX2D_REG_DECL 
+#else
+    #define RAY_DATA_REG_DECL 
+    #define OUTPUT_REG_DECL 
+    #define PROBE_DATA_REG_DECL
+#endif
+
+#else
+
+#define CONSTS_REG_DECL : register(CONSTS_REGISTER, CONSTS_SPACE)
+#define VOLUME_CONSTS_REG_DECL : register(VOLUME_CONSTS_REGISTER, VOLUME_CONSTS_SPACE)
+#if RTXGI_DDGI_BINDLESS_RESOURCES
+    #define RWTEX2D_REG_DECL : register(RWTEX2D_REGISTER, RWTEX2D_SPACE)
+#else
+    #define RAY_DATA_REG_DECL : register(RAY_DATA_REGISTER, RAY_DATA_SPACE)
+    #define OUTPUT_REG_DECL : register(OUTPUT_REGISTER, OUTPUT_SPACE)
+    #define PROBE_DATA_REG_DECL : register(PROBE_DATA_REGISTER, PROBE_DATA_SPACE)
+#endif // RTXGI_DDGI_BINDLESS_RESOURCES
+
+#endif // RTXGI_DDGI_SHADER_REFLECTION || SPIRV
+
+// Root / Push Constants
+#if !SPIRV
+
+// D3D12 can have multiple root constants across different root parameter slots, so this constant
+// buffer can be used for both bindless and bound resource access methods
+ConstantBuffer<DDGIConstants> DDGI CONSTS_REG_DECL;
+uint GetVolumeIndex() { return DDGI.volumeIndex; }
+#if RTXGI_DDGI_BINDLESS_RESOURCES
+uint GetUAVOffset() { return DDGI.uavOffset; }
+#endif
+
+#else
+
+#if RTXGI_DDGI_BINDLESS_RESOURCES
+// Vulkan only allows a single block of memory for push constants, so when using bindless access
+// the shader must understand the layout of the push constant data - which comes from the host application
+struct PushConsts
+{
+    // Insert padding to match the layout of your push constants.
+    // This matches the Test Harness' "GlobalConstants" struct with 
+    // 36 float values before the DDGI constants.
+    float4x4 padding0;
+    float4x4 padding1;
+    float4   padding3;
+    uint     ddgi_volumeIndex;
+    uint     ddgi_uavOffset;
+};
+RTXGI_VK_PUSH_CONST PushConsts Global;
+uint GetVolumeIndex() { return Global.ddgi_volumeIndex; }
+uint GetUAVOffset() { return Global.ddgi_uavOffset; }
+#else
+RTXGI_VK_PUSH_CONST ConstantBuffer<DDGIConstants> Global;
+uint GetVolumeIndex() { return Global.volumeIndex; }
+#endif // RTXGI_DDGI_BINDLESS_RESOURCES
+
+#endif
+
+// DDGIVolume constants structured buffer
+RTXGI_VK_BINDING(VOLUME_CONSTS_REGISTER, VOLUME_CONSTS_SPACE)
+StructuredBuffer<DDGIVolumeDescGPUPacked> DDGIVolumes VOLUME_CONSTS_REG_DECL;
+
+#if RTXGI_DDGI_BINDLESS_RESOURCES
+
+// DDGIVolume ray data, probe irradiance / distance, probe data
+RTXGI_VK_BINDING(RWTEX2D_REGISTER, RWTEX2D_SPACE)
+RWTexture2D<float4> RWTex2D[] RWTEX2D_REG_DECL;
+
+#else
+
+// DDGIVolume ray data (radiance and hit distances)
+RTXGI_VK_BINDING(RAY_DATA_REGISTER, RAY_DATA_SPACE)
+RWTexture2D<float4> RayData RAY_DATA_REG_DECL;
+
+// DDGIVolume probe irradiance or filtered distance
+RTXGI_VK_BINDING(OUTPUT_REGISTER, OUTPUT_SPACE)
+RWTexture2D<float4> Output OUTPUT_REG_DECL;
+
+// Probe data (world-space offsets and classification states)
+RTXGI_VK_BINDING(PROBE_DATA_REGISTER, PROBE_DATA_SPACE)
+RWTexture2D<float4> ProbeData PROBE_DATA_REG_DECL;
+
+#endif // RTXGI_DDGI_BINDLESS_RESOURCES
+
+#if RTXGI_DDGI_BLEND_SHARED_MEMORY
+// Shared Memory (example with default settings):
 // Radiance (float3) x 144 rays/probe = 432 floats (~1.7 KB)
 // Distance (float) x 144 rays/probe = 144 floats (~0.56 KB)
 // Ray Directions (float3 x 144 rays/probe) = 432 floats (~1.7 KB)
@@ -54,144 +348,173 @@ RWTexture2D<uint>   DDGIProbeStates             : register(u4, space1);
 //     Group threads compute 144 ray directions / 196 threads = ~0.73 ray directions / thread
 
 #if RTXGI_DDGI_BLEND_RADIANCE
-groupshared float3 RTRadiance[RAYS_PER_PROBE];
+groupshared float3 RayRadiance[RTXGI_DDGI_BLEND_RAYS_PER_PROBE];
 #endif
-groupshared float  RTDistance[RAYS_PER_PROBE];
-groupshared float3 RayDirection[RAYS_PER_PROBE];
-#endif
+groupshared float  RayDistance[RTXGI_DDGI_BLEND_RAYS_PER_PROBE];
+groupshared float3 RayDirection[RTXGI_DDGI_BLEND_RAYS_PER_PROBE];
+#endif // RTXGI_DDGI_BLEND_SHARED_MEMORY
 
-[numthreads(PROBE_NUM_TEXELS, PROBE_NUM_TEXELS, 1)]
+[numthreads(RTXGI_DDGI_PROBE_NUM_TEXELS, RTXGI_DDGI_PROBE_NUM_TEXELS, 1)]
 void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint GroupIndex : SV_GroupIndex)
 {
     float4 result = float4(0.f, 0.f, 0.f, 0.f);
 
-    // Find the index of the probe that this thread maps to (for reading the RT radiance buffer)
-    int probeIndex = DDGIGetProbeIndex(DispatchThreadID.xy, DDGIVolume.probeGridCounts, PROBE_NUM_TEXELS);
-    if (probeIndex < 0)
-    {
-        return; // Probe doesn't exist
-    }
-#if RTXGI_DDGI_PROBE_SCROLL
-    int storageProbeIndex = DDGIGetProbeIndexOffset(probeIndex, DDGIVolume.probeGridCounts, DDGIVolume.probeScrollOffsets);
-    // Transform the probe index into probe texel coordinates
-    // Offset 1 texel on X and Y to account for the 1 texel probe border
-    uint2 intraProbeTexelOffset = DispatchThreadID.xy % uint2(PROBE_NUM_TEXELS, PROBE_NUM_TEXELS);
-    uint2 probeTexCoords = DDGIGetThreadBaseCoords(storageProbeIndex, DDGIVolume.probeGridCounts, PROBE_NUM_TEXELS) + intraProbeTexelOffset;
-    probeTexCoords.xy = probeTexCoords.xy + uint2(1, 1) + (probeTexCoords.xy / PROBE_NUM_TEXELS) * 2;
-#else
-    int storageProbeIndex = probeIndex;
-    // Transform the thread dispatch index into probe texel coordinates
-    // Offset 1 texel on X and Y to account for the 1 texel probe border
-    uint2 probeTexCoords = DispatchThreadID.xy + uint2(1, 1);
-    probeTexCoords.xy += (DispatchThreadID.xy / PROBE_NUM_TEXELS) * 2;
+    // Get the volume's index
+    uint volumeIndex = GetVolumeIndex();
+
+    // Get the volume's constants
+    DDGIVolumeDescGPU volume = UnpackDDGIVolumeDescGPU(DDGIVolumes[volumeIndex]);
+
+    // Get the number of probes
+    uint numProbes = (volume.probeCounts.x * volume.probeCounts.y * volume.probeCounts.z);
+
+    // Find the probe index for this thread
+    int probeIndex = DDGIGetProbeIndex(DispatchThreadID.xy, RTXGI_DDGI_PROBE_NUM_TEXELS, volume);
+
+    // Early out: the probe doesn't exist
+    if (probeIndex >= numProbes || probeIndex < 0) return;
+
+    // Get the texture coordinates in the irradiance (or distance) texture atlas
+    uint2 atlasTexCoords = uint2(1, 1) + DispatchThreadID.xy + (DispatchThreadID.xy / RTXGI_DDGI_PROBE_NUM_TEXELS) * 2;
+
+#if RTXGI_DDGI_BINDLESS_RESOURCES
+    // Get the offset of each resource in the UAV array
+    uint uavOffset = GetUAVOffset();
+
+    // Get the volume's texture UAVs
+    RWTexture2D<float4> RayData = RWTex2D[uavOffset + (volumeIndex * 4)];
+    #if RTXGI_DDGI_BLEND_RADIANCE
+        RWTexture2D<float4> Output = RWTex2D[uavOffset + (volumeIndex * 4) + 1];
+    #else
+        RWTexture2D<float4> Output = RWTex2D[uavOffset + (volumeIndex * 4) + 2];
+    #endif
+    RWTexture2D<float4> ProbeData = RWTex2D[uavOffset + (volumeIndex * 4) + 3];
 #endif
 
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-    int2 texelPosition = DDGIGetProbeTexelPosition(storageProbeIndex, DDGIVolume.probeGridCounts);
-    int  probeState = DDGIProbeStates[texelPosition];
-    if (probeState == PROBE_STATE_INACTIVE)
+    // Clear and Early Out: probe scrolling has caused this probe to need to be cleared
+    if(IsVolumeMovementScrolling(volume))
     {
-        return; // If the probe is inactive, do not blend (it didn't shoot rays to get new radiance values)
-    }
-#endif /* RTXGI_DDGI_PROBE_STATE_CLASSIFIER */
+        // Get the probe's grid coordinates
+        int3 probeCoords = DDGIGetProbeCoords(probeIndex, volume);
 
-#if RTXGI_DDGI_BLEND_RADIANCE && RTXGI_DDGI_DEBUG_PROBE_INDEXING && RTXGI_DDGI_DEBUG_FORMAT_IRRADIANCE
+        // Reset probe planes that have been scrolled
+        bool reset = false;
+        reset |= DDGIResetScrolledPlane(Output, atlasTexCoords, probeCoords, 0, volume);
+        reset |= DDGIResetScrolledPlane(Output, atlasTexCoords, probeCoords, 1, volume);
+        reset |= DDGIResetScrolledPlane(Output, atlasTexCoords, probeCoords, 2, volume);
+        if(reset) return;
+    }
+
+    // Early Out: don't blend rays for probes that are inactive
+    if(volume.probeClassificationEnabled)
+    {
+        // Get the probe state
+        int2 probeDataCoords = DDGIGetProbeDataTexelCoords(probeIndex, volume);
+        int  probeState = ProbeData[probeDataCoords].w;
+        if (probeState == RTXGI_DDGI_PROBE_STATE_INACTIVE) return;
+    }
+
     // Visualize the probe index
-    DDGIProbeUAV[0][probeTexCoords] = float4(probeIndex, 0, 0, 1);
+#if RTXGI_DDGI_BLEND_RADIANCE && RTXGI_DDGI_DEBUG_PROBE_INDEXING
+    if(volume.probeIrradianceFormat == RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R32G32B32A32_FLOAT)
+    {
+        Output[atlasTexCoords] = float4(probeIndex, 0, 0, 1);
+    }
     return;
 #endif
 
     float2 probeOctantUV = float2(0.f, 0.f);
 
+    // Visualize the probe's octahedral indexing
 #if RTXGI_DDGI_BLEND_RADIANCE && RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING
-    probeOctantUV = DDGIGetNormalizedOctahedralCoordinates(int2(DispatchThreadID.xy), PROBE_NUM_TEXELS);
-    if (all(abs(probeOctantUV) <= 1.f))
+    if(volume.probeIrradianceFormat == RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R32G32B32A32_FLOAT)
     {
-        float3 probeDirection = DDGIGetOctahedralDirection(probeOctantUV);
-        probeDirection = (abs(probeDirection) >= 0.001f) * sign(probeDirection);    // Robustness for when the octant size is not a power of 2.
-        result = float4((probeDirection * 0.5f) + 0.5f, 1.f);
+        probeOctantUV = DDGIGetNormalizedOctahedralCoordinates(int2(DispatchThreadID.xy), RTXGI_DDGI_PROBE_NUM_TEXELS);
+        if (all(abs(probeOctantUV) <= 1.f))
+        {
+            float3 probeDirection = DDGIGetOctahedralDirection(probeOctantUV);
+            probeDirection = (abs(probeDirection) >= 0.001f) * sign(probeDirection);    // Robustness for when the octant size is not a power of 2.
+            result = float4((probeDirection * 0.5f) + 0.5f, 1.f);
+        }
+        Output[atlasTexCoords] = result;
+        return;
     }
-    DDGIProbeUAV[0][probeTexCoords] = result;
-    return;
 #endif
 
     // Get the probe ray direction associated with this thread
-    probeOctantUV = DDGIGetNormalizedOctahedralCoordinates(int2(DispatchThreadID.xy), PROBE_NUM_TEXELS);
+    probeOctantUV = DDGIGetNormalizedOctahedralCoordinates(int2(DispatchThreadID.xy), RTXGI_DDGI_PROBE_NUM_TEXELS);
     float3 probeRayDirection = DDGIGetOctahedralDirection(probeOctantUV);
 
-#if RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY
-    // Cooperatively load the ray traced radiance and hit distance values into shared memory
-    // Cooperatively compute the probe ray directions
-    int totalIterations = int(ceil(float(RAYS_PER_PROBE) / float(PROBE_NUM_TEXELS * PROBE_NUM_TEXELS)));
+#if RTXGI_DDGI_BLEND_SHARED_MEMORY
+    // Cooperatively load the ray radiance and hit distance values into shared memory
+    // Cooperatively compute probe ray directions
+    int totalIterations = int(ceil(float(RTXGI_DDGI_BLEND_RAYS_PER_PROBE) / float(RTXGI_DDGI_PROBE_NUM_TEXELS * RTXGI_DDGI_PROBE_NUM_TEXELS)));
     for (int iteration = 0; iteration < totalIterations; iteration++)
     {
         int rayIndex = (GroupIndex * totalIterations) + iteration;
-        if (rayIndex >= RAYS_PER_PROBE) break;
+        if (rayIndex >= RTXGI_DDGI_BLEND_RAYS_PER_PROBE) break;
 
-#if RTXGI_DDGI_BLEND_RADIANCE
-#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
-        RTRadiance[rayIndex] = DDGIProbeRTRadianceUAV[int2(rayIndex, probeIndex)].rgb;
-#else
-        RTRadiance[rayIndex] = RTXGIUintToFloat3(asuint(DDGIProbeRTRadianceUAV[int2(rayIndex, probeIndex)].r));
-#endif
-#endif
+    #if RTXGI_DDGI_BLEND_RADIANCE
+        // Load the ray radiance and store it in shared memory
+        RayRadiance[rayIndex] = DDGILoadProbeRayRadiance(RayData, uint2(rayIndex, probeIndex), volume);
+    #endif // RTXGI_DDGI_BLEND_RADIANCE
 
-#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
-        RTDistance[rayIndex] = DDGIProbeRTRadianceUAV[int2(rayIndex, probeIndex)].a;
-#else
-        RTDistance[rayIndex] = DDGIProbeRTRadianceUAV[int2(rayIndex, probeIndex)].g;
-#endif
+        // Load the ray hit distance and store it in shared memory
+        RayDistance[rayIndex] = DDGILoadProbeRayDistance(RayData, uint2(rayIndex, probeIndex), volume);
 
-        RayDirection[rayIndex] = DDGIGetProbeRayDirection(rayIndex, DDGIVolume.numRaysPerProbe, DDGIVolume.probeRayRotationTransform);
+        // Get a random normalized probe ray direction and store it in shared memory
+        RayDirection[rayIndex] = DDGIGetProbeRayDirection(rayIndex, volume);
     }
 
-    // Wait for all threads in the group to finish shared memory operations
+    // Wait for all threads in the group to finish their shared memory operations
     GroupMemoryBarrierWithGroupSync();
-#endif /* RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY */
+
+#endif // RTXGI_DDGI_BLEND_SHARED_MEMORY
 
 #if RTXGI_DDGI_BLEND_RADIANCE
     // Backface hits are ignored when blending radiance
     // Allow a maximum of 10% of the rays to hit backfaces. If that limit is exceeded, don't blend anything into this probe.
     uint backfaces = 0;
-    uint maxBackfaces = DDGIVolume.numRaysPerProbe * 0.1f;
+    uint maxBackfaces = (volume.probeNumRays) * 0.1f;
 #endif
 
     int rayIndex = 0;
-#if RTXGI_DDGI_PROBE_RELOCATION || RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-    rayIndex = RTXGI_DDGI_NUM_FIXED_RAYS;
-#endif
 
-    // Blend radiance or distance values from each ray to compute irradiance or fitered distance
-    for ( /*rayIndex*/; rayIndex < DDGIVolume.numRaysPerProbe; rayIndex++)
+    // If relocation or classification are enabled, don't blend the fixed rays since they will bias the result
+    if(volume.probeRelocationEnabled || volume.probeClassificationEnabled)
+    {
+        rayIndex = RTXGI_DDGI_NUM_FIXED_RAYS;
+    }
+
+    // Blend each ray's radiance or distance values to compute irradiance or fitered distance
+    for ( /*rayIndex*/; rayIndex < volume.probeNumRays; rayIndex++)
     {
         // Get the direction for this probe ray
-#if RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY
+    #if RTXGI_DDGI_BLEND_SHARED_MEMORY
         float3 rayDirection = RayDirection[rayIndex];
-#else
-        float3 rayDirection = DDGIGetProbeRayDirection(rayIndex, DDGIVolume.numRaysPerProbe, DDGIVolume.probeRayRotationTransform);
-#endif
+    #else
+        float3 rayDirection = DDGIGetProbeRayDirection(rayIndex, volume);
+    #endif
 
         // Find the weight of the contribution for this ray
         // Weight is based on the cosine of the angle between the ray direction and the direction of the probe octant's texel
         float weight = max(0.f, dot(probeRayDirection, rayDirection));
 
         // The indices of the probe ray in the radiance buffer
-        int2 probeRayIndex = int2(rayIndex, probeIndex);
+        uint2 probeRayIndex = uint2(rayIndex, probeIndex);
 
-#if RTXGI_DDGI_BLEND_RADIANCE
+    #if RTXGI_DDGI_BLEND_RADIANCE
         // Load the ray traced radiance and hit distance
-#if RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY
-        float3 probeRayRadiance = RTRadiance[rayIndex];
-        float  probeRayDistance = RTDistance[rayIndex];
-#else
-#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
-        float3 probeRayRadiance = DDGIProbeRTRadianceUAV[probeRayIndex].rgb;
-        float  probeRayDistance = DDGIProbeRTRadianceUAV[probeRayIndex].a;
-#else
-        float3 probeRayRadiance = RTXGIUintToFloat3(asuint(DDGIProbeRTRadianceUAV[int2(rayIndex, probeIndex)].r));
-        float  probeRayDistance = DDGIProbeRTRadianceUAV[probeRayIndex].g;
-#endif
-#endif
+        float3 probeRayRadiance = 0.f;
+        float  probeRayDistance = 0.f;
+
+        #if RTXGI_DDGI_BLEND_SHARED_MEMORY
+            probeRayRadiance = RayRadiance[rayIndex];
+            probeRayDistance = RayDistance[rayIndex];
+        #else
+            probeRayRadiance = DDGILoadProbeRayRadiance(RayData, probeRayIndex, volume);
+            probeRayDistance = DDGILoadProbeRayDistance(RayData, probeRayIndex, volume);
+        #endif // RTXGI_DDGI_BLEND_SHARED_MEMORY
 
         // Backface hit, don't blend this sample
         if (probeRayDistance < 0.f)
@@ -204,53 +527,59 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
         // Blend the ray's radiance
         result += float4(probeRayRadiance * weight, weight);
 
-#else /* !RTXGI_DDGI_BLEND_RADIANCE */
+    #else // RTXGI_DDGI_BLEND_RADIANCE == 0
 
-        // Initialize the probe hit distance to three quarters of the distance of the grid cell diagonal
-        float probeMaxRayDistance = length(DDGIVolume.probeGridSpacing) * 0.75f;
+        // Initialize the max probe hit distance to 50% larger the maximum distance between probe grid cells
+        float probeMaxRayDistance = length(volume.probeSpacing) * 1.5f;
 
         // Increase or decrease the filtered distance value's "sharpness"
-        weight = pow(weight, DDGIVolume.probeDistanceExponent);
+        weight = pow(weight, volume.probeDistanceExponent);
 
         // Load the ray traced distance
-#if RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY
-        float probeRayDistance = min(abs(RTDistance[rayIndex]), probeMaxRayDistance);
-#else
-        // HitT is negative on backface hits for the probe relocation, so take the absolute value
-#if RTXGI_DDGI_DEBUG_FORMAT_RADIANCE
-        float probeRayDistance = min(abs(DDGIProbeRTRadianceUAV[probeRayIndex].a), probeMaxRayDistance);
-#else
-        float probeRayDistance = min(abs(DDGIProbeRTRadianceUAV[probeRayIndex].g), probeMaxRayDistance);
-#endif
-#endif
+        // Hit distance is negative on backface hits (for probe relocation), so take the absolute value of the loaded data
+        float probeRayDistance = 0.f;
+    #if RTXGI_DDGI_BLEND_SHARED_MEMORY
+        probeRayDistance = min(abs(RayDistance[rayIndex]), probeMaxRayDistance);
+    #else
+        probeRayDistance = min(abs(DDGILoadProbeRayDistance(RayData, probeRayIndex, volume)), probeMaxRayDistance);
+    #endif // RTXGI_DDGI_BLEND_SHARED_MEMORY
 
-        // Filter the ray distance
+        // Filter the ray hit distance
         result += float4(probeRayDistance * weight, (probeRayDistance * probeRayDistance) * weight, 0.f, weight);
-#endif
+
+    #endif // RTXGI_DDGI_BLEND_RADIANCE
     }
 
     // Normalize the blended irradiance (or filtered distance), if the combined weight is not close to zero.
     // To match the Monte Carlo Estimator for Irradiance, we should divide by N. Instead, we are dividing by
     // N * sum(cos(theta)) (the sum of the weights) to reduce variance.
     // To account for this, we must mulitply in a factor of 1/2.
-    const float epsilon = 1e-9f * float(DDGIVolume.numRaysPerProbe);
-    result.rgb *= 1.f / max(2.f * result.a, epsilon);
+    float epsilon = float(volume.probeNumRays);
+    if (volume.probeRelocationEnabled || volume.probeClassificationEnabled)
+    {
+        // If relocation or classification are enabled, fixed rays aren't blended since they will bias the result
+        epsilon -= RTXGI_DDGI_NUM_FIXED_RAYS;
+    }
+    epsilon *= 1e-9f;
 
-    float  hysteresis = DDGIVolume.probeHysteresis;
-    float3 previous = DDGIProbeUAV[PROBE_UAV_INDEX][probeTexCoords].rgb;
+    result.rgb *= 1.f / (2.f * max(result.a, epsilon));
+
+    float  hysteresis = volume.probeHysteresis;
+    float3 previous = Output[atlasTexCoords].rgb;
 
 #if RTXGI_DDGI_BLEND_RADIANCE
     // Tone-mapping gamma adjustment
-    result.rgb = pow(result.rgb, DDGIVolume.probeInverseIrradianceEncodingGamma);
+    result.rgb = pow(result.rgb, (1.f / volume.probeIrradianceEncodingGamma));
 
-    if (RTXGIMaxComponent(previous.rgb - result.rgb) > DDGIVolume.probeChangeThreshold)
+    float3 delta = (result.rgb - previous.rgb);
+
+    if (RTXGIMaxComponent(previous.rgb - result.rgb) > volume.probeIrradianceThreshold)
     {
         // Lower the hysteresis when a large lighting change is detected
         hysteresis = max(0.f, hysteresis - 0.75f);
     }
-    
-    float3 delta = (result.rgb - previous.rgb);
-    if (length(delta) > DDGIVolume.probeBrightnessThreshold)
+
+    if (length(delta) > volume.probeBrightnessThreshold)
     {
         // Clamp the maximum change in irradiance when a large brightness change is detected
         result.rgb = previous.rgb + (delta * 0.25f);
@@ -276,8 +605,8 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
 
     // Interpolate the new filtered distance with the existing filtered distance in the probe.
     // A high hysteresis value emphasizes the existing probe filtered distance.
-    result = float4(lerp(result.rgb, previous.rgb, hysteresis), 1.f);
+    result = float4(lerp(result.rg, previous.rg, hysteresis), 0.f, 1.f);
 #endif
 
-    DDGIProbeUAV[PROBE_UAV_INDEX][probeTexCoords] = result;
+    Output[atlasTexCoords] = result;
 }

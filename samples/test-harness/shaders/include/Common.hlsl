@@ -11,7 +11,8 @@
 #ifndef COMMON_HLSL
 #define COMMON_HLSL
 
-const static float PI = 3.1415926535897932f;
+static const float PI = 3.1415926535897932f;
+static const float TWO_PI = 6.2831853071795864f;
 
 float3 LessThan(float3 f, float value)
 {
@@ -53,4 +54,4 @@ float3 ACESFilm(float3 x)
     return saturate((x*(a*x + b)) / (x*(c*x + d) + e));
 }
 
-#endif /* COMMON_HLSL */
+#endif // COMMON_HLSL

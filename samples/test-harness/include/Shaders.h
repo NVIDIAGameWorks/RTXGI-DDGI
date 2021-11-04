@@ -11,10 +11,102 @@
 #pragma once
 
 #include "Common.h"
+#include "Configs.h"
+
+#include <dxcapi.use.h>
 
 namespace Shaders
 {
-    bool InitCompiler(ShaderCompiler &compiler);
-    bool Compile(ShaderCompiler &compiler, ShaderProgram &shader, bool warningsAsErrors = false);
-    void Cleanup(ShaderCompiler &compiler);
+    struct ShaderCompiler
+    {
+        dxc::DxcDllSupport dxcDllHelper;
+        IDxcCompiler*      compiler = nullptr;
+        IDxcLibrary*       library = nullptr;
+        std::string        root = "";
+        std::string        rtxgi = "";
+    };
+
+    struct ShaderProgram
+    {
+        std::wstring               filepath = L"";
+        std::wstring               targetProfile = L"lib_6_4";
+        std::wstring               entryPoint = L"";
+        std::wstring               exportName = L"";
+        std::wstring               includePath = L"";
+        std::vector<LPCWSTR>       arguments;
+        std::vector<std::wstring*> defineStrs;
+        std::vector<DxcDefine>     defines;
+        IDxcBlob*                  bytecode = nullptr;
+
+        void Release()
+        {
+            for (size_t defineIndex = 0; defineIndex < defineStrs.size(); defineIndex++)
+            {
+                SAFE_DELETE(defineStrs[defineIndex]);
+            }
+            defineStrs.clear();
+            defines.clear();
+            arguments.clear();
+            SAFE_RELEASE(bytecode);
+        }
+    };
+
+    struct ShaderPipeline
+    {
+        ShaderProgram vs;
+        ShaderProgram ps;
+        uint32_t numStages() const { return 2; };
+
+        void Release()
+        {
+            vs.Release();
+            ps.Release();
+        }
+    };
+
+    struct ShaderRTHitGroup
+    {
+        ShaderProgram chs;
+        ShaderProgram ahs;
+        ShaderProgram is;
+        LPCWSTR exportName = L"";
+
+        bool hasCHS() const { return (chs.bytecode != nullptr); }
+        bool hasAHS() const { return (ahs.bytecode != nullptr); }
+        bool hasIS() const { return (is.bytecode != nullptr); }
+        uint32_t numStages() const { return (hasCHS() + hasAHS() + hasIS()); }
+        uint32_t numSubobjects() const { return (1 + numStages()); }
+
+        void Release()
+        {
+            chs.Release();
+            ahs.Release();
+            is.Release();
+        }
+    };
+
+    struct ShaderRTPipeline
+    {
+        uint32_t payloadSizeInBytes = 0;
+
+        ShaderProgram rgs;
+        ShaderProgram miss;
+        std::vector<ShaderRTHitGroup> hitGroups;
+
+        void Release()
+        {
+            rgs.Release();
+            miss.Release();
+            for (uint32_t hitGroupIndex = 0; hitGroupIndex < static_cast<uint32_t>(hitGroups.size()); hitGroupIndex++)
+            {
+                hitGroups[hitGroupIndex].Release();
+            }
+            hitGroups.clear();
+        }
+    };
+
+    bool Initialize(const Configs::Config& config, ShaderCompiler& compiler);
+    void AddDefine(ShaderProgram& shader, std::wstring name, std::wstring value);
+    bool Compile(ShaderCompiler& compiler, ShaderProgram& shader, bool warningsAsErrors = false, bool debugInfo = false);
+    void Cleanup(ShaderCompiler& compiler);
 }

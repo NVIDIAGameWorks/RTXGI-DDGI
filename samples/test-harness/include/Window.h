@@ -11,8 +11,21 @@
 #pragma once
 
 #include "Common.h"
+#include "Configs.h"
 
-namespace Window
+namespace Windows
 {
-    bool Create(LONG width, LONG height, HINSTANCE &instance, HWND &window, LPCWSTR title);
+    enum class EWindowEvent
+    {
+        NONE = 0,
+        RESIZE,
+        QUIT,
+        COUNT
+    };
+
+    bool Create(Configs::Config& config, GLFWwindow*& window);
+    bool Close(GLFWwindow*& window);
+
+    const EWindowEvent GetWindowEvent();
+    void ResetWindowEvent();
 }

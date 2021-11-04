@@ -8,8 +8,8 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#ifndef NOISE_HLSL
-#define NOISE_HLSL
+#ifndef RANDOM_HLSL
+#define RANDOM_HLSL
 
 #include "../../../../rtxgi-sdk/shaders/Common.hlsl"
 
@@ -119,4 +119,4 @@ float3 GetRandomCosineDirectionOnHemisphere(float3 direction, inout uint seed)
     return normalize(p);
 }
 
-#endif /* NOISE_HLSL */
+#endif // RANDOM_HLSL

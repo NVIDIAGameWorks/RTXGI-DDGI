@@ -8,73 +8,191 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#include "include/RTCommon.hlsl"
-#include "include/RTGlobalRS.hlsl"
-#include "include/RTLocalRS.hlsl"
-
- // ---[ Closest Hit Shader ]---
+#include "include/Descriptors.hlsl"
+#include "include/RayTracing.hlsl"
 
 [shader("closesthit")]
-void CHS(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttributes attrib)
+void CHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttributes attrib)
 {
     Payload payload = (Payload)0;
     payload.hitT = RayTCurrent();
     payload.hitKind = HitKind();
-    payload.instanceIndex = InstanceIndex();
 
-    // load the probeState from the first uint
-    int probeState = packedPayload.albedoAndNormal.x;
-    if (probeState == 1 /*PROBE_STATE_INACTIVE*/)
-    {
-        // inactive probe does not need any material data, so can return immediately
-        packedPayload = PackPayload(payload);
-        return;
-    }
-    // Load and interpolate the triangle's attributes (position, normal, tangent, texture coordinates)
+    // Load the triangle's vertices
+    Vertex vertices[3];
+    LoadVertices(InstanceID(), PrimitiveIndex(), vertices);
+
+    // Interpolate the triangle's attributes for the hit location (position, normal, tangent, texture coordinates)
     float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
-    VertexAttributes v = GetInterpolatedAttributes(PrimitiveIndex(), barycentrics);
+    Vertex v = InterpolateVertex(vertices, barycentrics);
 
-    payload.albedo = albedo;
-    payload.worldPosition = mul(ObjectToWorld3x4(), float4(v.position, 1.f)).xyz;
+    // World position
+    payload.worldPosition = v.position;
+    payload.worldPosition = mul(ObjectToWorld3x4(), float4(payload.worldPosition, 1.f)).xyz; // instance transform
 
     // Geometric normal
     payload.normal = v.normal;
     payload.normal = normalize(mul(ObjectToWorld3x4(), float4(payload.normal, 0.f)).xyz);
     payload.shadingNormal = payload.normal;
 
+    // Load the surface material
+    Material material = Materials[GetMaterialIndex(InstanceID())];
+    payload.albedo = material.albedo;
+
     // Albedo and Opacity
-    if (albedoTexIdx > -1)
+    if (material.albedoTexIdx > -1)
     {
-        float4 bco = Textures[albedoTexIdx].SampleLevel(BilinearSampler, v.uv0, 0);
+        float4 bco = Tex2D[material.albedoTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, 0);
         payload.albedo = bco.rgb;
         payload.opacity = bco.a;
     }
 
     // Shading normal
-    if (normalTexIdx > -1)
+    if (material.normalTexIdx > -1)
     {
-        float3x3 TBN = { v.tangent, v.bitangent, payload.normal };
-        payload.shadingNormal = Textures[normalTexIdx].SampleLevel(BilinearSampler, v.uv0, 0).xyz;
-        payload.shadingNormal = (payload.shadingNormal * 2.f) - 1.f;                                                // Transform to [-1, 1]
-        payload.shadingNormal = normalize(mul(ObjectToWorld3x4(), float4(mul(payload.shadingNormal, TBN), 0.f)));   // Transform tangent space normal to world space
+        float3 tangent = normalize(mul(ObjectToWorld3x4(), float4(v.tangent.xyz, 0.f)).xyz);
+        float3 bitangent = cross(payload.normal, tangent) * v.tangent.w;
+        float3x3 TBN = { tangent, bitangent, payload.normal };
+        payload.shadingNormal = Tex2D[material.normalTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, 0).xyz;
+        payload.shadingNormal = (payload.shadingNormal * 2.f) - 1.f;    // Transform to [-1, 1]
+        payload.shadingNormal = mul(payload.shadingNormal, TBN);        // Transform tangent-space normal to world-space
     }
 
     // Roughness and Metallic
-    if (roughnessMetallicTexIdx > -1)
+    if (material.roughnessMetallicTexIdx > -1)
     {
-        float2 rm = Textures[roughnessMetallicTexIdx].SampleLevel(BilinearSampler, v.uv0, 0).gb;
+        float2 rm = Tex2D[material.roughnessMetallicTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, 0).gb;
         payload.roughness = rm.x;
         payload.metallic = rm.y;
     }
 
     // Emissive
-    float3 emissive = float3(0.f, 0.f, 0.f);
-    if (emissiveTexIdx > -1)
+    if (material.emissiveTexIdx > -1)
     {
-        emissive = Textures[emissiveTexIdx].SampleLevel(BilinearSampler, v.uv0, 0).rgb;
+        payload.albedo += Tex2D[material.emissiveTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, 0).rgb;
     }
-    payload.albedo += emissive;
 
     // Pack the payload
     packedPayload = PackPayload(payload);
+}
+
+[shader("closesthit")]
+void CHS_PRIMARY(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttributes attrib)
+{
+    Payload payload = (Payload)0;
+    payload.hitT = RayTCurrent();
+    payload.hitKind = HitKind();
+
+    // Load the triangle's vertices
+    Vertex vertices[3];
+    LoadVertices(InstanceID(), PrimitiveIndex(), vertices);
+
+    // Interpolate the triangle's attributes for the hit location (position, normal, tangent, texture coordinates)
+    float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
+    Vertex v = InterpolateVertex(vertices, barycentrics);
+
+    // World position
+    payload.worldPosition = v.position;
+    payload.worldPosition = mul(ObjectToWorld3x4(), float4(payload.worldPosition, 1.f)).xyz; // instance transform
+
+    // Geometric normal
+    payload.normal = v.normal;
+    payload.normal = normalize(mul(ObjectToWorld3x4(), float4(payload.normal, 0.f)).xyz);
+    payload.shadingNormal = payload.normal;
+
+    // Load the surface material
+    Material material = Materials[GetMaterialIndex(InstanceID())];
+    payload.albedo = material.albedo;
+
+    // Compute texture coordinate differentials
+    float2 dUVdx, dUVdy;
+    ComputeUV0Differentials(vertices, WorldRayDirection(), RayTCurrent(), dUVdx, dUVdy);
+
+    // Albedo and Opacity
+    if (material.albedoTexIdx > -1)
+    {
+        float4 bco = Tex2D[material.albedoTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy);
+        payload.albedo = bco.rgb;
+        payload.opacity = bco.a;
+    }
+
+    // Shading normal
+    if (material.normalTexIdx > -1)
+    {
+        float3 tangent = normalize(mul(ObjectToWorld3x4(), float4(v.tangent.xyz, 0.f)).xyz);
+        float3 bitangent = cross(payload.normal, tangent) * v.tangent.w;
+        float3x3 TBN = { tangent, bitangent, payload.normal };
+
+        payload.shadingNormal = Tex2D[material.normalTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy).xyz;
+        payload.shadingNormal = (payload.shadingNormal * 2.f) - 1.f;    // Transform to [-1, 1]
+        payload.shadingNormal = mul(payload.shadingNormal, TBN);        // Transform tangent-space normal to world-space
+    }
+
+    // Roughness and Metallic
+    if (material.roughnessMetallicTexIdx > -1)
+    {
+        float2 rm = Tex2D[material.roughnessMetallicTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy).gb;
+        payload.roughness = rm.x;
+        payload.metallic = rm.y;
+    }
+
+    // Emissive
+    if (material.emissiveTexIdx > -1)
+    {
+        payload.albedo += Tex2D[material.emissiveTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy).rgb;
+    }
+
+    // Pack the payload
+    packedPayload = PackPayload(payload);
+}
+
+[shader("closesthit")]
+void CHS_GI(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttributes attrib)
+{
+    Payload payload = (Payload)0;
+    payload.hitT = RayTCurrent();
+    payload.hitKind = HitKind();
+
+    // Load the triangle's vertices
+    Vertex vertices[3];
+    LoadVertices(InstanceID(), PrimitiveIndex(), vertices);
+
+    // Interpolate the triangle's attributes for the hit location (position, normal, tangent, texture coordinates)
+    float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
+    Vertex v = InterpolateVertex(vertices, barycentrics);
+
+    // World position
+    payload.worldPosition = v.position;
+    payload.worldPosition = mul(ObjectToWorld3x4(), float4(payload.worldPosition, 1.f)).xyz; // instance transform
+
+    // Geometric normal
+    payload.normal = v.normal;
+    payload.normal = normalize(mul(ObjectToWorld3x4(), float4(payload.normal, 0.f)).xyz);
+    payload.shadingNormal = payload.normal;
+
+    // Load the surface material
+    Material material = Materials[GetMaterialIndex(InstanceID())];
+    payload.albedo = material.albedo;
+
+    // Albedo and Opacity
+    if (material.albedoTexIdx > -1)
+    {
+        // Get the number of mip levels
+        uint width, height, numLevels;
+        Tex2D[material.albedoTexIdx].GetDimensions(0, width, height, numLevels);
+
+        // Sample the albedo texture
+        float4 bco = Tex2D[material.albedoTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, numLevels / 2.f);
+        payload.albedo = bco.rgb;
+        payload.opacity = bco.a;
+    }
+
+    // Pack the payload
+    packedPayload = PackPayload(payload);
+}
+
+[shader("closesthit")]
+void CHS_VISIBILITY(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttributes attrib)
+{
+    packedPayload.hitT = RayTCurrent();
 }

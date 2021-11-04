@@ -12,7 +12,11 @@
 #ifndef __DXCAPI_USE_H__
 #define __DXCAPI_USE_H__
 
-#include "dxc/dxcapi.h"
+#include "thirdparty/dxc/dxcapi.h"
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+#include <filesystem>
+#endif
 
 namespace dxc {
 
@@ -23,17 +27,32 @@ protected:
   DxcCreateInstanceProc m_createFn;
   DxcCreateInstance2Proc m_createFn2;
 
-#pragma warning(disable:4191)
   HRESULT InitializeInternal(LPCWSTR dllName, LPCSTR fnName) {
     if (m_dll != nullptr) return S_OK;
+
+#ifdef _WIN32
     m_dll = LoadLibraryW(dllName);
+#else
+    char nameStr[256];
+    std::wcstombs(nameStr, dllName, 256);
+    m_dll = ::dlopen(nameStr, RTLD_LAZY);
+#endif
 
     if (m_dll == nullptr) return HRESULT_FROM_WIN32(GetLastError());
+
+#ifdef _WIN32
     m_createFn = (DxcCreateInstanceProc)GetProcAddress(m_dll, fnName);
+#else
+    m_createFn = (DxcCreateInstanceProc)::dlsym(m_dll, fnName);
+#endif
 
     if (m_createFn == nullptr) {
       HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
+#ifdef _WIN32
       FreeLibrary(m_dll);
+#else
+      ::dlclose(m_dll);
+#endif
       m_dll = nullptr;
       return hr;
     }
@@ -46,7 +65,11 @@ protected:
       memcpy(fnName2, fnName, s);
       fnName2[s] = '2';
       fnName2[s + 1] = '\0';
+#ifdef _WIN32
       m_createFn2 = (DxcCreateInstance2Proc)GetProcAddress(m_dll, fnName2);
+#else
+      m_createFn2 = (DxcCreateInstance2Proc)::dlsym(m_dll, fnName2);
+#endif
     }
 
     return S_OK;
@@ -67,7 +90,18 @@ public:
   }
 
   HRESULT Initialize() {
+    #ifdef _WIN32
     return InitializeInternal(L"dxcompiler.dll", "DxcCreateInstance");
+    #elif __APPLE__
+    return InitializeInternal(L"libdxcompiler.dylib", "DxcCreateInstance");
+    #else
+    // LB_LIBRARY_PATH does not include the executable's directory by default
+    // Get the path to working directory and append the dxcompiler lib filename
+    std::string path = std::filesystem::current_path().c_str();
+    std::wstring wpath = std::wstring(path.begin(), path.end());
+    wpath.append(L"/libdxcompiler.so");
+    return InitializeInternal(wpath.c_str(), "DxcCreateInstance");
+    #endif
   }
 
   HRESULT InitializeForDll(_In_z_ const wchar_t* dll, _In_z_ const char* entryPoint) {
@@ -111,18 +145,21 @@ public:
     if (m_dll != nullptr) {
       m_createFn = nullptr;
       m_createFn2 = nullptr;
+#ifdef _WIN32
       FreeLibrary(m_dll);
+#else
+      ::dlclose(m_dll);
+#endif
       m_dll = nullptr;
     }
   }
 
   HMODULE Detach() {
-    HMODULE module = m_dll;
+    HMODULE hModule = m_dll;
     m_dll = nullptr;
-    return module;
+    return hModule;
   }
 };
-#pragma warning(default:4191)
 
 inline DxcDefine GetDefine(_In_ LPCWSTR name, LPCWSTR value) {
   DxcDefine result;
@@ -138,8 +175,8 @@ void EnsureEnabled(DxcDllSupport &dxcSupport);
 void ReadFileIntoBlob(DxcDllSupport &dxcSupport, _In_ LPCWSTR pFileName,
                       _Outptr_ IDxcBlobEncoding **ppBlobEncoding);
 void WriteBlobToConsole(_In_opt_ IDxcBlob *pBlob, DWORD streamType = STD_OUTPUT_HANDLE);
-void WriteBlobToFile(_In_opt_ IDxcBlob *pBlob, _In_ LPCWSTR pFileName);
-void WriteBlobToHandle(_In_opt_ IDxcBlob *pBlob, HANDLE hFile, _In_opt_ LPCWSTR pFileName);
+void WriteBlobToFile(_In_opt_ IDxcBlob *pBlob, _In_ LPCWSTR pFileName, _In_ UINT32 textCodePage);
+void WriteBlobToHandle(_In_opt_ IDxcBlob *pBlob, _In_ HANDLE hFile, _In_opt_ LPCWSTR pFileName, _In_ UINT32 textCodePage);
 void WriteUtf8ToConsole(_In_opt_count_(charCount) const char *pText,
                         int charCount, DWORD streamType = STD_OUTPUT_HANDLE);
 void WriteUtf8ToConsoleSizeT(_In_opt_count_(charCount) const char *pText,

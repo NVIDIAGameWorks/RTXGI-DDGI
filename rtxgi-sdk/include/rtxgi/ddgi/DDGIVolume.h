@@ -10,111 +10,75 @@
 
 #pragma once
 
-#include <d3d12.h>
-#include <dxcapi.h>
-#include <string>
-
 #include "rtxgi/Common.h"
 #include "rtxgi/Defines.h"
 #include "rtxgi/Math.h"
-#include "rtxgi/Types.h"
+
+#include <random>
+#include <string>
+
+// --- Resource Allocation Mode -------------------------------------------------------------------
+
+// Define RTXGI_DDGI_RESOURCE_MANAGEMENT to specify the resource management mode.
+// 0: "Unmanaged", the application creates, allocates, deallocates, and destroys all graphics resources (default).
+// 1: "Managed", the SDK creates, allocates, deallocates, and destroys all graphics
+//     resources - *except* for the DDGIVolume constants structured buffer and the Descriptor Heap (D3D12) or Descriptor Pool (Vulkan).
+#ifndef RTXGI_DDGI_RESOURCE_MANAGEMENT
+#error RTXGI_DDGI_RESOURCE_MANAGEMENT is not defined!
+#endif
 
 namespace rtxgi
 {
-    #include "rtxgi/ddgi/DDGIVolumeDefines.h"
-    #include "rtxgi/ddgi/DDGIVolumeDescGPU.h"
+    #include "DDGIConstants.h"
+    #include "DDGIVolumeDescGPU.h"
 
-    enum class EDDGITextureType
+    enum class EDDGIVolumeTextureType
     {
-        RTRadiance = 0,
+        RayData = 0,
         Irradiance,
         Distance,
-        Offsets,
-        States,
+        Data,
         Count
     };
 
-#if RTXGI_DDGI_PROBE_SCROLL
     enum class EDDGIVolumeMovementType
     {
         Default = 0,
         Scrolling,
         Count
     };
-#endif
+
+    extern bool bInsertPerfMarkers;
+    void SetInsertPerfMarkers(bool value);
 
     /**
-    * Resources provided by the host application to be used by the volume.
-    */
-    struct DDGIVolumeResources
-    {
-        ID3D12DescriptorHeap*   descriptorHeap = nullptr;               // Descriptor heap
-        int                     descriptorHeapDescSize = 0;             // Size of each entry on the descriptor heap
-        int                     descriptorHeapOffset = 0;               // Offset to the first free descriptor heap slot
+     * Get the number of resource descriptors required.
+     */
+    int GetDDGIVolumeNumRTVDescriptors();
+    int GetDDGIVolumeNumSRVDescriptors();
+    int GetDDGIVolumeNumUAVDescriptors();
 
-#if RTXGI_DDGI_SDK_MANAGED_RESOURCES
-        ID3D12Device*           device = nullptr;                       // D3D12 device
-        ID3DBlob*               probeRadianceBlendingCS = nullptr;      // Probe radiance blending compute shader bytecode
-        ID3DBlob*               probeDistanceBlendingCS = nullptr;      // Probe distance blending compute shader bytecode
-        ID3DBlob*               probeBorderRowCS = nullptr;             // Probe irradiance or distance border row update compute shader bytecode
-        ID3DBlob*               probeBorderColumnCS = nullptr;          // Probe irradiance or distance border column update compute shader bytecode
-#if RTXGI_DDGI_PROBE_RELOCATION
-        ID3DBlob*               probeRelocationCS = nullptr;            // Probe relocation compute shader bytecode
-#endif
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        ID3DBlob*               probeStateClassifierCS = nullptr;               // Probe state classifier bytecode
-        ID3DBlob*               probeStateClassifierActivateAllCS = nullptr;    // Probe state classifier activate all bytecode
-#endif
-
-        bool IsDeviceChanged(DDGIVolumeResources &resources)
-        {
-            if (resources.device != device) return true;
-            return false;
-        }
-
-#else   /* !RTXGI_DDGI_SDK_MANAGED_RESOURCES */
-        ID3D12RootSignature*    rootSignature = nullptr;                // Root signature for the compute shaders
-        ID3D12Resource*         probeRTRadiance = nullptr;              // Probe radiance texture (from ray tracing)
-        ID3D12Resource*         probeIrradiance = nullptr;              // Probe irradiance texture, encoded with a high gamma curve
-        ID3D12Resource*         probeDistance = nullptr;                // Probe distance texture, R channel is mean distance, G channel is mean distance^2
-#if RTXGI_DDGI_PROBE_RELOCATION
-        ID3D12Resource*         probeOffsets = nullptr;                 // Probe relocation world-space offsets texture
-#endif
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        ID3D12Resource*         probeStates = nullptr;                  // Probe state texture
-#endif
-
-        ID3D12PipelineState*    probeRadianceBlendingPSO = nullptr;     // Probe radiance blending compute PSO
-        ID3D12PipelineState*    probeDistanceBlendingPSO = nullptr;     // Probe distance blending compute PSO
-        ID3D12PipelineState*    probeBorderRowPSO = nullptr;            // Probe irradiance or distance border row update compute PSO
-        ID3D12PipelineState*    probeBorderColumnPSO = nullptr;         // Probe irradiance or distance border column update compute PSO
-#if RTXGI_DDGI_PROBE_RELOCATION
-        ID3D12PipelineState*    probeRelocationPSO = nullptr;           // Probe relocation compute PSO
-#endif
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        ID3D12PipelineState*    probeStateClassifierPSO = nullptr;              // Probe state classifier compute PSO
-        ID3D12PipelineState*    probeStateClassifierActivateAllPSO = nullptr;   // Probe state classifier activate all compute PSO
-#endif
-#endif /* RTXGI_DDGI_SDK_MANAGED_RESOURCES */
-    };
-
-    /*
-    * Describes properties of a DDGIVolume.
-    */
+    /**
+     * Describes properties of a DDGIVolume.
+     */
     struct DDGIVolumeDesc
     {
-        std::string     name;                                   // Name for the volume
-        float3          origin = { 0.f, 0.f, 0.f };             // World-space origin of the volume.
-        float3          eulerAngles = { 0.f, 0.f, 0.f };        // Euler angles XYZ (radians).
-        float3          probeGridSpacing = { 0.f, 0.f, 0.f };   // World-space distance between probes.
+        std::string     name;                                   // Name of the volume.
+        uint32_t        index = 0;                              // Index of the volume in the constants structured buffer.
+        uint32_t        rngSeed = 0;                            // A seed for the random number generator (optional). A non-zero value manually initializes the seed used for rotation generation. Leave as zero to use the default (based on system time).
 
-        int3            probeGridCounts = { -1, -1, -1 };       // Number of probes on each axis.
+        bool            showProbes = false;                     // A flag for toggling probe visualizations for this volume.
+        bool            insertPerfMarkers = false;              // A flag for toggling volume-specific perf markers in the graphics command list (for debugging and tools).
 
-        int             numIrradianceTexels = -1;               // Number of texels used in one dimension of the irradiance texture, not including the 1-pixel border on each side.
-        int             numDistanceTexels = -1;                 // Number of texels used in one dimension of the distance texture, not including the 1-pixel border on each side.
-        int             numRaysPerProbe = 144;                  // Number of rays cast per probe per frame. When using RTXGI_DDGI_BLENDING_USE_SHARED_MEMORY, make this a multiple of the irradiance/distance probe texel resolution for best behavior.
+        float3          origin = {};                            // World-space origin of the volume.
+        float3          eulerAngles = {};                       // Euler rotation angles XYZ (in radians).
+        float3          probeSpacing = {};                      // World-space distance between probes on each axis of the grid.
 
-        float           probeMaxRayDistance = 1e27f;            // Maximum distance a probe ray may travel.
+        int3            probeCounts = { -1, -1, -1 };           // Number of probes on each axis.
+
+        int             probeNumRays = 144;                     // Number of rays cast per probe per frame. When using RTXGI_DDGI_BLEND_SHARED_MEMORY, make this a multiple of the irradiance/distance probe texel resolution for best behavior.
+        int             probeNumIrradianceTexels = -1;          // Number of texels used in one dimension of the irradiance texture, not including the 1-pixel border on each side.
+        int             probeNumDistanceTexels = -1;            // Number of texels used in one dimension of the distance texture, not including the 1-pixel border on each side.
 
         // Controls the influence of new rays when updating each probe. A value close to 1 will
         // very slowly change the probe textures, improving stability but reducing accuracy when objects
@@ -122,293 +86,227 @@ namespace rtxgi
         // but will exhibit flickering.
         float           probeHysteresis = 0.97f;
 
-        // Exponent for depth testing. A high value will rapidly react to depth discontinuities, 
+        // Maximum world-space distance a probe ray may travel.
+        float           probeMaxRayDistance = 1e27f;
+
+        // Exponent for depth testing. A high value will rapidly react to depth discontinuities,
         // but risks causing banding.
         float           probeDistanceExponent = 50.f;
 
-        // Irradiance blending happens in post-tonemap space
+        // Irradiance blending happens in post-tonemap space.
         float           probeIrradianceEncodingGamma = 5.f;
 
         // A threshold ratio used during probe radiance blending that determines if a large lighting change has happened.
         // If the max color component difference is larger than this threshold, the hysteresis will be reduced.
-        float           probeChangeThreshold = 0.25f;
+        float           probeIrradianceThreshold = 0.25f;
 
         // A threshold value used during probe radiance blending that determines the maximum allowed difference in brightness
         // between the previous and current irradiance values. This prevents impulses from drastically changing a
         // texel's irradiance in a single update cycle.
         float           probeBrightnessThreshold = 0.10f;
 
-        // Bias values for Indirect Lighting
-        float           viewBias = 0.1f;
-        float           normalBias = 0.1f;
+        // Bias values for Indirect Lighting.
+        float           probeViewBias = 0.1f;                   // A small offset along the camera view ray applied to the shaded surface point to avoid numerical instabilities when determining visibility
+        float           probeNormalBias = 0.1f;                 // A small offset along the surface normal applied to the shaded surface point to avoid numerical instabilities when determining visibility
 
-#if RTXGI_DDGI_PROBE_RELOCATION
-        // Probe relocation moves probes that see front facing triangles closer than this value
+        // Format type for probe texture atlases.
+        uint32_t        probeRayDataFormat = 0;                 // Texel format index for the ray data texture, used with GetDDGIVolumeTextureFormat()
+        uint32_t        probeIrradianceFormat = 0;              // Texel format index for the irradiance texture, used with GetDDGIVolumeTextureFormat()
+        uint32_t        probeDistanceFormat = 0;                // Texel format index for the distance texture, used with GetDDGIVolumeTextureFormat()
+        uint32_t        probeDataFormat = 0;                    // Texel format index for the probe data texture, used with GetDDGIVolumeTextureFormat()
+
+        // Probe relocation moves probes to more useful positions.
+        bool            probeRelocationEnabled = false;
+        bool            probeRelocationNeedsReset = false;
+
+        // Probe relocation will maintain a minimum world-space distance from front facing surfaces.
         float           probeMinFrontfaceDistance = 1.f;
-#endif
 
-#if RTXGI_DDGI_PROBE_RELOCATION || RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        // Probe relocation and state classifier assume probes with more than
-        // this ratio of backface hits are inside of geometry.
+        // Probe classification marks probes with states to reduce the ray tracing and blending workloads.
+        bool            probeClassificationEnabled = false;
+        bool            probeClassificationNeedsReset = false;
+
+        // Probe relocation and probe classification assume probes with more
+        // than this ratio of backface hits are inside of geometry.
         float           probeBackfaceThreshold = 0.25f;
-#endif
 
-#if RTXGI_DDGI_PROBE_SCROLL
-        // The type of movement the volume supports
-        // 0: Default movement with the Move() function
-        // 1: Scrolling movement with the Scroll() function
+        // The type of movement the volume supports:
+        // 0: Default movement
+        // 1: Infinite scrolling movement
         EDDGIVolumeMovementType movementType = EDDGIVolumeMovementType::Default;
 
-        // Volume grid-space offsets for probe scrolling
-        int3            probeScrollOffsets = { 0, 0, 0 };
-#endif
-
-#if RTXGI_DDGI_SDK_MANAGED_RESOURCES
-        bool ShouldAllocateProbes(DDGIVolumeDesc &desc)
+    #if RTXGI_DDGI_RESOURCE_MANAGEMENT
+        bool ShouldAllocateProbes(const DDGIVolumeDesc& desc)
         {
-            // Number of probes changed
-            if (desc.probeGridCounts.x == -1 && desc.probeGridCounts.y == -1 && desc.probeGridCounts.z == -1) return true;
-            if (probeGridCounts != desc.probeGridCounts) return true;
-            
-            // Volume moved
-            if (origin != desc.origin) return true;
-            if (probeGridSpacing != desc.probeGridSpacing) return true;
+            // Probes haven't been allocated or number of probes has changed
+            if (desc.probeCounts.x == -1 && desc.probeCounts.y == -1 && desc.probeCounts.z == -1) return true;
+            if (probeCounts != desc.probeCounts) return true;
             return false;
         }
 
-        bool ShouldAllocateRTRadiance(DDGIVolumeDesc &desc)
+        bool ShouldAllocateRayData(const DDGIVolumeDesc& desc)
         {
-            if (desc.numRaysPerProbe != numRaysPerProbe) return true;
+            // The number of rays to trace per probe has changed
+            if (probeNumRays != desc.probeNumRays) return true;
             return false;
         }
 
-        bool ShouldAllocateIrradiance(DDGIVolumeDesc &desc)
+        bool ShouldAllocateIrradiance(const DDGIVolumeDesc& desc)
         {
-            if (numIrradianceTexels != desc.numIrradianceTexels) return true;
+            // The number of irradiance texels has changed
+            if (probeNumIrradianceTexels != desc.probeNumIrradianceTexels) return true;
             return false;
         }
 
-        bool ShouldAllocateDistance(DDGIVolumeDesc &desc)
+        bool ShouldAllocateDistance(const DDGIVolumeDesc& desc)
         {
-            if (numDistanceTexels != desc.numDistanceTexels) return true;
+            // The number of distance texels has changed
+            if (probeNumDistanceTexels != desc.probeNumDistanceTexels) return true;
             return false;
         }
-#endif /* RTXGI_DDGI_SDK_MANAGED_RESOURCES */
+    #endif // RTXGI_DDGI_RESOURCE_MANAGEMENT
     };
 
     /**
-    * Get the size of the constant buffer required by a DDGIVolume.
-    */
-    int GetDDGIVolumeConstantBufferSize();
-
-    /*
-    * Get the number of CBV/SRV/UAV resource descriptors required by a DDGIVolume.
-    */
-    int GetDDGIVolumeNumDescriptors();
-
-    /**
-    * Get the DXGI_FORMAT type of the given texture resource.
-    */
-    DXGI_FORMAT GetDDGIVolumeTextureFormat(EDDGITextureType type);
-
-    /**
-    * Get the number of probes on the X and Y dimensions of the irradiance and distance textures.
-    */
-    void GetDDGIVolumeProbeCounts(const DDGIVolumeDesc &desc, UINT &probeCountX, UINT &probeCountY);
-
-    /**
-    * Get the dimensions of the given texture type for a DDGIVolume with the given descriptor.
-    */
-    void GetDDGIVolumeTextureDimensions(const DDGIVolumeDesc &desc, EDDGITextureType type, UINT &width, UINT &height);
-
-    /**
-    * Get the root signature descriptor for a DDGIVolume.
-    */
-    bool GetDDGIVolumeRootSignatureDesc(int descriptorHeapOffset, ID3DBlob** signature);
-
-    /**
-     * Get the GPU version of the DDGIVolume descriptor.
+     * Validate a shader bytecode blob.
      */
-    DDGIVolumeDescGPU GetDDGIVolumeGPUDesc(DDGIVolumeDesc &desc);
+    bool ValidateShaderBytecode(const ShaderBytecode& bytecode);
+
+    /**
+     * Get the number of probes on the X and Y dimensions of the irradiance and distance textures.
+     */
+    void GetDDGIVolumeProbeCounts(const DDGIVolumeDesc& desc, uint32_t& probeCountX, uint32_t& probeCountY);
+
+    /**
+     * Get the dimensions of the given texture type.
+     */
+    void GetDDGIVolumeTextureDimensions(const DDGIVolumeDesc& desc, EDDGIVolumeTextureType type, uint32_t& width, uint32_t& height);
 
     /*
-    * A volume of space within which irradiance queries at arbitrary points are supported using
-    * a grid of probes. A single DDGIVolume may cover the entire scene or some sub-volume of the scene.
-    * The probe grid of the volume is centered around the provided origin. Grid probes are numbered
-    * in ascending order from left to right, back to front in a left handed coordinate system.
-
-    * If there are parts of a scene with very different geometric density or dimensions, instantiate
-    * multiple DDGIVolumes.
-    */
-    class DDGIVolume
+     * DDGIVolume abstract base class. Instantiate API-specific class.
+     */
+    class DDGIVolumeBase
     {
     public:
-        /**
-         * Allocates resources for the volume if resource management is enabled.
-         * Computes the bounding box and performs other initialization.
-         */
-        ERTXGIStatus Create(DDGIVolumeDesc &desc, DDGIVolumeResources &resources);
+        virtual void Update();
 
-        /**
-         * Move the volume's location by the given translation in world-space units.
-         */
-        ERTXGIStatus Move(float3 translation);
+        // Random numbers
+        void  SeedRNG(const int seed);
+        float GetRandomFloat();
 
-#if RTXGI_DDGI_PROBE_SCROLL
-        /**
-         * Move the volume probe grid by the given translation, preserving interior probe positions
-         * by swapping probes from the "back" side of the volume (i.e. the side opposite the motion
-         * direction) to the "front". This kind of motion is called "scolling" since a fixed set of
-         * probes will scroll within the volume's extent.
-         */
-        ERTXGIStatus Scroll(int3 translation);
-
-        /**
-        * Scrolling movement with an ellipsoid deadzone.
-        */
-        ERTXGIStatus Scroll(float3 translation, float3 deadzoneRadii);
-
-        /**
-        * Scrolling movement with an axis-aligned bounding box deadzone.
-        */
-        ERTXGIStatus Scroll(float3 translation, AABB deadzoneBBox);
-#endif /* RTXGI_DDGI_PROBE_SCROLL */
-
-        /**
-         * Updates the volume's random rotation and constant buffer.
-         */
-        ERTXGIStatus Update(ID3D12Resource* constantBuffer, UINT64 offsetInBytes = 0);
-
-        /**
-         * Updates the volume's probes.
-         */
-        ERTXGIStatus UpdateProbes(ID3D12GraphicsCommandList4* cmdList);
-
-#if RTXGI_DDGI_PROBE_RELOCATION
-        /**
-        * Adjusts probe positions to avoid being inside geometry.
-        * The argument probeDistanceScale is a value between 0 and 1 indicating how far to move.
-        * If using probe relocation in an iterative optimizer, start with values close to 1 and descend to 0.
-        */
-        ERTXGIStatus RelocateProbes(ID3D12GraphicsCommandList4* cmdList, float probeDistanceScale);
-#endif /* RTXGI_DDGI_PROBE_RELOCATION */
-
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        /**
-        * Classifies probes as active or inactive based on the current data in the RT radiance texture.
-        */
-        ERTXGIStatus ClassifyProbes(ID3D12GraphicsCommandList4* cmdList);
-
-        /**
-        * Forces all probes in the volume to the active state.
-        */
-        ERTXGIStatus ActivateAllProbes(ID3D12GraphicsCommandList4* cmdList);
-#endif /* RTXGI_DDGI_PROBE_STATE_CLASSIFIER */
+        // Event Handlers
+        virtual void OnGlobalLightChange() {}
+        virtual void OnLargeObjectChange() {}
+        virtual void OnSmallLightChange() {}
 
         /**
          * Releases resources owned by the volume.
          */
-        void Destroy();
-
-        //------------------------------------------------------------------------
-        // Resources
-        //------------------------------------------------------------------------
-
-        ID3D12DescriptorHeap* GetDescriptorHeap() const { return m_descriptorHeap; }
-
-        int GetDescriptorHeapOffset() const { return m_descriptorHeapOffset; }
-
-        void SetDescriptorHeap(ID3D12DescriptorHeap* ptr, int offset) { m_descriptorHeap = ptr; m_descriptorHeapOffset = offset; }
-
-        ID3D12RootSignature* GetRootSignature() const { return m_rootSignature; }
-        ID3D12Resource* GetConstantBuffer() const { return m_volumeCB; }
-        ID3D12Resource* GetProbeRTRadianceTexture() const { return m_probeRTRadiance; }
-        ID3D12Resource* GetProbeIrradianceTexture() const { return m_probeIrradiance; }
-        ID3D12Resource* GetProbeDistanceTexture() const { return m_probeDistance; }
-#if RTXGI_DDGI_PROBE_RELOCATION
-        ID3D12Resource* GetProbeOffsetsTexture() const { return m_probeOffsets; }
-#endif
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        ID3D12Resource* GetProbeStatesTexture() const { return m_probeStates; }
-#endif
-
-#if !RTXGI_DDGI_SDK_MANAGED_RESOURCES
-        ID3D12Resource* SetRTRadianceTexture(ID3D12Resource* ptr) { m_probeRTRadiance = ptr; }
-        ID3D12Resource* SetIrradianceTexture(ID3D12Resource* ptr) { m_probeIrradiance = ptr; }
-        ID3D12Resource* SetDistanceTexture(ID3D12Resource* ptr) { m_probeDistance = ptr; }
-#if RTXGI_DDGI_PROBE_RELOCATION
-        ID3D12Resource* SetProbeOffsetsTexture(ID3D12Resource* ptr) { m_probeOffsets = ptr; }
-#endif
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        ID3D12Resource* SetProbeStatesTexture(ID3D12Resource* ptr) { m_probeStates = ptr; }
-#endif
-#endif
+        virtual void Destroy() = 0;
 
         //------------------------------------------------------------------------
         // Setters
         //------------------------------------------------------------------------
 
-        void SetName(std::string name) { m_name = name; }
+        void SetName(std::string name) { m_desc.name = name; }
 
-        void SetViewBias(float value) { m_desc.viewBias = value; }
+        void SetIndex(uint32_t index) { m_desc.index = index; }
 
-        void SetNormalBias(float value) { m_desc.normalBias = value; }
+        void SetShowProbes(bool value) { m_desc.showProbes = value; }
+
+        void SetInsertPerfMarkers(bool value) { m_desc.insertPerfMarkers = value; }
+
+        void SetMovementType(EDDGIVolumeMovementType value);
+
+        void SetOrigin(const float3& value) { m_desc.origin = value; }
+
+        void SetScrollAnchor(const float3& value) { m_probeScrollAnchor = value; }
+
+        void SetProbeSpacing(const float3& value) { m_desc.probeSpacing = value; }
+
+        void SetEulerAngles(const float3& eulerAngles);
 
         void SetProbeHysteresis(float value) { m_desc.probeHysteresis = value; }
 
         void SetProbeMaxRayDistance(float value) { m_desc.probeMaxRayDistance = value; }
 
+        void SetProbeNormalBias(float value) { m_desc.probeNormalBias = value; }
+
+        void SetProbeViewBias(float value) { m_desc.probeViewBias = value; }
+
         void SetProbeDistanceExponent(float value) { m_desc.probeDistanceExponent = value; }
 
-        void SetProbeChangeThreshold(float value) { m_desc.probeChangeThreshold = value; }
+        void SetIrradianceEncodingGamma(float value) { m_desc.probeIrradianceEncodingGamma = value; }
+
+        void SetProbeIrradianceThreshold(float value) { m_desc.probeIrradianceThreshold = value; }
 
         void SetProbeBrightnessThreshold(float value) { m_desc.probeBrightnessThreshold = value; }
 
-        void SetEulerAngles(float3 eulerAngles);
+        // Probe Relocation Setters
+        void SetProbeRelocationEnabled(bool value) { m_desc.probeRelocationEnabled = value; }
 
-#if RTXGI_DDGI_PROBE_SCROLL
-        void SetMovementType(EDDGIVolumeMovementType value) { m_desc.movementType = value; }
-#endif
+        void SetProbeRelocationNeedsReset(bool value) { m_desc.probeRelocationNeedsReset = value; }
+
+        void SetMinFrontFaceDistance(float value) { m_desc.probeMinFrontfaceDistance = value; }
+
+        // Probe Classification Setters
+        void SetProbeClassificationEnabled(bool value) { m_desc.probeClassificationEnabled = value; }
+
+        void SetProbeClassificationNeedsReset(bool value) { m_desc.probeClassificationNeedsReset = value; }
+
+        void SetProbeBackfaceThreshold(float value) { m_desc.probeBackfaceThreshold = value; }
 
         //------------------------------------------------------------------------
         // Getters
         //------------------------------------------------------------------------
 
-        std::string GetName() const { return m_name; }
+        DDGIVolumeDesc GetDesc() const { return m_desc; }
 
-        float GetViewBias() const { return m_desc.viewBias; }
+        DDGIVolumeDescGPU GetDescGPU() const;
 
-        float GetNormalBias() const { return m_desc.normalBias; }
+        DDGIVolumeDescGPUPacked GetDescGPUPacked() const;
+
+        std::string GetName() const { return m_desc.name; }
+
+        uint32_t GetIndex() const { return m_desc.index; }
+
+        float3 GetOrigin() const;
+
+        bool GetShowProbes() const { return m_desc.showProbes; }
+
+        bool GetInsertPerfMarkers() const { return m_desc.insertPerfMarkers; }
+
+        EDDGIVolumeMovementType GetMovementType() const { return m_desc.movementType; }
+
+        float3 GetScrollAnchor() const { return m_probeScrollAnchor; }
+
+        int3 GetScrollOffsets() { return m_probeScrollOffsets; }
+
+        float3 GetProbeSpacing() const { return m_desc.probeSpacing; }
+
+        int3 GetProbeCounts() const { return m_desc.probeCounts; }
+
+        int GetNumProbes() const { return (m_desc.probeCounts.x * m_desc.probeCounts.y * m_desc.probeCounts.z); }
+
+        int GetNumRaysPerProbe() const { return m_desc.probeNumRays; }
 
         float GetProbeHysteresis() const { return m_desc.probeHysteresis; }
 
         float GetProbeMaxRayDistance() const { return m_desc.probeMaxRayDistance; }
 
+        float GetProbeNormalBias() const { return m_desc.probeNormalBias; }
+
+        float GetProbeViewBias() const { return m_desc.probeViewBias; }
+
         float GetProbeDistanceExponent() const { return m_desc.probeDistanceExponent; }
 
-        float GetProbeChangeThreshold() const { return m_desc.probeChangeThreshold; }
+        float GetProbeIrradianceThreshold() const { return m_desc.probeIrradianceThreshold; }
 
         float GetProbeBrightnessThreshold() const { return m_desc.probeBrightnessThreshold; }
 
+        float GetProbeIrradianceEncodingGamma() const { return m_desc.probeIrradianceEncodingGamma; }
+
         float3 GetEulerAngles() const { return m_desc.eulerAngles; }
-
-        float3 GetProbeGridSpacing() const { return m_desc.probeGridSpacing; }
-
-        int3 GetProbeGridCounts() const { return m_desc.probeGridCounts; }
-
-#if RTXGI_DDGI_PROBE_SCROLL
-        EDDGIVolumeMovementType GetMovementType() const { return m_desc.movementType; }
-#endif
-
-        DDGIVolumeDesc GetDesc() const { return m_desc; }
-
-        DDGIVolumeResources GetResources() const { return m_resources; }
-
-        int GetNumProbes() const {  return (m_desc.probeGridCounts.x * m_desc.probeGridCounts.y * m_desc.probeGridCounts.z); }
-
-        int GetNumRaysPerProbe() const { return static_cast<int>(m_desc.numRaysPerProbe); }
-
-        float4x4 GetProbeRayRotationTransform() const { return m_probeRayRotationTransform; }
 
         float3 GetProbeWorldPosition(int probeIndex) const;
 
@@ -416,88 +314,54 @@ namespace rtxgi
 
         OBB GetOrientedBoundingBox() const;
 
-        //------------------------------------------------------------------------
-        // Event Handlers
-        //------------------------------------------------------------------------
+        // Probe Relocation Getters
+        bool GetProbeRelocationEnabled() const { return m_desc.probeRelocationEnabled; }
 
-        virtual void OnGlobalLightChange() {}
-        virtual void OnLargeObjectChange() {}
-        virtual void OnSmallLightChange() {}
+        bool GetProbeRelocationNeedsReset() const { return m_desc.probeRelocationNeedsReset; }
+
+        float GetMinFrontFaceDistance() const { return m_desc.probeMinFrontfaceDistance; }
+
+        // Probe Classification Getters
+        bool GetProbeClassificationEnabled() const { return m_desc.probeClassificationEnabled; }
+
+        bool GetProbeClassificationNeedsReset() const { return m_desc.probeClassificationNeedsReset; }
+
+        float GetProbeBackfaceThreshold() const { return m_desc.probeBackfaceThreshold; }
+
+    protected:
+
+        void ComputeRandomRotation();
+        void ComputeScrolling();
+        int3 GetProbeGridCoords(int probeIndex) const;
+
+    protected:
+
+        DDGIVolumeDesc m_desc;                                                 // Properties of the volume
+        std::mt19937   m_rng;                                                  // Mersenne twister pseudo-random generator of 32-bit numbers with state size of 19937 bits
+
+        float4         m_rotationQuaternion = { 0.f, 0.f, 0.f, 1.f };          // Quaternion defining the orientation of the volume (constructed from m_rotationMatrix)
+        float3x3       m_rotationMatrix = {                                    // Matrix defining the orientation of the volume
+                        { 1.f, 0.f, 0.f },
+                        { 0.f, 1.f, 0.f },
+                        { 0.f, 0.f, 1.f }
+        };
+
+        float4         m_probeRayRotationQuaternion = { 0.f, 0.f, 0.f, 1.f };  // Quaternion defining the orientation of probe rays (constructed from m_probeRayRotationMatrix)
+        float3x3       m_probeRayRotationMatrix = {                            // Matrix defining the orientation of probe rays, updated every time Update() is called
+                        { 1.f, 0.f, 0.f },
+                        { 0.f, 1.f, 0.f },
+                        { 0.f, 0.f, 1.f },
+        };
+
+        float3         m_probeScrollAnchor = { 0.f, 0.f, 0.f };                // The anchor position for a scrolling volume to target for it's effective origin
+        int3           m_probeScrollOffsets = { 0, 0, 0 };                     // Grid-space space offsets for scrolling movement
+        bool           m_probeScrollClear[3] = { 0, 0, 0 };                    // If probes of a plane need to be cleared due to scrolling movement
+
+        bool           m_insertPerfMarkers = false;                            // Toggles whether the volume will insert performance markers in the graphics command list.
 
     private:
-        std::string                 m_name;                                             // Name of the volume
-        DDGIVolumeDesc              m_desc;                                             // Properties of the volume provided by the client
-        DDGIVolumeResources         m_resources;                                        // Resources passed in by the host application
-        float3                      m_origin;                                           // Origin of the volume
-        float3x3                    m_rotationMatrix = {                                // Matrix defining the orientation of the volume
-                                        { 1.f, 0.f, 0.f },
-                                        { 0.f, 1.f, 0.f },
-                                        { 0.f, 0.f, 1.f }
-                                    };
-        float4                      m_rotationQuaternion = { 0.f, 0.f, 0.f, 1.f };      // Quaternion defining the orientation of the volume (constructed directly from m_rotationMatrix)
 
-        ID3D12Resource*             m_volumeCB;                                         // Constant data for the DDGIVolume
-        UINT64                      m_volumeCBOffsetInBytes;                            // Offset into the constant buffer, in bytes
+        void ScrollReset(int planeIndex, int direction);
 
-        ID3D12Resource*             m_probeRTRadiance = nullptr;                        // Probe radiance (from ray tracing)
-        ID3D12Resource*             m_probeIrradiance = nullptr;                        // Probe irradiance, encoded with a high gamma curve
-        ID3D12Resource*             m_probeDistance = nullptr;                          // Probe distance, R channel is mean distance, G channel is mean distance^2
-
-        ID3D12DescriptorHeap*       m_descriptorHeap = nullptr;                         // Descriptor heap
-        ID3D12RootSignature*        m_rootSignature = nullptr;                          // Root signature, used for all the update compute shaders
-        ID3D12PipelineState*        m_probeRadianceBlendingPSO = nullptr;               // Probe radiance blending compute shader pipeline state object
-        ID3D12PipelineState*        m_probeDistanceBlendingPSO = nullptr;               // Probe distance blending compute shader pipeline state object
-        ID3D12PipelineState*        m_probeBorderRowPSO = nullptr;                      // Probe irradiance or distance border row update compute shader pipeline state object
-        ID3D12PipelineState*        m_probeBorderColumnPSO = nullptr;                   // Probe irradiance or distance border column update compute shader pipeline state object
-
-#if RTXGI_DDGI_PROBE_RELOCATION
-        ID3D12Resource*             m_probeOffsets = nullptr;                           // Probe offsets texture, world-space offsets to relocate probes at runtime
-        ID3D12PipelineState*        m_probeRelocationPSO = nullptr;                     // Probe relocation compute shader pipeline state object
-#endif
-
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        ID3D12Resource*             m_probeStates = nullptr;
-        ID3D12PipelineState*        m_probeClassifierPSO = nullptr;
-        ID3D12PipelineState*        m_probeClassifierActivateAllPSO = nullptr;
-#endif
-
-#if RTXGI_DDGI_PROBE_SCROLL
-        int3                        m_probeScrollOffsets = { 0, 0, 0 };                 // Grid-space space offsets for scrolling movement
-        float3                      m_probeScrollTranslation = { 0.f, 0.f, 0.f };       // Accumulated world-space translations for scrolling movement
-#endif
-
-        D3D12_ROOT_SIGNATURE_DESC   m_rootSignatureDesc;                                // The root signature descriptor for the volume's compute shaders
-
-        D3D12_CPU_DESCRIPTOR_HANDLE m_descriptorHeapStart;                              // Start location of the descriptor heap
-        UINT                        m_descriptorDescSize = 0;                           // Size of each descriptor heap entry
-        UINT                        m_descriptorHeapOffset = 0;                         // Offset to the first available slot in the descriptor heap
-
-        float4x4                    m_probeRayRotationTransform = {                     // A random rotation transform, updated each frame for computing probe ray directions
-                                        { 1.f, 0.f, 0.f, 0.f },
-                                        { 0.f, 1.f, 0.f, 0.f },
-                                        { 0.f, 0.f, 1.f, 0.f },
-                                        { 0.f, 0.f, 0.f, 1.f }
-                                    };
-
-        
-#if RTXGI_DDGI_SDK_MANAGED_RESOURCES
-        void CreateDescriptors(ID3D12Device* device);
-        bool CreateRootSignature(ID3D12Device* device);
-        bool CreateComputePSO(ID3D12Device* device, ID3DBlob* shader, ID3D12PipelineState** pipeline);
-        bool CreateTexture(UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_STATES state, ID3D12Resource** resource, ID3D12Device* device);
-        bool CreateProbeRTRadianceTexture(DDGIVolumeDesc &desc, ID3D12Device* device);
-        bool CreateProbeIrradianceTexture(DDGIVolumeDesc &desc, ID3D12Device* device);
-        bool CreateProbeDistanceTexture(DDGIVolumeDesc &desc, ID3D12Device* device);
-#if RTXGI_DDGI_PROBE_RELOCATION
-        bool CreateProbeOffsetTexture(DDGIVolumeDesc &desc, ID3D12Device* device);
-#endif
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-        bool CreateProbeStatesTexture(DDGIVolumeDesc &desc, ID3D12Device* device);
-#endif
-#endif
-
-        // Helper Functions
-        void ComputeRandomRotation();                               // Computes the random rotation transformation
-        int3 GetProbeGridCoords(int probeIndex) const;              // Computes the 3D grid coordinates for the probe at the given probe index
     };
 }

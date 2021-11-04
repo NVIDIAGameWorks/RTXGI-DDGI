@@ -9,6 +9,7 @@
 */
 
 #include "Textures.h"
+#include "UI.h"
 
 #define STBI_NO_BMP
 #define STBI_NO_GIF
@@ -21,200 +22,349 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-static const D3D12_HEAP_PROPERTIES defaultHeapProps =
-{
-    D3D12_HEAP_TYPE_DEFAULT,
-    D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-    D3D12_MEMORY_POOL_UNKNOWN,
-    0, 0
-};
+#if defined(GPU_COMPRESSION)
+#include <d3d11.h>
+static ID3D11Device* d3d11Device = nullptr;
+#endif
 
-static const D3D12_HEAP_PROPERTIES uploadHeapProps =
-{
-    D3D12_HEAP_TYPE_UPLOAD,
-    D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-    D3D12_MEMORY_POOL_UNKNOWN,
-    0, 0
-};
+#if __linux__
+// Note: disabling gcc warnings for ignored attributes
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wignored-attributes"
+#endif
+#include "thirdparty/directxtex/DirectXTex.h"
+#if __linux__
+#pragma GCC diagnostic pop
+#endif
+
+using namespace DirectX;
 
 namespace Textures
 {
 
-//----------------------------------------------------------------------------------------------------------
-// Public Functions
-//----------------------------------------------------------------------------------------------------------
+    //----------------------------------------------------------------------------------------------------------
+    // Private Functions
+    //----------------------------------------------------------------------------------------------------------
 
-/**
-* Load an image from disk.
-*/
-bool LoadTexture(Texture &texture)
-{
-    // Load the texture with stb_image (require 4 component RGBA)
-    texture.pixels = stbi_load(texture.filepath.c_str(), &texture.width, &texture.height, &texture.stride, STBI_rgb_alpha);
-    texture.stride = 4;
-    if (!texture.pixels)
+    /**
+     * Compute the aligned memory required for the texture.
+     * Add texels to the texture if either dimension is not a factor of 4 (required for BC7 compressed formats).
+     */
+    bool FormatTexture(Texture& texture)
     {
-        std::string msg = "Error: failed to load texture: \'";
-        msg.append(texture.name);
-        msg.append("\'");
-        MessageBox(NULL, msg.c_str(), "Error", MB_OK);
+        // BC7 compressed textures require 4x4 texel blocks
+        // Add texels to the texture if its original dimensions aren't factors of 4
+        if (texture.width % 4 != 0 || texture.height % 4 != 0)
+        {
+            // Get original row stride
+            uint32_t rowSize = (texture.width * texture.stride);
+            uint32_t numRows = texture.height;
+
+            // Align the new texture to 4x4
+            texture.width = ALIGN(4, texture.width);
+            texture.height = ALIGN(4, texture.height);
+
+            uint32_t alignedRowSize = (texture.width * texture.stride);
+            uint32_t size = alignedRowSize * texture.height;
+
+            // Copy the original texture into the new one
+            size_t offset = 0;
+            size_t alignedOffset = 0;
+            uint8_t* texels = new uint8_t[size];
+            memset(texels, 0, size);
+            for(uint32_t row = 0; row < numRows; row++)
+            {
+                memcpy(&texels[alignedOffset], &texture.texels[offset], rowSize);
+                alignedOffset += alignedRowSize;
+                offset += rowSize;
+            }
+
+            // Release the memory of the original texture
+            delete[] texture.texels;
+            texture.texels = texels;
+        }
+
+        // Compute the texture's aligned memory size
+        uint32_t rowSize = (texture.width * texture.stride);
+        uint32_t rowPitch = ALIGN(256, rowSize);          // 256 == D3D12_TEXTURE_DATA_PITCH_ALIGNMENT
+        texture.texelBytes = (rowPitch * texture.height);
+
+        return (texture.texelBytes > 0);
+    }
+
+#if defined(__x86_64__) || defined(_M_X64)
+    /**
+     * Copy a compressed BC7 texture into our format, aligned for GPU use.
+     */
+    bool FormatCompressedTexture(ScratchImage& src, Texture& dst)
+    {
+        bool result = false;
+
+        // Get the texture's metadata
+        const TexMetadata metadata = src.GetMetadata();
+
+        // Check if the texture's format is supported
+        if (metadata.format != DXGI_FORMAT_BC7_UNORM && metadata.format != DXGI_FORMAT_BC7_UNORM_SRGB && metadata.format != DXGI_FORMAT_BC7_TYPELESS)
+        {
+            std::string msg = "Error: unsupported compressed texture format for: \'" + dst.name + "\' \'" + dst.filepath + "\'\n. Compressed textures must be in BC7 format";
+            Graphics::UI::MessageBox(msg);
+            return false;
+        }
+
+        // Set texture data
+        dst.width = static_cast<int>(metadata.width);
+        dst.height = static_cast<int>(metadata.height);
+        dst.stride = 1;
+        dst.mips = static_cast<int>(metadata.mipLevels);
+        dst.texelBytes = 0;
+
+        // Compute the total size of the texture in bytes (including alignment).
+        // Note: BC7 uses fixed block sizes of 4x4 texels with 16 bytes per block, 1 byte per texel.
+        for (uint32_t mipIndex = 0; mipIndex < dst.mips; mipIndex++)
+        {
+            // Compute the size of the mip level and add it to the total aligned memory size
+            const Image* image = src.GetImage(mipIndex, 0, 0);
+
+            uint32_t alignedWidth = ALIGN(4, static_cast<uint32_t>(image->width));
+            uint32_t alignedHeight = ALIGN(4, static_cast<uint32_t>(image->height));
+
+            // Add the size of the last mip (one texel)
+            if (dst.mips > 1 && (mipIndex + 1) == dst.mips)
+            {
+                dst.texelBytes += 16; // BC7 blocks are 16 bytes
+                break;
+            }
+
+            // Get the aligned memory size in bytes of the mip level and add it to the texture memory total
+            dst.texelBytes += GetBC7TextureSizeInBytes(alignedWidth, alignedHeight);
+        }
+
+        if (dst.texelBytes > 0)
+        {
+            // Delete existing texels
+            if(dst.texels)
+            {
+                delete[] dst.texels;
+                dst.texels = nullptr;
+            }
+
+            // Copy each aligned mip level to the texel array
+            size_t alignedOffset = 0;
+            dst.texels = new uint8_t[dst.texelBytes];
+            memset(dst.texels, 0, dst.texelBytes);
+            for (uint32_t mipIndex = 0; mipIndex < dst.mips; mipIndex++)
+            {
+                size_t offset = 0;
+                const Image* image = src.GetImage(mipIndex, 0, 0);
+
+                uint32_t alignedHeight = ALIGN(4, static_cast<uint32_t>(image->height));
+
+                // Copy the last mip level / block
+                if (dst.mips > 1 && (mipIndex + 1) == dst.mips)
+                {
+                    memcpy(&dst.texels[alignedOffset], &image->pixels[offset], image->rowPitch);
+                    alignedOffset += image->rowPitch;
+                    assert(dst.texelBytes == alignedOffset);
+                    break;
+                }
+
+                // Copy each row of the mip texture, padding for alignment
+                size_t numRows = alignedHeight / 4;
+                for (uint32_t rowIndex = 0; rowIndex < numRows; rowIndex++)
+                {
+                    memcpy(&dst.texels[alignedOffset], &image->pixels[offset], image->rowPitch);
+                    offset += image->rowPitch;
+                    alignedOffset += ALIGN(256, image->rowPitch);
+                }
+
+                alignedOffset = ALIGN(512, alignedOffset);
+            }
+            result =  true;
+        }
+
+        src.Release();
+        return result;
+    }
+#endif
+
+    //----------------------------------------------------------------------------------------------------------
+    // Public Functions
+    //----------------------------------------------------------------------------------------------------------
+
+#if defined(GPU_COMPRESSION)
+    /**
+     * Creates a D3D11Device for use with DirectXTex to compress textures with the GPU.
+     */
+    bool Initialize()
+    {
+        D3D_FEATURE_LEVEL requested = D3D_FEATURE_LEVEL_11_1;
+        D3D_FEATURE_LEVEL supported;
+        if(FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, &requested, 1, D3D11_SDK_VERSION, &d3d11Device, &supported, nullptr))) return false;
+        return true;
+    }
+
+    void Cleanup()
+    {
+        SAFE_RELEASE(d3d11Device);
+    }
+#endif
+
+    /**
+     * Load a texture file from disk.
+     * Supports uncompressed R8G8B8A8_UNORM textures without mipmaps and BC7 compressed textures with or without mipmaps.
+     */
+    bool Load(Texture& texture)
+    {
+        if(texture.format == ETextureFormat::UNCOMPRESSED)
+        {
+            // Load the uncompressed texture with stb_image (require 4 component RGBA)
+            texture.texels = stbi_load(texture.filepath.c_str(), (int*)&(texture.width), (int*)&texture.height, (int*)&texture.stride, STBI_rgb_alpha);
+            if (!texture.texels)
+            {
+                std::string msg = "Error: failed to load texture: \'" + texture.name + "\' \'" + texture.filepath + "\'";
+                Graphics::UI::MessageBox(msg);
+                return false;
+            }
+
+            texture.stride = 4;
+            texture.mips = 1;
+
+            // Prep the texture for compression and use on the GPU
+            return FormatTexture(texture);
+        }
+    #if defined(__x86_64__) || defined(_M_X64)
+        else if(texture.format == ETextureFormat::BC7)
+        {
+            // Load the compressed texture from a DDS file
+            ScratchImage dds = {};
+            if(FAILED(LoadFromDDSFile(std::wstring(texture.filepath.begin(), texture.filepath.end()).c_str(), DDS_FLAGS_NONE, nullptr, dds)))
+            {
+                std::string msg = "Error: failed to load texture: \'" + texture.name + "\' \'" + texture.filepath + "\'\n.";
+                Graphics::UI::MessageBox(msg);
+                return false;
+            }
+
+            // Ensure the texture format is compressed as BC7
+            if(dds.GetMetadata().format != DXGI_FORMAT_BC7_UNORM)
+            {
+                std::string msg = "Error: loaded texture is not in BC7 (UNORM) format!";
+                Graphics::UI::MessageBox(msg);
+                return false;
+            }
+
+            // Copy the texture into our format, prepping it for upload to the GPU
+            return FormatCompressedTexture(dds, texture);
+        }
+    #endif
         return false;
     }
-    return true;
-}
 
-/**
-* Release texture memory.
-*/
-void UnloadTexture(Texture &texture)
-{
-    stbi_image_free(texture.pixels);
-    texture.pixels = nullptr;
-}
-
-/**
-* Loads a texture from disk, creates a D3D12 GPU resource, and uploads the texels to the GPU. 
-* Returns the index of the texture in the resources.textures array.
-* Uses format DXGI_FORMAT_R8G8B8A8_UNORM.
-* Does not make mips and puts the texture in state D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE.
-* An upload buffer is created and not freed until cleanup.
-*/
-bool LoadAndCreateTexture(D3D12Global &d3d, D3D12Resources &resources, Texture &texture, int &index)
-{
-    // Load the texture from disk
-    if (!LoadTexture(texture)) return false;
-
-    // Create the texture resource on the default heap
-    ID3D12Resource* textureResource = nullptr;
+#if defined(__x86_64__) || defined(_M_X64)
+    /**
+     * Covert a R8G8B8A8_UNORM texture to BC7 format.
+     * CAUTION: CPU-only compression is very slow, use GPU_COMPRESSION whenever possible.
+     */
+    bool Compress(Texture& texture, bool quick)
     {
-        // Describe the texture resource
-        D3D12_RESOURCE_DESC desc = {};
-        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        desc.Alignment = 0;
-        desc.Width = texture.width;
-        desc.Height = texture.height;
-        desc.DepthOrArraySize = 1;
-        desc.MipLevels = 1;
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        desc.SampleDesc.Count = 1;
-        desc.SampleDesc.Quality = 0;
-        desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-        desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+        // Only compressed uncompressed textures
+        if(texture.format != ETextureFormat::UNCOMPRESSED) return false;
 
-        // Create the texture resource        
-        HRESULT hr = d3d.device->CreateCommittedResource(&defaultHeapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COPY_DEST, NULL, IID_PPV_ARGS(&textureResource));
-        if (FAILED(hr)) return false;
-#if defined(RTXGI_NAME_D3D_OBJECTS)
-        std::string name = "Texture: ";
-        name.append(texture.name);
-        std::wstring n = std::wstring(name.begin(), name.end());
-        textureResource->SetName(n.c_str());
+        // B7 textures must be aligned to pixel 4x4 blocks
+        assert(texture.width % 4 == 0);
+        assert(texture.height % 4 == 0);
+
+        Image source = {};
+        source.width = texture.width;
+        source.height = texture.height;
+        source.rowPitch = (texture.width * texture.stride);
+        source.slicePitch = (source.rowPitch * source.height);
+        source.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        source.pixels = texture.texels;
+
+        TEX_COMPRESS_FLAGS flags = TEX_COMPRESS_DEFAULT;
+        if(quick) flags = TEX_COMPRESS_BC7_QUICK;
+
+        // Compress the source image to BC7 format
+        ScratchImage destination;
+    #ifdef GPU_COMPRESSION
+        if (FAILED(DirectX::Compress(d3d11Device, source, DXGI_FORMAT_BC7_UNORM, flags, 1.f, destination))) return false;
+    #else
+        flags |= TEX_COMPRESS_PARALLEL;
+        if (FAILED(DirectX::Compress(source, DXGI_FORMAT_BC7_UNORM, flags, TEX_THRESHOLD_DEFAULT, destination))) return false;
+    #endif
+
+        // The image is now compressed, change the format descriptor
+        texture.format = ETextureFormat::BC7;
+
+        // Format the compressed texture into our format, prepping it for use on the GPU
+        return FormatCompressedTexture(destination, texture);
+    }
+
+    /**
+     * Generate the mipmap chain for the given texture, then compress the mipmap chain to BC7 format.
+     * CAUTION: CPU-only compression is very slow, use GPU_COMPRESSION whenever possible.
+     */
+    bool MipmapAndCompress(Texture& texture, bool quick)
+    {
+        // DirectX::GenerateMipMaps does not support block compressed images
+        if (texture.format != ETextureFormat::UNCOMPRESSED) return false;
+
+        // B7 textures must be aligned to pixel 4x4 blocks
+        assert(texture.width % 4 == 0);
+        assert(texture.height % 4 == 0);
+
+        Image source = {};
+        source.width = texture.width;
+        source.height = texture.height;
+        source.rowPitch = (texture.width * texture.stride);
+        source.slicePitch = (source.rowPitch * source.height);
+        source.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        source.pixels = texture.texels;
+
+        // Generate the mipmap chain
+        ScratchImage mips;
+        if (FAILED(DirectX::GenerateMipMaps(source, TEX_FILTER_DEFAULT, 0, mips))) return false;
+
+        TEX_COMPRESS_FLAGS flags = TEX_COMPRESS_DEFAULT;
+        if (quick) flags = TEX_COMPRESS_BC7_QUICK;
+
+        // Compress the mip chain to BC7 format
+        ScratchImage compressed;
+    #ifdef GPU_COMPRESSION
+        if (FAILED(DirectX::Compress(d3d11Device, mips.GetImages(), mips.GetImageCount(), mips.GetMetadata(), DXGI_FORMAT_BC7_UNORM, flags, 1.f, compressed))) return false;
+    #else
+        flags |= TEX_COMPRESS_PARALLEL;
+        if (FAILED(DirectX::Compress(mips.GetImages(), mips.GetImageCount(), mips.GetMetadata(), DXGI_FORMAT_BC7_UNORM, flags, TEX_THRESHOLD_DEFAULT, compressed))) return false;
+    #endif
+
+        mips.Release();
+        texture.format = ETextureFormat::BC7;
+
+        // Format the compressed image into our format, prepping it for use on the GPU
+        return FormatCompressedTexture(compressed, texture);
+    }
+
 #endif
-    }
 
-    UINT rowPitch = RTXGI_ALIGN(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT, texture.width * texture.stride);
-    ID3D12Resource* uploadBuffer = nullptr;
-
-    // Create an upload buffer and copy texels into it
+    /**
+     * Release texture memory (CPU).
+     */
+    void Unload(Texture& texture)
     {
-        UINT uploadBufferSize = (rowPitch * texture.height);
-
-        // Describe the upload buffer
-        D3D12_RESOURCE_DESC desc = {};
-        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        desc.Alignment = 0;
-        desc.Width = uploadBufferSize;
-        desc.Height = 1;
-        desc.DepthOrArraySize = 1;
-        desc.MipLevels = 1;
-        desc.Format = DXGI_FORMAT_UNKNOWN;
-        desc.SampleDesc.Count = 1;
-        desc.SampleDesc.Quality = 0;
-        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-        
-        // Create the upload buffer        
-        HRESULT hr = d3d.device->CreateCommittedResource(&uploadHeapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL, IID_PPV_ARGS(&uploadBuffer));
-        if (FAILED(hr)) return false;
-#if RTXGI_NAME_D3D_OBJECTS
-        std::string name = " Texture Upload Buffer: ";
-        name.append(texture.name);
-        std::wstring n = std::wstring(name.begin(), name.end());
-        uploadBuffer->SetName(n.c_str());
-#endif
-
-        // Copy the texel data to the upload buffer
-        UINT8* pData = nullptr;
-        D3D12_RANGE range = { 0, uploadBufferSize };
-        hr = uploadBuffer->Map(0, &range, reinterpret_cast<void**>(&pData));
-        if (FAILED(hr)) return false;
-
-        size_t rowSize = (texture.width * texture.stride);
-        if (rowSize < D3D12_TEXTURE_DATA_PITCH_ALIGNMENT)
-        {
-            // Copy each row of the image, padding the copies for the row pitch alignment
-            UINT8* source = texture.pixels;
-            for (size_t rowIndex = 0; rowIndex < texture.height; rowIndex++)
-            {
-                memcpy(pData, source, rowSize);
-                pData += D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
-                source += rowSize;
-            }
-        }
-        else
-        {
-            // RowPitch is aligned, copy the entire image
-            size_t size = (texture.width * texture.height * texture.stride);
-            memcpy(pData, texture.pixels, size);
-            pData += size;
-        }
-
-        uploadBuffer->Unmap(0, &range);
+        delete[] texture.texels;
+        texture = {};
     }
 
-    // Copy the texture from the upload buffer to the default heap resource, then transition it to a shader resource
+    /**
+     * Get the size (in bytes) of an aligned BC7 compressed texture.
+     * This matches the size returned by D3D12Device->GetCopyableFootprints(...).
+     * https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-getcopyablefootprints
+     */
+    uint32_t GetBC7TextureSizeInBytes(uint32_t width, uint32_t height)
     {
-        // Describe the upload buffer resource (source)
-        D3D12_TEXTURE_COPY_LOCATION source = {};
-        source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-        source.pResource = uploadBuffer;
-        source.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        source.PlacedFootprint.Footprint.Width = texture.width;
-        source.PlacedFootprint.Footprint.Height = texture.height;
-        source.PlacedFootprint.Footprint.RowPitch = rowPitch;
-        source.PlacedFootprint.Footprint.Depth = 1;
-
-        // Describe the default heap resource (destination)
-        D3D12_TEXTURE_COPY_LOCATION destination = {};
-        destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-        destination.pResource = textureResource;
-        destination.SubresourceIndex = 0;
-
-        // Copy the texture from the upload heap to the default heap
-        d3d.cmdList->CopyTextureRegion(&destination, 0, 0, 0, &source, NULL);
-
-        // Transition the default heap texture resource to a shader resource
-        D3D12_RESOURCE_BARRIER barrier = {};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Transition.pResource = textureResource;
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-        d3d.cmdList->ResourceBarrier(1, &barrier);
+        uint32_t numRows = height / 4;
+        uint32_t rowPitch = ALIGN(16, width * 4);
+        return ALIGN(512, numRows * ALIGN(256, rowPitch));
     }
 
-    // Track the texture resource and return the array index
-    index = (int)resources.textures.size();
-    resources.textures.push_back(textureResource);
-
-    // Track the upload buffer so we can release it later
-    resources.textureUploadBuffers.push_back(uploadBuffer);
-
-    // Unload texels
-    UnloadTexture(texture);
-
-    return true;
-}
-
-}
+} //namespace Textures

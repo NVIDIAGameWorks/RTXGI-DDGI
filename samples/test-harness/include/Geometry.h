@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -9,9 +9,10 @@
 */
 #pragma once
 
-#include "Common.h"
+#include "Scenes.h"
 
 namespace Geometry
 {
-    bool CreateSphere(D3D12Global &d3d, D3D12Resources &resources);
+    void CreateSphere(uint32_t latitudes, uint32_t longitudes, Scenes::MeshPrimitive& mesh);
 }
+

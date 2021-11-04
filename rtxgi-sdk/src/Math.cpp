@@ -8,20 +8,42 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#pragma once
-
-#include <time.h>
-#include <stdlib.h>
-#include <cmath>
-
-#include "rtxgi/Defines.h"
 #include "rtxgi/Math.h"
+#include "rtxgi/Defines.h"
+
+#include <math.h>
 
 namespace rtxgi
 {
-    int AbsFloor(float f)
+
+    int Sign(const int value)
     {
-        return f >= 0.f ? int(floor(f)) : int(ceil(f));
+        return value >= 0 ? 1 : -1;
+    }
+
+    int Sign(const float value)
+    {
+        return value >= 0.f ? 1 : -1;
+    }
+
+    int AbsFloor(const float value)
+    {
+        return value >= 0.f ? int(floor(value)) : int(ceil(value));
+    }
+
+    float Distance(const float3& a, const float3& b)
+    {
+        return sqrtf(powf(b.x - a.x, 2.f) + powf(b.y - a.y, 2.f) + powf(b.z - a.z, 2.f));
+    }
+
+    float Dot(const float3& a, const float3& b)
+    {
+        return (a.x * b.x) + (a.y * b.y) + (a.z * b.z);
+    }
+
+    float3 Cross(const float3& a, const float3& b)
+    {
+        return {(a.y * b.z) - (a.z * b.y), (a.z * b.x - a.x * b.z), (a.x * b.y - a.y * b.x)};
     }
 
     float3 Normalize(const float3& v)
@@ -30,30 +52,14 @@ namespace rtxgi
         return (v / length);
     }
 
-    float3x3 EulerAnglesToRotationMatrixYXZ(const float3& eulerAngles)
+    float3 Min(const float3& a, const float3& b)
     {
-        float sx = std::sin(eulerAngles.x);
-        float cx = std::cos(eulerAngles.x);
-        float sy = std::sin(eulerAngles.y);
-        float cy = std::cos(eulerAngles.y);
-        float sz = std::sin(eulerAngles.z);
-        float cz = std::cos(eulerAngles.z);
+        return { fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z) };
+    }
 
-#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
-        float3x3 rotYXZ = {
-            { cy * cz + sx * sy * sz, cz * sx * sy - cy * sz, cx * sy },
-            { cx * sz,                cx * cz,               -sx      },
-            {-cz * sy + cy * sx * sz, cy * cz * sx + sy * sz, cx * cy }
-        };
-#else // Swap signs of all sin()
-        float3x3 rotYXZ = {
-            { cy * cz - sx * sy * sz, cz * sx * sy + cy * sz,-cx * sy },
-            {-cx * sz,                cx * cz,                sx      },
-            { cz * sy + cy * sx * sz,-cy * cz * sx + sy * sz, cx * cy }
-        };
-#endif
-
-        return rotYXZ;
+    float3 Max(const float3& a, const float3& b)
+    {
+        return { fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z) };
     }
 
     float4 QuaternionConjugate(const float4& q)
@@ -72,7 +78,7 @@ namespace rtxgi
 
         if (diagSum > 0.f)
         {
-            q.w = std::sqrt(diagSum + 1.f) * 0.5f;
+            q.w = sqrtf(diagSum + 1.f) * 0.5f;
             float f = 0.25f / q.w;
             q.x = (m21 - m12) * f;
             q.y = (m02 - m20) * f;
@@ -80,7 +86,7 @@ namespace rtxgi
         }
         else if ((m00 > m11) && (m00 > m22))
         {
-            q.x = std::sqrt(m00 - m11 - m22 + 1.f) * 0.5f;
+            q.x = sqrtf(m00 - m11 - m22 + 1.f) * 0.5f;
             float f = 0.25f / q.x;
             q.y = (m10 + m01) * f;
             q.z = (m02 + m20) * f;
@@ -88,7 +94,7 @@ namespace rtxgi
         }
         else if (m11 > m22)
         {
-            q.y = std::sqrt(m11 - m00 - m22 + 1.f) * 0.5f;
+            q.y = sqrtf(m11 - m00 - m22 + 1.f) * 0.5f;
             float f = 0.25f / q.y;
             q.x = (m10 + m01) * f;
             q.z = (m21 + m12) * f;
@@ -96,181 +102,192 @@ namespace rtxgi
         }
         else
         {
-            q.z = std::sqrt(m22 - m00 - m11 + 1.f) * 0.5f;
+            q.z = sqrtf(m22 - m00 - m11 + 1.f) * 0.5f;
             float f = 0.25f / q.z;
             q.x = (m02 + m20) * f;
             q.y = (m21 + m12) * f;
             q.w = (m10 - m01) * f;
         }
 
-#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
+    #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
         // By default, a quaternion rotation through a positive angle is counterclockwise when the axis points toward the viewer.
         // It needs to be reversed (by conjugate), in case of left-hand coordinate system.
         q = QuaternionConjugate(q);
-#endif
+    #endif
 
         return q;
+    }
+
+    float3x3 EulerAnglesToRotationMatrixYXZ(const float3& eulerAngles)
+    {
+        float sx = sinf(eulerAngles.x);
+        float cx = cosf(eulerAngles.x);
+        float sy = sinf(eulerAngles.y);
+        float cy = cosf(eulerAngles.y);
+        float sz = sinf(eulerAngles.z);
+        float cz = cosf(eulerAngles.z);
+
+    #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+        float3x3 rotationYXZ = {
+            { cy * cz + sx * sy * sz, cz * sx * sy - cy * sz, cx * sy },
+            { cx * sz,                cx * cz,               -sx      },
+            {-cz * sy + cy * sx * sz, cy * cz * sx + sy * sz, cx * cy }
+        };
+    #else // Swap signs of all sin()
+        float3x3 rotationYXZ = {
+            { cy * cz - sx * sy * sz, cz * sx * sy + cy * sz,-cx * sy },
+            {-cx * sz,                cx * cz,                sx      },
+            { cz * sy + cy * sx * sz,-cy * cz * sx + sy * sz, cx * cy }
+        };
+    #endif
+
+        return rotationYXZ;
     }
 
     //------------------------------------------------------------------------
     // Addition
     //------------------------------------------------------------------------
 
-    int2 operator+(const int2 &lhs, const int2 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y }; }
-    int2 operator+(const int2 &lhs, const float2 &rhs) { return { lhs.x + (int)rhs.x, lhs.y + (int)rhs.y }; }
-    int2 operator+(const int2 &lhs, const int &rhs) { return { lhs.x + rhs, lhs.y + rhs }; }
-    int2 operator+(const int2 &lhs, const float &rhs) { return { lhs.x + (int)rhs, lhs.y + (int)rhs }; }
+    int2 operator+(const int2& lhs, const int2& rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y }; }
+    int2 operator+(const int2& lhs, const float2& rhs) { return { lhs.x + (int)rhs.x, lhs.y + (int)rhs.y }; }
+    int2 operator+(const int2& lhs, const int& rhs) { return { lhs.x + rhs, lhs.y + rhs }; }
+    int2 operator+(const int2& lhs, const float& rhs) { return { lhs.x + (int)rhs, lhs.y + (int)rhs }; }
 
-    int3 operator+(const int3 &lhs, const int3 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z }; }
-    int3 operator+(const int3 &lhs, const float3 &rhs) { return { lhs.x + (int)rhs.x, lhs.y + (int)rhs.y, lhs.z + (int)rhs.z }; }
-    int3 operator+(const int3 &lhs, const int &rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs }; }
-    int3 operator+(const int3 &lhs, const float &rhs) { return { lhs.x + (int)rhs, lhs.y + (int)rhs, lhs.z + (int)rhs }; }
+    int3 operator+(const int3& lhs, const int3& rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z }; }
+    int3 operator+(const int3& lhs, const float3& rhs) { return { lhs.x + (int)rhs.x, lhs.y + (int)rhs.y, lhs.z + (int)rhs.z }; }
+    int3 operator+(const int3& lhs, const int& rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs }; }
+    int3 operator+(const int3& lhs, const float& rhs) { return { lhs.x + (int)rhs, lhs.y + (int)rhs, lhs.z + (int)rhs }; }
 
-    void operator+=(int2 &lhs, const int2 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; }
-    void operator+=(int3 &lhs, const int3 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; }
-    void operator+=(int4 &lhs, const int4 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; lhs.w += rhs.w; }
+    void operator+=(int2& lhs, const int2& rhs) { lhs.x += rhs.x; lhs.y += rhs.y; }
+    void operator+=(int3& lhs, const int3& rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; }
+    void operator+=(int4& lhs, const int4& rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; lhs.w += rhs.w; }
 
-    float2 operator+(const float2 &lhs, const float2 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y }; }
-    float2 operator+(const float2 &lhs, const int2 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y }; }
-    float2 operator+(const float2 &lhs, const float &rhs) { return { lhs.x + rhs, lhs.y + rhs }; }
-    float2 operator+(const float2 &lhs, const int &rhs) { return { lhs.x + rhs, lhs.y + rhs }; }
-    
-    float3 operator+(const float3 &lhs, const float3 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z }; }
-    float3 operator+(const float3 &lhs, const int3 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z }; }
-    float3 operator+(const float3 &lhs, const float &rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs }; }
-    float3 operator+(const float3 &lhs, const int &rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs }; }
+    float2 operator+(const float2& lhs, const float2& rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y }; }
+    float2 operator+(const float2& lhs, const int2& rhs) { return { lhs.x + (float)rhs.x, lhs.y + (float)rhs.y }; }
+    float2 operator+(const float2& lhs, const float& rhs) { return { lhs.x + rhs, lhs.y + rhs }; }
+    float2 operator+(const float2& lhs, const int& rhs) { return { lhs.x + (float)rhs, lhs.y + (float)rhs }; }
 
-    float4 operator+(const float4 &lhs, const float4 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w }; }
-    float4 operator+(const float4 &lhs, const float &rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs, lhs.w + rhs }; }
-    float4 operator+(const float4 &lhs, const int &rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs, lhs.w + rhs }; }
+    float3 operator+(const float3& lhs, const float3& rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z }; }
+    float3 operator+(const float3& lhs, const int3& rhs) { return { lhs.x + (float)rhs.x, lhs.y + (float)rhs.y, lhs.z + (float)rhs.z }; }
+    float3 operator+(const float3& lhs, const float& rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs }; }
+    float3 operator+(const float3& lhs, const int& rhs) { return { lhs.x + (float)rhs, lhs.y + (float)rhs, lhs.z + (float)rhs }; }
 
-    void operator+=(float2 &lhs, const float2 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; }
-    void operator+=(float3 &lhs, const float3 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; }
-    void operator+=(float4 &lhs, const float4 &rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; lhs.w += rhs.w; }
+    float4 operator+(const float4& lhs, const float4& rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w }; }
+    float4 operator+(const float4& lhs, const float& rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs, lhs.w + rhs }; }
+    float4 operator+(const float4& lhs, const int& rhs) { return { lhs.x + (float)rhs, lhs.y + (float)rhs, lhs.z + (float)rhs, lhs.w + (float)rhs }; }
+
+    void operator+=(float2& lhs, const float2& rhs) { lhs.x += rhs.x; lhs.y += rhs.y; }
+    void operator+=(float3& lhs, const float3& rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; }
+    void operator+=(float4& lhs, const float4& rhs) { lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; lhs.w += rhs.w; }
 
     //------------------------------------------------------------------------
     // Subtraction
     //------------------------------------------------------------------------
 
-    int2 operator-(const int2 &lhs, const int2 &rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y }; }
-    int2 operator-(const int2 &lhs, const float2 &rhs) { return { lhs.x - (int)rhs.x, lhs.y - (int)rhs.y }; }
-    int2 operator-(const int2 &lhs, const int &rhs) { return { lhs.x - rhs, lhs.y - rhs }; }
-    int2 operator-(const int2 &lhs, const float &rhs) { return { lhs.x - (int)rhs, lhs.y - (int)rhs }; }
-    
-    int3 operator-(const int3 &lhs, const int3 &rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z }; }
-    int3 operator-(const int3 &lhs, const float3 &rhs) { return { lhs.x - (int)rhs.x, lhs.y - (int)rhs.y, lhs.z - (int)rhs.z }; }
-    int3 operator-(const int3 &lhs, const int &rhs) { return { lhs.x - rhs, lhs.y - rhs, lhs.z - rhs }; }
-    int3 operator-(const int3 &lhs, const float &rhs) { return { lhs.x - (int)rhs, lhs.y - (int)rhs, lhs.z - (int)rhs }; }
+    int2 operator-(const int2& lhs, const int2& rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y }; }
+    int2 operator-(const int2& lhs, const float2& rhs) { return { lhs.x - (int)rhs.x, lhs.y - (int)rhs.y }; }
+    int2 operator-(const int2& lhs, const int& rhs) { return { lhs.x - rhs, lhs.y - rhs }; }
+    int2 operator-(const int2& lhs, const float& rhs) { return { lhs.x - (int)rhs, lhs.y - (int)rhs }; }
 
-    float2 operator-(const float2 &lhs, const float2 &rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y }; }
-    float2 operator-(const float2 &lhs, const int2 &rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y }; }
-    float2 operator-(const float2 &lhs, const float &rhs) { return { lhs.x - rhs, lhs.y - rhs }; }
-    float2 operator-(const float2 &lhs, const int &rhs) { return { lhs.x - rhs, lhs.y - rhs }; }
+    int3 operator-(const int3& lhs, const int3& rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z }; }
+    int3 operator-(const int3& lhs, const float3& rhs) { return { lhs.x - (int)rhs.x, lhs.y - (int)rhs.y, lhs.z - (int)rhs.z }; }
+    int3 operator-(const int3& lhs, const int& rhs) { return { lhs.x - rhs, lhs.y - rhs, lhs.z - rhs }; }
+    int3 operator-(const int3& lhs, const float& rhs) { return { lhs.x - (int)rhs, lhs.y - (int)rhs, lhs.z - (int)rhs }; }
 
-    float3 operator-(const float3 &lhs, const float3 &rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z }; }
-    float3 operator-(const float3 &lhs, const int3 &rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z }; }
-    float3 operator-(const float3 &lhs, const float &rhs) { return { lhs.x - rhs, lhs.y - rhs, lhs.z - rhs }; }
-    float3 operator-(const float3 &lhs, const int &rhs) { return { lhs.x - rhs, lhs.y - rhs, lhs.z - rhs }; }
+    float2 operator-(const float2& lhs, const float2& rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y }; }
+    float2 operator-(const float2& lhs, const int2& rhs) { return { lhs.x - (float)rhs.x, lhs.y - (float)rhs.y }; }
+    float2 operator-(const float2& lhs, const float& rhs) { return { lhs.x - rhs, lhs.y - rhs }; }
+    float2 operator-(const float2& lhs, const int& rhs) { return { lhs.x - (float)rhs, lhs.y - (float)rhs }; }
 
-    float4 operator-(const float4 &lhs, const float4 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w }; }
-    float4 operator-(const float4 &lhs, const float &rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs, lhs.w + rhs }; }
-    float4 operator-(const float4 &lhs, const int &rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs, lhs.w + rhs }; }
+    float3 operator-(const float3& lhs, const float3& rhs) { return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z }; }
+    float3 operator-(const float3& lhs, const int3& rhs) { return { lhs.x - (float)rhs.x, lhs.y - (float)rhs.y, lhs.z - (float)rhs.z }; }
+    float3 operator-(const float3& lhs, const float& rhs) { return { lhs.x - rhs, lhs.y - rhs, lhs.z - rhs }; }
+    float3 operator-(const float3& lhs, const int& rhs) { return { lhs.x - (float)rhs, lhs.y - (float)rhs, lhs.z - (float)rhs }; }
 
-    void operator-=(float2 &lhs, const float2 &rhs) { lhs.x -= rhs.x; lhs.y -= rhs.y; }
-    void operator-=(float3 &lhs, const float3 &rhs) { lhs.x -= rhs.x; lhs.y -= rhs.y; lhs.z -= rhs.z; }
-    void operator-=(float4 &lhs, const float4 &rhs) { lhs.x -= rhs.x; lhs.y -= rhs.y; lhs.z -= rhs.z; lhs.w -= rhs.w; }
+    float4 operator-(const float4& lhs, const float4 &rhs) { return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w }; }
+    float4 operator-(const float4& lhs, const float &rhs) { return { lhs.x + rhs, lhs.y + rhs, lhs.z + rhs, lhs.w + rhs }; }
+    float4 operator-(const float4& lhs, const int &rhs) { return { lhs.x + (float)rhs, lhs.y + (float)rhs, lhs.z + (float)rhs, lhs.w + (float)rhs }; }
+
+    void operator-=(float2& lhs, const float2& rhs) { lhs.x -= rhs.x; lhs.y -= rhs.y; }
+    void operator-=(float3& lhs, const float3& rhs) { lhs.x -= rhs.x; lhs.y -= rhs.y; lhs.z -= rhs.z; }
+    void operator-=(float4& lhs, const float4& rhs) { lhs.x -= rhs.x; lhs.y -= rhs.y; lhs.z -= rhs.z; lhs.w -= rhs.w; }
 
     //------------------------------------------------------------------------
     // Multiplication
     //------------------------------------------------------------------------
 
-    int2 operator*(const int2 &lhs, const int2 &rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y }; }
-    int2 operator*(const int2 &lhs, const float2 &rhs) { return { lhs.x * (int)rhs.x, lhs.y * (int)rhs.y }; }
-    int2 operator*(const int2 &lhs, const int &rhs) { return { lhs.x * rhs, lhs.y * rhs }; }
-    int2 operator*(const int2 &lhs, const float &rhs) { return { lhs.x * (int)rhs, lhs.y * (int)rhs }; }
-    
-    int3 operator*(const int3 &lhs, const int3 &rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z }; }
-    int3 operator*(const int3 &lhs, const float3 &rhs) { return { lhs.x * (int)rhs.x, lhs.y * (int)rhs.y, lhs.z * (int)rhs.z }; }
-    int3 operator*(const int3 &lhs, const int &rhs) { return { lhs.x * rhs, lhs.y * rhs, lhs.z * rhs }; }
-    int3 operator*(const int3 &lhs, const float &rhs) { return { lhs.x * (int)rhs, lhs.y * (int)rhs, lhs.z * (int)rhs }; }
+    int2 operator*(const int2& lhs, const int2& rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y }; }
+    int2 operator*(const int2& lhs, const float2& rhs) { return { lhs.x * (int)rhs.x, lhs.y * (int)rhs.y }; }
+    int2 operator*(const int2& lhs, const int& rhs) { return { lhs.x * rhs, lhs.y * rhs }; }
+    int2 operator*(const int2& lhs, const float& rhs) { return { lhs.x * (int)rhs, lhs.y * (int)rhs }; }
 
-    float3 operator*(const float3 &lhs, const float3 &rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z }; }
-    float3 operator*(const float3 &lhs, const int3 &rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z }; }
-    float3 operator*(const float3 &lhs, const float &rhs) { return { lhs.x * rhs, lhs.y * rhs, lhs.z * rhs }; }
-    float3 operator*(const float3 &lhs, const int &rhs) { return { lhs.x * rhs, lhs.y * rhs, lhs.z * rhs }; }
+    int3 operator*(const int3& lhs, const int3& rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z }; }
+    int3 operator*(const int3& lhs, const float3& rhs) { return { lhs.x * (int)rhs.x, lhs.y * (int)rhs.y, lhs.z * (int)rhs.z }; }
+    int3 operator*(const int3& lhs, const int& rhs) { return { lhs.x * rhs, lhs.y * rhs, lhs.z * rhs }; }
+    int3 operator*(const int3& lhs, const float& rhs) { return { lhs.x * (int)rhs, lhs.y * (int)rhs, lhs.z * (int)rhs }; }
 
-    float4 operator*(const float4 &lhs, const float4 &rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z, lhs.w * rhs.w }; }
-    float4 operator*(const float4 &lhs, const float &rhs) { return { lhs.x * rhs, lhs.y * rhs, lhs.z * rhs, lhs.w * rhs }; }
-    float4 operator*(const float4 &lhs, const int &rhs) { return { lhs.x * rhs, lhs.y * rhs, lhs.z * rhs, lhs.w * rhs }; }
+    float3 operator*(const float3& lhs, const float3& rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z }; }
+    float3 operator*(const float3& lhs, const int3& rhs) { return { lhs.x * (float)rhs.x, lhs.y * (float)rhs.y, lhs.z * (float)rhs.z }; }
+    float3 operator*(const float3& lhs, const float& rhs) { return { lhs.x * rhs, lhs.y * rhs, lhs.z * (float)rhs }; }
+    float3 operator*(const float3& lhs, const int& rhs) { return { lhs.x * (float)rhs, lhs.y * (float)rhs, lhs.z * (float)rhs }; }
 
-    void operator*=(float2 &lhs, const float2 &rhs) { lhs.x *= rhs.x; lhs.y *= rhs.y; }
-    void operator*=(float3 &lhs, const float3 &rhs) { lhs.x *= rhs.x; lhs.y *= rhs.y; lhs.z *= rhs.z; }
-    void operator*=(float4 &lhs, const float4 &rhs) { lhs.x *= rhs.x; lhs.y *= rhs.y; lhs.z *= rhs.z; lhs.w *= rhs.w; }
+    float4 operator*(const float4& lhs, const float4& rhs) { return { lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z, lhs.w * rhs.w }; }
+    float4 operator*(const float4& lhs, const float& rhs) { return { lhs.x * rhs, lhs.y * rhs, lhs.z * rhs, lhs.w * rhs }; }
+    float4 operator*(const float4& lhs, const int& rhs) { return { lhs.x * (float)rhs, lhs.y * (float)rhs, lhs.z * (float)rhs, lhs.w * (float)rhs }; }
+
+    void operator*=(float2& lhs, const float2& rhs) { lhs.x *= rhs.x; lhs.y *= rhs.y; }
+    void operator*=(float3& lhs, const float3& rhs) { lhs.x *= rhs.x; lhs.y *= rhs.y; lhs.z *= rhs.z; }
+    void operator*=(float4& lhs, const float4& rhs) { lhs.x *= rhs.x; lhs.y *= rhs.y; lhs.z *= rhs.z; lhs.w *= rhs.w; }
 
     //------------------------------------------------------------------------
     // Division
     //------------------------------------------------------------------------
 
-    int2 operator/(const int2 &lhs, const int2 &rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y }; }
-    int2 operator/(const int2 &lhs, const float2 &rhs) { return { lhs.x / (int)rhs.x, lhs.y / (int)rhs.y }; }
-    int2 operator/(const int2 &lhs, const int &rhs) { return { lhs.x / rhs, lhs.y / rhs }; }
-    int2 operator/(const int2 &lhs, const float &rhs) { return { lhs.x / (int)rhs, lhs.y / (int)rhs }; }
+    int2 operator/(const int2& lhs, const int2& rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y }; }
+    int2 operator/(const int2& lhs, const float2& rhs) { return { lhs.x / (int)rhs.x, lhs.y / (int)rhs.y }; }
+    int2 operator/(const int2& lhs, const int& rhs) { return { lhs.x / rhs, lhs.y / rhs }; }
+    int2 operator/(const int2& lhs, const float& rhs) { return { lhs.x / (int)rhs, lhs.y / (int)rhs }; }
 
-    int3 operator/(const int3 &lhs, const int3 &rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z }; }
-    int3 operator/(const int3 &lhs, const float3 &rhs) { return { lhs.x / (int)rhs.x, lhs.y / (int)rhs.y, lhs.z / (int)rhs.z }; }
-    int3 operator/(const int3 &lhs, const int &rhs) { return { lhs.x / rhs, lhs.y / rhs, lhs.z / rhs }; }
-    int3 operator/(const int3 &lhs, const float &rhs) { return { lhs.x / (int)rhs, lhs.y / (int)rhs, lhs.z / (int)rhs }; }
+    int3 operator/(const int3& lhs, const int3& rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z }; }
+    int3 operator/(const int3& lhs, const float3& rhs) { return { lhs.x / (int)rhs.x, lhs.y / (int)rhs.y, lhs.z / (int)rhs.z }; }
+    int3 operator/(const int3& lhs, const int& rhs) { return { lhs.x / rhs, lhs.y / rhs, lhs.z / rhs }; }
+    int3 operator/(const int3& lhs, const float& rhs) { return { lhs.x / (int)rhs, lhs.y / (int)rhs, lhs.z / (int)rhs }; }
 
-    float3 operator/(const float3 &lhs, const float3 &rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z }; }
-    float3 operator/(const float3 &lhs, const int3 &rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z }; }
-    float3 operator/(const float3 &lhs, const float &rhs) { return { lhs.x / rhs, lhs.y / rhs, lhs.z / rhs }; }
-    float3 operator/(const float3 &lhs, const int &rhs) { return { lhs.x / rhs, lhs.y / rhs, lhs.z / rhs }; }
+    float3 operator/(const float3& lhs, const float3& rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z }; }
+    float3 operator/(const float3& lhs, const int3& rhs) { return { lhs.x / (float)rhs.x, lhs.y / (float)rhs.y, lhs.z / (float)rhs.z }; }
+    float3 operator/(const float3& lhs, const float& rhs) { return { lhs.x / rhs, lhs.y / rhs, lhs.z / rhs }; }
+    float3 operator/(const float3& lhs, const int& rhs) { return { lhs.x / (float)rhs, lhs.y / (float)rhs, lhs.z / (float)rhs }; }
 
-    float4 operator/(const float4 &lhs, const float4 &rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z, lhs.w / rhs.w }; }
-    float4 operator/(const float4 &lhs, const float &rhs) { return { lhs.x / rhs, lhs.y / rhs, lhs.z / rhs, lhs.w / rhs }; }
-    float4 operator/(const float4 &lhs, const int &rhs) { return { lhs.x / rhs, lhs.y / rhs, lhs.z / rhs, lhs.w / rhs }; }
+    float4 operator/(const float4& lhs, const float4& rhs) { return { lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z, lhs.w / rhs.w }; }
+    float4 operator/(const float4& lhs, const float& rhs) { return { lhs.x / rhs, lhs.y / rhs, lhs.z / rhs, lhs.w / rhs }; }
+    float4 operator/(const float4& lhs, const int& rhs) { return { lhs.x / (float)rhs, lhs.y / (float)rhs, lhs.z / (float)rhs, lhs.w / (float)rhs }; }
 
-    void operator/=(float2 &lhs, const float2 &rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; }
-    void operator/=(float3 &lhs, const float3 &rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; lhs.z /= rhs.z; }
-    void operator/=(float4 &lhs, const float4 &rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; lhs.z /= rhs.z; lhs.w = rhs.w; }
-    
+    void operator/=(float2& lhs, const float2& rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; }
+    void operator/=(float3& lhs, const float3& rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; lhs.z /= rhs.z; }
+    void operator/=(float4& lhs, const float4& rhs) { lhs.x /= rhs.x; lhs.y /= rhs.y; lhs.z /= rhs.z; lhs.w = rhs.w; }
+
     //------------------------------------------------------------------------
     // Modulus
     //------------------------------------------------------------------------
 
-    int2 operator%(const int2 &lhs, const int2 &rhs) { return { lhs.x % rhs.x, lhs.y % rhs.y }; }
-    int2 operator%(const int2 &lhs, const int &rhs) { return { lhs.x % rhs, lhs.y % rhs }; }
+    int2 operator%(const int2& lhs, const int2& rhs) { return { lhs.x % rhs.x, lhs.y % rhs.y }; }
+    int2 operator%(const int2& lhs, const int& rhs) { return { lhs.x % rhs, lhs.y % rhs }; }
 
-    int3 operator%(const int3 &lhs, const int3 &rhs) { return { lhs.x % rhs.x, lhs.y % rhs.y, lhs.z % rhs.z }; }
-    int3 operator%(const int3 &lhs, const int &rhs) { return { lhs.x % rhs, lhs.y % rhs, lhs.z % rhs }; }
+    int3 operator%(const int3& lhs, const int3& rhs) { return { lhs.x % rhs.x, lhs.y % rhs.y, lhs.z % rhs.z }; }
+    int3 operator%(const int3& lhs, const int& rhs) { return { lhs.x % rhs, lhs.y % rhs, lhs.z % rhs }; }
 
     //------------------------------------------------------------------------
     // Equalities
     //------------------------------------------------------------------------
 
-    bool operator==(const int2 &lhs, const int2 &rhs)
+    bool operator==(const int2& lhs, const int2& rhs)
     {
         if (lhs.x != rhs.x) return false;
         if (lhs.y != rhs.y) return false;
         return true;
     }
 
-    bool operator==(const int3 &lhs, const int3 &rhs)
-    {
-        if (lhs.x != rhs.x) return false;
-        if (lhs.y != rhs.y) return false;
-        if (lhs.z != rhs.z) return false;
-        return true;
-    }
-
-    bool operator==(const float2 &lhs, const float2 &rhs)
-    {
-        if (lhs.x != rhs.x) return false;
-        if (lhs.y != rhs.y) return false;
-        return true;
-    }
-
-    bool operator==(const float3 &lhs, const float3 &rhs)
+    bool operator==(const int3& lhs, const int3& rhs)
     {
         if (lhs.x != rhs.x) return false;
         if (lhs.y != rhs.y) return false;
@@ -278,7 +295,22 @@ namespace rtxgi
         return true;
     }
 
-    bool operator==(const float4 &lhs, const float4 &rhs)
+    bool operator==(const float2& lhs, const float2& rhs)
+    {
+        if (lhs.x != rhs.x) return false;
+        if (lhs.y != rhs.y) return false;
+        return true;
+    }
+
+    bool operator==(const float3& lhs, const float3& rhs)
+    {
+        if (lhs.x != rhs.x) return false;
+        if (lhs.y != rhs.y) return false;
+        if (lhs.z != rhs.z) return false;
+        return true;
+    }
+
+    bool operator==(const float4& lhs, const float4& rhs)
     {
         if (lhs.x != rhs.x) return false;
         if (lhs.y != rhs.y) return false;
@@ -291,29 +323,14 @@ namespace rtxgi
     // Inequalities
     //------------------------------------------------------------------------
 
-    bool operator!=(const int2 &lhs, const int2 &rhs)
+    bool operator!=(const int2& lhs, const int2& rhs)
     {
         if (lhs.x == rhs.x) return false;
         if (lhs.y == rhs.y) return false;
         return true;
     }
 
-    bool operator!=(const int3 &lhs, const int3 &rhs)
-    {
-        if (lhs.x == rhs.x) return false;
-        if (lhs.y == rhs.y) return false;
-        if (lhs.z == rhs.z) return false;
-        return true;
-    }
-
-    bool operator!=(const float2 &lhs, const float2 &rhs)
-    {
-        if (lhs.x == rhs.x) return false;
-        if (lhs.y == rhs.y) return false;
-        return true;
-    }
-
-    bool operator!=(const float3 &lhs, const float3 &rhs)
+    bool operator!=(const int3& lhs, const int3& rhs)
     {
         if (lhs.x == rhs.x) return false;
         if (lhs.y == rhs.y) return false;
@@ -321,7 +338,22 @@ namespace rtxgi
         return true;
     }
 
-    bool operator!=(const float4 &lhs, const float4 &rhs)
+    bool operator!=(const float2& lhs, const float2& rhs)
+    {
+        if (lhs.x == rhs.x) return false;
+        if (lhs.y == rhs.y) return false;
+        return true;
+    }
+
+    bool operator!=(const float3& lhs, const float3& rhs)
+    {
+        if (lhs.x == rhs.x) return false;
+        if (lhs.y == rhs.y) return false;
+        if (lhs.z == rhs.z) return false;
+        return true;
+    }
+
+    bool operator!=(const float4& lhs, const float4& rhs)
     {
         if (lhs.x == rhs.x) return false;
         if (lhs.y == rhs.y) return false;

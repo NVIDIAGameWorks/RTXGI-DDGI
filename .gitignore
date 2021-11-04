@@ -1,0 +1,8 @@
+build/*
+scripts/images/*
+scripts/*.mp4
+dxc
+.venv/*
+.vscode/settings.json
+log.txt
+samples/test-harness/data/gltf/sponza/Sponza.cache

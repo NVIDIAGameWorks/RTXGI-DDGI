@@ -10,35 +10,44 @@
 
 #include "Window.h"
 
-#include "UI.h"
+//#include "UI.h" // previously for the WinProc
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN         // Exclude rarely-used items from Windows headers.
-#endif
-
-#include <Windows.h>
-#include <iostream>
-#include <Keyboard.h>
-#include <Mouse.h>
+#include <stb_image.h>
 
 using namespace DirectX;
 
-/**
- * Windows message loop.
- */
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
+namespace Windows
 {
-    if (UI::WndProc(hWnd, message, wParam, lParam)) return true;
+    static EWindowEvent state = EWindowEvent::NONE;
+    const EWindowEvent GetWindowEvent() { return state; }
+    void ResetWindowEvent() { state = EWindowEvent::NONE; }
 
-    PAINTSTRUCT ps;
-    switch( message ) 
+    //----------------------------------------------------------------------------------------------------------
+    // Event Handlers
+    //----------------------------------------------------------------------------------------------------------
+
+    /**
+    * Handle frame buffer resize events.
+    */
+    void onFramebufferResize(GLFWwindow* window, int width, int height)
     {
-        case WM_PAINT:
-            BeginPaint( hWnd, &ps );
-            EndPaint( hWnd, &ps );
+        state = EWindowEvent::RESIZE;
+    }
+
+    /**
+     * Windows message loop.
+     */
+    /*LRESULT CALLBACK WndProc(HWND hWnd, uint32_t message, WPARAM wParam, LPARAM lParam)
+    {
+        if (Graphics::UI::WndProc(hWnd, message, wParam, lParam)) return true;
+
+        switch (message)
+        {
+        case WM_SIZE:
+            state = EWindowEvent::RESIZE;
             break;
         case WM_SYSCOMMAND:
-            if ((wParam & 0xfff0) == SC_KEYMENU) return 0; // Disable ALT application menu  
+            if ((wParam & 0xfff0) == SC_KEYMENU) return 0; // Disable ALT application menu
             break;
         case WM_ACTIVATEAPP:
             Keyboard::ProcessMessage(message, wParam, lParam);
@@ -56,7 +65,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_XBUTTONDOWN:
         case WM_XBUTTONUP:
         case WM_MOUSEHOVER:
-            if (UI::WantsMouseCapture()) return false;
+            if (Graphics::UI::WantsMouseCapture()) return false;
             Mouse::ProcessMessage(message, wParam, lParam);
             break;
         case WM_KEYDOWN:
@@ -65,64 +74,55 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_SYSKEYUP:
             Keyboard::ProcessMessage(message, wParam, lParam);
             break;
-        case WM_DESTROY:
-            PostQuitMessage( 0 );
-            break; 
-    }
-    return DefWindowProc(hWnd, message, wParam, lParam);
-}
+        case WM_CLOSE:
+            state = EWindowEvent::QUIT;
+            PostQuitMessage(0);
+            break;
+        }
+        return DefWindowProc(hWnd, message, wParam, lParam);
+    }*/
 
-namespace Window
-{
-
-/**
-* Create a window.
-*/
-bool Create(LONG width, LONG height, HINSTANCE &instance, HWND &window, LPCWSTR title)
-{
-    // Register the window class
-    WNDCLASSEX wcex;
-    wcex.cbSize = sizeof(WNDCLASSEX);
-    wcex.style = CS_HREDRAW | CS_VREDRAW;
-    wcex.lpfnWndProc = WndProc;
-    wcex.cbClsExtra = 0;
-    wcex.cbWndExtra = 0;
-    wcex.hInstance = instance;
-    wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    wcex.lpszMenuName = NULL;
-    wcex.lpszClassName = "WindowClass";
-    wcex.hIcon = nullptr;
-    wcex.hIconSm = nullptr;
-
-    if (!RegisterClassEx(&wcex))
+    /**
+    * Create a window.
+    */
+    bool Create(Configs::Config& config, GLFWwindow*& window)
     {
-        throw std::runtime_error("Failed to register window!");
+        config.app.title.append(", ");
+        config.app.title.append(config.scene.name);
+    #if defined(API_D3D12)
+        config.app.title.append(" (D3D12)");
+    #elif defined(API_VULKAN)
+        config.app.title.append(" (Vulkan)");
+    #endif
+
+        glfwInit();
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);   // don't need an OpenGL context with D3D12/Vulkan
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+
+        // Create the window with GLFW
+        window = glfwCreateWindow(config.app.width, config.app.height, config.app.title.c_str(), nullptr, nullptr);
+        if (!window) return false;
+
+        // Add a GLFW hook to handle resize events
+        glfwSetFramebufferSizeCallback(window, onFramebufferResize);
+
+        // Load the nvidia logo and set it as the window icon
+        GLFWimage icon;
+        icon.pixels = stbi_load("nvidia.jpg", (int*)&(icon.width), (int*)&icon.height, nullptr, STBI_rgb_alpha);
+        if (icon.pixels) glfwSetWindowIcon(window, 1, &icon);
+        delete[] icon.pixels;
+        icon.pixels = nullptr;
+
+        return true;
     }
 
-    // Get the desktop resolution
-    RECT desktop;
-    const HWND hDesktop = GetDesktopWindow();
-    GetWindowRect(hDesktop, &desktop);
-
-    int x = (desktop.right - width) / 2;
-
-    // Create the window
-    RECT rc = { 0, 0, width, height };
-	DWORD dwStyle = WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX;
-    AdjustWindowRect(&rc, dwStyle, FALSE);
-    window = CreateWindowExW(NULL, L"WindowClass", title, dwStyle, x, 0, (rc.right - rc.left), (rc.bottom - rc.top), NULL, NULL, instance, NULL);
-    if (!window) return false;
-
-    // Set the window icon
-    HANDLE hIcon = LoadImage(GetModuleHandle(NULL), "nvidia.ico", IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_LOADFROMFILE);
-    SendMessage(window, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-
-    // Show the window
-    ShowWindow(window, SW_SHOWDEFAULT);
-    UpdateWindow(window);
-
-    return true;
-}
-
+    /**
+     * Close and destroy a window.
+     */
+    bool Close(GLFWwindow*& window)
+    {
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return true;
+    }
 }

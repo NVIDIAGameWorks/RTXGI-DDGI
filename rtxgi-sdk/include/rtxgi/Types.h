@@ -11,9 +11,12 @@
 #pragma once
 
 #include <cstddef>
+#include <stdint.h>
 
 namespace rtxgi
 {
+
+    typedef uint32_t uint;
 
     struct uint2
     {

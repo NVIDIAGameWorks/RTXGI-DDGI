@@ -8,15 +8,13 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#include "include/RTCommon.hlsl"
+#include "include/Descriptors.hlsl"
+#include "include/RayTracing.hlsl"
 
 // ---[ Miss Shader ]---
 
 [shader("miss")]
 void Miss(inout PackedPayload packedPayload)
 {
-    Payload payload = (Payload)0;
-    payload.hitT = -1.f;
-
-    packedPayload = PackPayload(payload);
+    packedPayload.hitT = -1.f;
 }

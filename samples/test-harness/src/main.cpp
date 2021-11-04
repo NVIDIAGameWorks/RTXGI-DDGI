@@ -8,84 +8,72 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#pragma once
-
-#include <rtxgi/Types.h>
-#include <rtxgi/ddgi/DDGIVolume.h>
-
 #include "Common.h"
-#include "Config.h"
-#include "GLTF.h"
-#include "Harness.h"
-#include "ImGui.h"
-#include "Input.h"
-#include "Shaders.h"
+#include "Configs.h"
+#include "Scenes.h"
+#include "Inputs.h"
+#include "Instrumentation.h"
+#include "Graphics.h"
 #include "UI.h"
-#include "Visualization.h"
 #include "Window.h"
 
-#include <iostream>
-#include <fstream>
+#include "graphics/PathTracing.h"
+#include "graphics/GBuffer.h"
+#include "graphics/DDGI.h"
+#include "graphics/DDGIVisualizations.h"
+#include "graphics/RTAO.h"
+#include "graphics/Composite.h"
 
 /**
- * Test Harness entry point.
+ * Run the Test Harness.
  */
-int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
+int Run(const std::vector<std::string>& arguments)
 {
     std::ofstream log;
     log.open("log.txt", std::ios::out);
     if (!log.is_open()) return EXIT_FAILURE;
 
-    D3D12Global d3d;
-    DXRGlobal dxr;
-    D3D12Resources resources;
-    ShaderCompiler shaderCompiler;
-    std::vector<std::vector<ShaderProgram>> shaders;
+    // Global Data Structures
+    Configs::Config config;
+    Scenes::Scene scene;
 
-    ConfigInfo config;
-    Camera camera;
-    Scene scene;
-    LightInfo lights;
-    
-    InputInfo input;
-    InputOptions inputOptions;
-    RTOptions rtOptions;
-    PostProcessOptions postOptions;
-    VizOptions vizOptions;
+    // Graphics Globals
+    Graphics::Globals gfx;
+    Graphics::GlobalResources gfxResources;
 
-    std::vector<rtxgi::DDGIVolume*> volumes;
-    std::vector<rtxgi::DDGIVolumeDesc> volumeDescs;
-    std::vector<rtxgi::DDGIVolumeResources> volumeResources;
+    // Graphics Workloads
+    Graphics::PathTracing::Resources pt;
+    Graphics::GBuffer::Resources gbuffer;
+    Graphics::DDGI::Resources ddgi;
+    Graphics::DDGI::Visualizations::Resources ddgiVis;
+    Graphics::RTAO::Resources rtao;
+    Graphics::Composite::Resources composite;
+    Graphics::UI::Resources ui;
 
-    MSG msg = { 0 };
-    HWND window;
+    // Performance Timers
+    Instrumentation::Stat startupShutdown;
+    Instrumentation::Performance perf;
+    perf.AddCPUStat("Frame");
+    perf.AddGPUStat("Frame");
+    perf.AddCPUStat("Input");
+    perf.AddCPUStat("Update");
 
-    // Parse the command line and get the configuration filepath
-    if (!Config::ParseCommandLine(lpCmdLine, config, log))
+    CPU_TIMESTAMP_BEGIN(&startupShutdown);
+
+    // Parse the command line and get the config file path
+    log << "Parsing command line...";
+    if (!Configs::ParseCommandLine(arguments, config, log))
     {
+        log << "Failed to parse the command line!";
         log.close();
         return EXIT_FAILURE;
     }
+    log << "done.\n";
 
-    // Read the config file from disk and initialize variables
-    if (!Config::Load(config, lights, camera, volumeDescs, input, inputOptions, rtOptions, postOptions, vizOptions, log))
+    // Load and parse the config file
+    log << "Loading config file...";
+    if (!Configs::Load(config, log))
     {
-        log.close();
-        return EXIT_FAILURE;
-    }
-
-    d3d.width = input.width = config.width;
-    d3d.height = input.height = config.height;
-    d3d.vsync = config.vsync;
-
-    shaderCompiler.root = config.root;
-    shaderCompiler.rtxgi = config.rtxgi;
-
-    // Create a D3D12 device
-    log << "Creating D3D12 device...";
-    if (!D3D12::CreateDevice(d3d))
-    {
-        log << "Failed to create the D3D12 device!\n";
         log.close();
         return EXIT_FAILURE;
     }
@@ -93,286 +81,352 @@ int Run(HINSTANCE hInstance, LPWSTR lpCmdLine)
 
     // Create a window
     log << "Creating a window...";
-    bool result = Window::Create(d3d.width, d3d.height, hInstance, window, L"RTXGI SDK Test Harness");
-    if (!result)
+    if(!Windows::Create(config, gfx.window))
     {
+        log << "\nFailed to create the window!";
         log.close();
         return EXIT_FAILURE;
     }
     log << "done.\n";
 
-    // Perform initialization tasks
-    if (!Harness::Initialize(config, scene, d3d, dxr, resources, shaderCompiler, window, log))
+    // Input
+    log << "Initializing input system...";
+    Inputs::Input input;
+    if(!Inputs::Initialize(gfx.window, input, config, scene))
     {
+        log << "\nFailed to initialize input!";
+        log.close();
+        return EXIT_FAILURE;
+    }
+    log << "done.\n";
+
+    // Create a device
+    log << "Creating graphics device...";
+    if (!Graphics::CreateDevice(gfx, config))
+    {
+        log << "\nFailed to create the graphics device!";
+        log.close();
+        return EXIT_FAILURE;
+    }
+    log << "done.\n";
+
+#ifdef GPU_COMPRESSION
+    // Initialize the texture system
+    log << "Initializing texture system...";
+    if (!Textures::Initialize())
+    {
+        log << "\nFailed to initialize texture system!";
+        log.close();
+        return EXIT_FAILURE;
+    }
+    log << "done.\n";
+#endif
+
+    // Initialize the scene
+    log << "Initializing the scene...";
+    if (!Scenes::Initialize(config, scene, log))
+    {
+        log << "\nFailed to initialize the scene!";
+        log.close();
+        return EXIT_FAILURE;
+    }
+    log << "done.\n";
+
+    // Initialize the graphics system
+    log << "Initializing graphics...";
+    if (!Graphics::Initialize(config, scene, gfx, gfxResources, log))
+    {
+        log << "\nFailed to initialize graphics!";
         log.close();
         return EXIT_FAILURE;
     }
 
-    // Load and compile shaders
-    if (!Harness::CompileVolumeShadersMulti(shaders, shaderCompiler, volumeDescs, log))
+    // Initialize the graphics workloads
+    CHECK(Graphics::PathTracing::Initialize(gfx, gfxResources, pt, perf, log), "initialize path tracing workload!\n", log);
+    CHECK(Graphics::GBuffer::Initialize(gfx, gfxResources, gbuffer, perf, log), "initialize gbuffer workload!\n", log);
+    CHECK(Graphics::DDGI::Initialize(gfx, gfxResources, ddgi, config, perf, log), "initialize dynamic diffuse global illumination workload!\n", log);
+    CHECK(Graphics::DDGI::Visualizations::Initialize(gfx, gfxResources, ddgi, ddgiVis, perf, log), "initialize dynamic diffuse global illumination visualization workload!\n", log);
+    CHECK(Graphics::RTAO::Initialize(gfx, gfxResources, rtao, perf, log), "initialize ray traced ambient occlusion workload!\n", log);
+    CHECK(Graphics::Composite::Initialize(gfx, gfxResources, composite, perf, log), "initialize composition workload!\n", log);
+
+    log << "\nInitializing graphics...done.\n";
+
+    // Initialize the user interface system
+    log << "Initializing user interface...";
+    if (!Graphics::UI::Initialize(gfx, gfxResources, ui, perf, log))
     {
+        log << "\nFailed to initialize user interface!";
         log.close();
         return EXIT_FAILURE;
     }
+    log << "done.\n";
 
-    // Create a RTXGI DDGIVolume
-    if (!Harness::CreateVolumeMulti(d3d, resources, shaders, volumes, volumeDescs, volumeResources, log))
-    {
-        log.close();
-        return EXIT_FAILURE;
-    }
+    perf.AddCPUStat("Submit/Present");
 
-    // Create descriptors for the DDGIVolume probe textures and additional engine textures
-    if (!Harness::CreateDescriptorsMulti(d3d, resources, volumes, log))
-    {
-        log.close();
-        return EXIT_FAILURE;
-    }
+    CPU_TIMESTAMP_END(&startupShutdown);
+    log << "Startup complete in " << startupShutdown.elapsed << " milliseconds\n";
 
-    // Create resources used to visualize the volume's probes
-    if(!Harness::CreateProbeVisResourcesMulti(d3d, dxr, resources, volumes, log))
-    {
-        log.close();
-        return EXIT_FAILURE;
-    }
-
-    log << "Main loop..." << std::flush;
+    log << "Main loop...\n";
+    std::flush(log);
 
     // Main loop
-    bool hotReload = false;
-    bool keyboardInput = false;
-    bool mouseInput = false;
-    while (WM_QUIT != msg.message)
+    while(!glfwWindowShouldClose(gfx.window))
     {
-        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+        CPU_TIMESTAMP_BEGIN(perf.cpuTimes[0]);   // frame
+        CPU_TIMESTAMP_BEGIN(perf.cpuTimes[1]);   // input
+
+        glfwPollEvents();
+
+        // Handle resize events
+        if (Windows::GetWindowEvent() == Windows::EWindowEvent::RESIZE)
         {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+            Graphics::WaitForGPU(gfx);
+
+            // Get the new back buffer dimensions from GLFW
+            int width, height;
+            glfwGetFramebufferSize(gfx.window, &width, &height);
+
+            // Resize all screen-space buffers
+            if (!Graphics::Resize(gfx, gfxResources, width, height, log)) break;                  // Back buffers and GBuffer textures
+            if (!Graphics::PathTracing::Resize(gfx, gfxResources, pt, log)) break;                // PT Output and Accumulation
+            if (!Graphics::GBuffer::Resize(gfx, gfxResources, gbuffer, log)) break;               // GBuffer
+            if (!Graphics::DDGI::Resize(gfx, gfxResources, ddgi, log)) break;                     // DDGI
+            if (!Graphics::DDGI::Visualizations::Resize(gfx, gfxResources, ddgiVis, log)) break;  // DDGI Visualizations
+            if (!Graphics::RTAO::Resize(gfx, gfxResources, rtao, log)) break;                     // RTAO Raw and Output textures
+            if (!Graphics::Composite::Resize(gfx, gfxResources, composite, log)) break;           // Composite
+            Windows::ResetWindowEvent();
+
+            CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+            continue;
         }
 
-        // Handle mouse and keyboard input
-        float3 translation = { 0, 0, 0 };
-        keyboardInput = Input::KeyHandler(input, config, inputOptions, vizOptions, camera, translation, postOptions.useDDGI, hotReload);
-        mouseInput = Input::MouseHandler(input, camera, inputOptions);
-
-        // Reset the frame number on camera movement (for path tracer)
-        if (keyboardInput || mouseInput) d3d.frameNumber = 1;
-
-        // Update the camera constant buffer
-        memcpy(resources.cameraCBStart, &camera, sizeof(Camera));
-
-        // Update the lights constant buffer
-        memcpy(resources.lightsCBStart, &lights, sizeof(LightInfo));
-
-        if(config.mode == ERenderMode::PathTrace)
+        // Reload shaders and PSOs for graphics workloads
         {
-            if(config.ui) UI::OnNewFrame(d3d, dxr, config, camera, lights, volumes, input, inputOptions, rtOptions, vizOptions, postOptions);
-            Harness::PathTrace(d3d, dxr, resources, rtOptions, postOptions);
-            if (config.ui) UI::OnRender(d3d, resources);
-        }
-        else if(config.mode == ERenderMode::DDGI)
-        {
-            if (hotReload)
+            if (config.pathTrace.reload)
             {
-                if (!Harness::HotReload(
-                    config, lights, camera,
-                    d3d, dxr, resources, shaders,
-                    volumes, volumeDescs, volumeResources,
-                    input, inputOptions, rtOptions,
-                    postOptions, vizOptions, log))
-                {
-                    log << "\nError: hot reload failed!\n";
-                    log.close();
-                    return EXIT_FAILURE;
-                }
+                if (!Graphics::PathTracing::Reload(gfx, gfxResources, pt, log)) break;
+                config.pathTrace.reload = false;
+                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+            #ifdef GFX_PERF_INSTRUMENTATION
+                Graphics::BeginFrame(gfx, gfxResources, perf);
+            #endif
                 continue;
             }
 
-            // ImGui
-            if (config.ui) UI::OnNewFrame(d3d, dxr, config, camera, lights, volumes, input, inputOptions, rtOptions, vizOptions, postOptions);
-
-            // Determine which volume is selected
-            int volumeSelect = min(inputOptions.volumeSelect, static_cast<int>(volumes.size() - 1));
-
-            if (keyboardInput)
+            if (config.ddgi.reload)
             {
-                // Move the volume
-                DDGIVolume* volume = volumes[volumeSelect];
-#if RTXGI_DDGI_PROBE_SCROLL
-                if (volume->GetMovementType() == EDDGIVolumeMovementType::Scrolling)
-                {
-                    // When the deadzone radii match the probe grid spacing, a single "layer" of
-                    // probes will move when translation moves out of the deadzone ellipsoid
-                    float3 deadzoneRadii = volume->GetProbeGridSpacing();
-                    volume->Scroll(translation, deadzoneRadii);
-                }
-                else
-                {
-                    volume->Move(translation);
-                }
-#else
-                volume->Move(translation);
-#endif
+                if (!Graphics::DDGI::Reload(gfx, gfxResources, ddgi, config, log)) break;
+                if (!Graphics::DDGI::Visualizations::Reload(gfx, gfxResources, ddgi, ddgiVis, log)) break;
+                config.ddgi.reload = false;
+                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+            #ifdef GFX_PERF_INSTRUMENTATION
+                Graphics::BeginFrame(gfx, gfxResources, perf);
+            #endif
+                continue;
             }
 
-            for (size_t volumeIndex = 0; volumeIndex < volumes.size(); volumeIndex++)
+            if (config.rtao.reload)
             {
-                // Update the volume's random rotation and constant buffer
-                DDGIVolume* volume = volumes[volumeIndex];
-                if (resources.volumeGroupCB)
-                {
-                    UINT64 groupOffset = (d3d.frameIndex * volumes.size() + volumeIndex) * GetDDGIVolumeConstantBufferSize();
-                    volume->Update(resources.volumeGroupCB, groupOffset);
-                }
+                if (!Graphics::RTAO::Reload(gfx, gfxResources, rtao, log)) break;
+                config.rtao.reload = false;
+                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+            #ifdef GFX_PERF_INSTRUMENTATION
+                Graphics::BeginFrame(gfx, gfxResources, perf);
+            #endif
+                continue;
             }
 
-            for (size_t volumeIndex = 0; volumeIndex < volumes.size(); volumeIndex++)
+            if (config.postProcess.reload)
             {
-                // Ray trace from the probes
-                DDGIVolume* volume = volumes[volumeIndex];
-                Harness::RayTraceProbes(d3d, dxr, resources,
-                    volume->GetProbeRTRadianceTexture(),
-                    rtOptions,
-                    volume->GetNumRaysPerProbe(),
-                    volume->GetNumProbes(), static_cast<int>(volumeIndex));
-            }
-
-            for (size_t volumeIndex = 0; volumeIndex < volumes.size(); volumeIndex++)
-            {
-                // Update the RTXGI DDGIVolume data structure
-                volumes[volumeIndex]->UpdateProbes(d3d.cmdList);
-            }
-
-            // Ray trace primary rays, compute and store the direct lighting
-            Harness::RayTracePrimary(d3d, dxr, resources, rtOptions);
-
-            // Ray trace AO rays at 1 sample per pixel, then bilaterally filter the results
-            if (postOptions.useRTAO)
-            {
-                Harness::RayTraceAO(d3d, dxr, resources, postOptions);
-                Harness::FilterAO(d3d, resources, postOptions);
-            }
-
-            // Render a debug visualization of the DDGIVolume probes
-            if (vizOptions.showDDGIVolumeProbes)
-            {
-                for (size_t volumeIndex = 0; volumeIndex < volumes.size(); volumeIndex++)
-                {
-                    DXR::UpdateVisTLAS(d3d, dxr, resources, volumes[volumeIndex]->GetNumProbes(), vizOptions.probeRadius, volumeIndex);
-                    Visualization::RenderProbes(d3d, dxr, resources, volumeIndex);
-                }
-            }
-
-#if RTXGI_DDGI_PROBE_RELOCATION
-            if (inputOptions.enableProbeRelocation)
-            {
-                // run every frame with full distance scale value for continuous relocation
-                volumes[volumeSelect]->RelocateProbes(d3d.cmdList, 1.f);
-            }
-#endif // RTXGI_DDGI_PROBE_RELOCATION
-
-#if RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-            // Activate all probes.
-            // This can be useful if the classifier has disabled probes and new geometry is spawned into the scene.
-            if (inputOptions.activateAllProbes)
-            {
-                volumes[volumeSelect]->ActivateAllProbes(d3d.cmdList);
-                inputOptions.activateAllProbes = false;
-            }
-            else
-            {
-                // Run probe classification
-                if (inputOptions.enableProbeClassification)
-                {
-                    volumes[volumeSelect]->ClassifyProbes(d3d.cmdList);
-                }
-            }
-#endif // RTXGI_DDGI_PROBE_STATE_CLASSIFIER
-
-            // Run a fullscreen pass and composite direct lighting
-            // with indirect lighting from the DDGIVolume
-            Harness::RenderIndirect(d3d, dxr, resources, postOptions);
-
-            // Render a debug visualization of the DDGIVolume buffers
-            if (vizOptions.showDDGIVolumeBuffers)
-            {
-                Visualization::RenderBuffers(d3d, resources, vizOptions, volumeSelect);
-            }
-
-            // Render the user interface with ImGui
-            if (config.ui)
-            {
-                UI::OnRender(d3d, resources);
+                if (!Graphics::Composite::Reload(gfx, gfxResources, composite, log)) break;
+                config.postProcess.reload = false;
+                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+            #ifdef GFX_PERF_INSTRUMENTATION
+                Graphics::BeginFrame(gfx, gfxResources, perf);
+            #endif
+                continue;
             }
         }
 
-        D3D12::SubmitCmdList(d3d);
-        D3D12::Present(d3d);
+        // Exit the application
+        if (input.event == Inputs::EInputEvent::QUIT) break;
 
-        if(input.saveImage)
+        // Fullscreen transition
+        if (input.event == Inputs::EInputEvent::FULLSCREEN_CHANGE || gfx.fullscreenChanged)
         {
-            D3D12::ScreenCapture(d3d, config.screenshotFile);
-            input.saveImage = false;
+            Graphics::ToggleFullscreen(gfx);
+            input.event = Inputs::EInputEvent::NONE;
+            CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+        #ifdef GFX_PERF_INSTRUMENTATION
+            Graphics::BeginFrame(gfx, gfxResources, perf);
+        #endif
+            continue;
         }
 
-        D3D12::MoveToNextFrame(d3d);
-        D3D12::ResetCmdList(d3d);
+        // Handle mouse and keyboard input
+        Inputs::PollInputs(gfx.window);
+
+        // Reset the frame number on camera movement (for path tracer accumulation reset)
+        if (input.event == Inputs::EInputEvent::CAMERA_MOVEMENT)
+        {
+            gfx.frameNumber = 1;
+            input.event = Inputs::EInputEvent::NONE;
+        }
+
+        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[1]);  // input
+
+        // Update constant buffers
+        CPU_TIMESTAMP_BEGIN(perf.cpuTimes[2]);
+        Graphics::Update(gfx, gfxResources, config, scene);
+        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[2]);
+
+        if(config.app.renderMode == ERenderMode::PATH_TRACE)
+        {
+            Graphics::PathTracing::Update(gfx, gfxResources, pt, config);
+            Graphics::PathTracing::Execute(gfx, gfxResources, pt);
+        }
+        else if(config.app.renderMode == ERenderMode::DDGI)
+        {
+            // GBuffer
+            Graphics::GBuffer::Update(gfx, gfxResources, gbuffer, config);
+            Graphics::GBuffer::Execute(gfx, gfxResources, gbuffer);
+
+            // RTXGI: DDGI
+            Graphics::DDGI::Update(gfx, gfxResources, ddgi, config);
+            Graphics::DDGI::Execute(gfx, gfxResources, ddgi);
+
+            // RTXGI: DDGI Visualizations
+            Graphics::DDGI::Visualizations::Update(gfx, gfxResources, ddgiVis, config);
+            Graphics::DDGI::Visualizations::Execute(gfx, gfxResources, ddgiVis);
+
+            // Ray Traced Ambient Occlusion
+            Graphics::RTAO::Update(gfx, gfxResources, rtao, config);
+            Graphics::RTAO::Execute(gfx, gfxResources, rtao);
+
+            // Composite & Post Processing
+            Graphics::Composite::Update(gfx, gfxResources, composite, config);
+            Graphics::Composite::Execute(gfx, gfxResources, composite);
+        }
+
+        // UI
+        CPU_TIMESTAMP_BEGIN(perf.cpuTimes[perf.cpuTimes.size() - 2]);
+        Graphics::UI::Update(gfx, ui, config, scene, ddgi.volumes, perf);
+        Graphics::UI::Execute(gfx, gfxResources, ui, config);
+        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[perf.cpuTimes.size() - 2]);
+
+        // Timestamps
+    #ifdef GFX_PERF_INSTRUMENTATION
+        Graphics::EndFrame(gfx, gfxResources, perf);
+        Graphics::ResolveTimestamps(gfx, gfxResources, perf);
+    #endif
+
+        // Submit / Present
+        CPU_TIMESTAMP_BEGIN(perf.cpuTimes.back());
+        if (!Graphics::SubmitCmdList(gfx)) break;
+        if (!Graphics::Present(gfx)) continue;
+        if (!Graphics::WaitForGPU(gfx)) break;
+        if (!Graphics::MoveToNextFrame(gfx)) break;
+        if (!Graphics::ResetCmdList(gfx)) break;
+        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes.back());
+
+    #ifdef GFX_PERF_INSTRUMENTATION
+        if (!Graphics::UpdateTimestamps(gfx, gfxResources, perf)) break;
+        Graphics::BeginFrame(gfx, gfxResources, perf);
+    #endif
+
+        // TODO: add GBuffer image dump code for debugging
+
+        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
     }
 
-    D3D12::WaitForGPU(d3d);
-    CloseHandle(d3d.fenceEvent);
+    Graphics::WaitForGPU(gfx);
 
-    log << "done...\n";
-    log << "Shutting down and cleaning up...";
+    CPU_TIMESTAMP_BEGIN(&startupShutdown);
 
-    // Release the volumes and their resources
-    for (size_t volumeIndex = 0; volumeIndex < volumes.size(); volumeIndex++)
-    {
-        volumes[volumeIndex]->Destroy();
-#if !RTXGI_DDGI_SDK_MANAGED_RESOURCES
-        Harness::DestroyVolumeResources(volumeResources[volumeIndex]);
+    log << "Shutting down and cleaning up...\n";
+
+    perf.Cleanup();
+
+    Graphics::UI::Cleanup();
+    Graphics::Composite::Cleanup(gfx, composite);
+    Graphics::RTAO::Cleanup(gfx, rtao);
+    Graphics::DDGI::Visualizations::Cleanup(gfx, ddgiVis);
+    Graphics::DDGI::Cleanup(gfx, ddgi);
+    Graphics::GBuffer::Cleanup(gfx, gbuffer);
+    Graphics::PathTracing::Cleanup(gfx, pt);
+    Graphics::Cleanup(gfx, gfxResources);
+
+#ifdef GPU_COMPRESSION
+    Textures::Cleanup();
 #endif
-        // Release the volume's shaders
-        for (size_t shaderIndex = 0; shaderIndex < shaders[volumeIndex].size(); shaderIndex++)
-        {
-            RTXGI_SAFE_RELEASE(shaders[volumeIndex][shaderIndex].bytecode);
-        }
-        delete volumes[volumeIndex];
-    }
-    RTXGI_SAFE_RELEASE(resources.volumeGroupCB);
 
-    UI::Cleanup();
-    GLTF::Cleanup(scene);
-    Shaders::Cleanup(shaderCompiler);
-    D3DResources::Cleanup(resources);
-    DXR::Cleanup(dxr);
-    D3D12::Cleanup(d3d);
+    Windows::Close(gfx.window);
 
-    DestroyWindow(window);
-    log << "done.\n";
+    CPU_TIMESTAMP_END(&startupShutdown);
+    log << "Shutdown complete in " << startupShutdown.elapsed << " milliseconds\n";
+
+    log << "Done.\n";
     log.close();
 
     return EXIT_SUCCESS;
 }
 
+/**
+ * Test Harness entry point.
+ */
+#if defined(_WIN32) || defined(WIN32)
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
 {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    // Run the application
-    int result = Run(hInstance, lpCmdLine);
-
-    // Check for memory leaks
-#if defined _CRTDBG_MAP_ALLOC
-    _CrtDumpMemoryLeaks();
+#if _DEBUG
+    // Set CRT flags to automatically check for memory leaks at program termination
+    int flags = _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG);
+    flags = (flags & 0x0000FFFF) | _CRTDBG_LEAK_CHECK_DF;
+    _CrtSetDbgFlag(flags);
 #endif
+
+    // Convert command line arguments to vector
+    char arg[256];
+    std::vector<std::string> arguments;
+    for(int i = 1; i < __argc; i++)
+    {
+        size_t len;
+        size_t max = wcslen(__wargv[i]) + 1;
+        memset(&arg, 0, 256);
+        wcstombs_s(&len, arg, max, __wargv[i], max);
+        arguments.push_back(std::string(arg));
+    }
+
+#elif __linux__
+int main(int argc, char* argv[])
+{
+#if _DEBUG
+    // TODO: Set flags to automatically check for memory leaks at program termination
+#endif
+
+    // Add command line arguments to vector
+    std::vector<std::string> arguments;
+    for(int i = 1; i < argc; i++)
+    {
+        arguments.push_back(std::string(argv[i]));
+    }
+
+#else
+    #pragma message("Platform not supported!")
+#endif
+
+    // Run the application
+    int result = Run(arguments);
 
     // If an error occurred, spawn a message box
     if (result != EXIT_SUCCESS)
     {
-        MessageBox(NULL, "An error occurred. See log.txt for details.", NULL, MB_OK);
+        std::string msg = "An error occurred. See log.txt for details.";
+        Graphics::UI::MessageBox(msg);
     }
 
-    return result;
+    return EXIT_SUCCESS;
 }
+
