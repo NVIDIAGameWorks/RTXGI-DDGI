@@ -272,6 +272,23 @@ namespace Graphics
                 // Store the data to be written to the descriptor set
                 std::vector<VkWriteDescriptorSet> writeDescriptorSets;
 
+                // Samplers
+                VkDescriptorImageInfo samplersInfo[] =
+                {
+                    { vkResources.samplers[0], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED }  // bilinear sampler
+                };
+
+                VkWriteDescriptorSet samplerSet = {};
+                samplerSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                samplerSet.dstSet = resources.descriptorSet;
+                samplerSet.dstBinding = DescriptorLayoutBindings::SAMPLERS;
+                samplerSet.dstArrayElement = SamplerIndices::BILINEAR_WRAP;
+                samplerSet.descriptorCount = _countof(samplersInfo);
+                samplerSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+                samplerSet.pImageInfo = samplersInfo;
+
+                writeDescriptorSets.push_back(samplerSet);
+
                 // Materials structured buffer
                 VkDescriptorBufferInfo materialsSTBInfo = { vkResources.materialsSTB, 0, VK_WHOLE_SIZE };
 
