@@ -42,10 +42,12 @@ The RTXGI SDK and sample application(s) require the following hardware and softw
 
 ### Hardware
 * Any DXR capable GPU. NVIDIA DXR enabled GPUs are:
-    * RTX 3090, 3080 Ti, 3080, 3070 Ti, 3070, 3060 Ti, 3060
+    * RTX 3090 Ti, 3090, 3080 Ti, 3080, 3070 Ti, 3070, 3060 Ti, 3060, 3050
+    * Titan RTX
     * RTX 2080 Ti, 2080 SUPER, 2080, 2070 SUPER, 2070, 2060 SUPER, 2060
     * GTX 1660 Ti, 1660 SUPER, 1660
-    * GTX 1080 Ti, 1080, 1070, 1060 6GB (or higher)
+    * Titan Xp
+    * GTX 1080 Ti, 1080, 1070 Ti, 1070, 1060 Ti, 1060 6GB (or higher)
 
 ### Software (Windows)
 * Windows 10 v1809 or higher

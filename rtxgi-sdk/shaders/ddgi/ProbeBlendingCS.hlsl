@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -550,10 +550,6 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
     #endif // RTXGI_DDGI_BLEND_RADIANCE
     }
 
-    // Normalize the blended irradiance (or filtered distance), if the combined weight is not close to zero.
-    // To match the Monte Carlo Estimator for Irradiance, we should divide by N. Instead, we are dividing by
-    // N * sum(cos(theta)) (the sum of the weights) to reduce variance.
-    // To account for this, we must mulitply in a factor of 1/2.
     float epsilon = float(volume.probeNumRays);
     if (volume.probeRelocationEnabled || volume.probeClassificationEnabled)
     {
@@ -562,6 +558,10 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
     }
     epsilon *= 1e-9f;
 
+    // Normalize the blended irradiance (or filtered distance), if the combined weight is not close to zero.
+    // To match the Monte Carlo Estimator, we should divide by N. Instead, we are dividing by
+    // N * sum(cos(theta)) (the sum of the weights) to reduce variance.
+    // To account for this, we must multiply in a factor of 1/2.
     result.rgb *= 1.f / (2.f * max(result.a, epsilon));
 
     float  hysteresis = volume.probeHysteresis;

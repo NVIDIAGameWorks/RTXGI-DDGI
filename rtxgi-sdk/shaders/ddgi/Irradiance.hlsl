@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -138,7 +138,7 @@ float3 DDGIGetVolumeIrradiance(
         float2 probeTextureUV = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeNumDistanceTexels, volume);
 
         // Sample the probe's distance texture to get the mean distance to nearby surfaces
-        float2 filteredDistance = resources.probeDistance.SampleLevel(resources.bilinearSampler, probeTextureUV, 0).rg;
+        float2 filteredDistance = 2.f * resources.probeDistance.SampleLevel(resources.bilinearSampler, probeTextureUV, 0).rg;
 
         // Find the variance of the mean distance
         float variance = abs((filteredDistance.x * filteredDistance.x) - filteredDistance.y);

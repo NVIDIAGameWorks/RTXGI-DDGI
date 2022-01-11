@@ -20,7 +20,6 @@ The following sections cover how to use the ```DDGIVolume``` and detail how its 
 **Step 1:** to create a new ```DDGIVolume```, start by filling out a ```rtxgi::DDGIVolumeDesc``` structure.
 
 - All properties of the descriptor struct are explained in [DDGIVolume.h](../rtxgi-sdk/include/rtxgi/ddgi/DDGIVolume.h#L51-124).
-
 - Example usage is shown in ```GetDDGIVolumeDesc()``` of [DDGI_D3D12.cpp](../samples/test-harness/src/graphics/DDGI_D3D12.cpp) and [DDGI_VK.cpp](../samples/test-harness/src/graphics/DDGI_VK.cpp).
 
 **Probe Irradiance Gamma**
@@ -489,3 +488,31 @@ The number of fixed rays is specified by the ```RTXGI_DDGI_NUM_FIXED_RAYS``` def
 <img src="images/ddgivolume-fixedRays.gif"></img>
 <figcaption><b>Figure 10: The default fixed rays distribution used in probe relocation and classification.</b></figcaption>
 </figure>
+
+## Rules of Thumb
+
+Below are rules of thumb related to ```DDGIVolume``` configuration and how a volume's settings affect the lighting results and content creation.
+
+### Geometry Configuration
+
+- To achieve proper occlusion results from DDGI, **avoid representing walls with zero thickness planes**.
+  - Walls should have a "thickness" that is proportional to the probe density of the containing ```DDGIVolume```.
+- If walls are too thin relative to the volume's probe density, you will observe **light leaking**.
+- The planes that walls consist of should be **single-sided**.
+  - The probe relocation and probe classification features track backfaces in order to make decisions.
+
+### Probe Density and Counts
+
+- High probe counts within a volume are usually not necessary (with properly configured wall geometry).
+- **We recommend a probe every 2-3 meters for typical use cases.**
+- Sparse probe grids can often produce better visual results than dense probe grids, since dense probes grids localize the effect of each probe and can (at times) reveal the structure of the probe grid.
+- When in doubt, use the minimum number of probes necessary to get the desired result.
+
+### View Bias
+
+- If light leaking occurs - and zero thickness planes are not used for walls - the volume's ```probeViewBias``` value probably needs to be adjusted.
+  - **Reminder:** ```probeViewBias``` is a world-space offset along the camera view ray applied to the shaded surface point to avoid numerical instabilities when determining visibility.
+  - Increasing the ```probeViewBias``` value pushes the shaded point away from the surface and further into the probe's voxel, where the variance of the probe's mean distance values is lower.
+  - Since ```probeViewBias``` is a world-space value, scene scale matters! As a result, **the SDK's default value likely won't be what your content requires**.
+
+

@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -1364,6 +1364,12 @@ namespace Graphics
              */
             bool Initialize(Globals& vk, GlobalResources& vkResources, Resources& resources, const Configs::Config& config, Instrumentation::Performance& perf, std::ofstream& log)
             {
+                // Validate the SDK version
+                assert(RTXGI_VERSION::major == 1);
+                assert(RTXGI_VERSION::minor == 2);
+                assert(RTXGI_VERSION::revision == 4);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.04") == 0);
+
                 // Reset the command list before initialization
                 CHECK(ResetCmdList(vk), "reset command list!", log);
 

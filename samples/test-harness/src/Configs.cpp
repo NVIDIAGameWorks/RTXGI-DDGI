@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -12,6 +12,7 @@
 
 #include <sstream>
 #include <stdlib.h>
+#include <filesystem>
 
 #define PARSE_CHECK(statement, lineNumber, log) { if(!statement) { log << "\nFailed to parse config file at line " << lineNumber; return false; } }
 
@@ -438,8 +439,22 @@ namespace Configs
         if (tokens[1].compare("vsync") == 0) { Store(data, config.app.vsync); return true; }
         if (tokens[1].compare("fullscreen") == 0) { Store(data, config.app.fullscreen); return true; }
         if (tokens[1].compare("showUI") == 0) { Store(data, config.app.showUI); return true; }
-        if (tokens[1].compare("root") == 0) { config.app.root = data; return true; }
-        if (tokens[1].compare("rtxgiSDK") == 0) { config.app.rtxgi = data; return true; }
+        if (tokens[1].compare("root") == 0)
+        {
+            std::filesystem::path configFilePath(config.app.filepath);
+            std::filesystem::path appRootRelativeToConfig(data);
+            std::filesystem::path appRootRelativeToRunDirectory = configFilePath.parent_path() / appRootRelativeToConfig;
+            config.app.root = appRootRelativeToRunDirectory.lexically_normal().string();
+            return true;
+        }
+        if (tokens[1].compare("rtxgiSDK") == 0)
+        {
+            std::filesystem::path configFilePath(config.app.filepath);
+            std::filesystem::path sdkRootRelativeToConfig(data);
+            std::filesystem::path sdkRootrelativeToRunDirectory = configFilePath.parent_path() / sdkRootRelativeToConfig;
+            config.app.rtxgi = sdkRootrelativeToRunDirectory.lexically_normal().string();
+            return true;
+        }
         if (tokens[1].compare("title") == 0) { config.app.title = data; return true; }
 
         if (tokens[1].compare("renderMode") == 0) {

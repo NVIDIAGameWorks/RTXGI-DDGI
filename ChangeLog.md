@@ -1,5 +1,29 @@
 # RTXGI SDK Change Log
 
+## 1.2.04
+
+### SDK
+
+Features and Improvements:
+- Bumped SDK revision number and version string
+- Updated copyright dates
+
+Bug Fixes:
+- Fixed regression related to distance values sampled from probe distance textures
+
+### Test Harness
+
+Features and Improvements:
+- Relative paths defined in configuration ```.ini``` files are now interpreted as relative to the ```.ini``` file, instead of the Visual Studio working directory
+  - This should be easier to use than the previous behavior
+- CMake: the ```nvidia.jpg``` copy operations now use ```CMAKE_BINARY_DIR```
+- Added version number and version string assert checks during DDGI initialization
+- Updated documentation with DDGIVolume Rules of Thumb
+- Updated copyright dates
+
+Bug Fixes:
+- Fixed regression related to distance values sampled from probe distance textures
+
 ## 1.2.0
 
 ### SDK

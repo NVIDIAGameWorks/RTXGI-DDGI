@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2020, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -69,7 +69,7 @@ float3 GetProbeData(uint volumeIndex, int probeIndex, int3 probeCoords, float3 w
         float2 uv = DDGIGetProbeUV(probeIndex, octantCoords, volume.probeNumDistanceTexels, volume);
 
         // Sample the distance texture and reconstruct the depth
-        float distance = ProbeDistance.SampleLevel(BilinearWrapSampler, uv, 0).r;
+        float distance = 2.f * ProbeDistance.SampleLevel(BilinearWrapSampler, uv, 0).r;
 
         // Normalize the distance for visualization
         float value = saturate(distance / GetGlobalConst(ddgivis, distanceDivisor));

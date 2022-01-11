@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -20,11 +20,11 @@ namespace rtxgi
     {
         static const int major = 1;
         static const int minor = 2;
-        static const int revision = 0;
+        static const int revision = 4;
 
         inline static const char* getVersionString()
         {
-            return "1.2.00";
+            return "1.2.04";
         }
     };
 

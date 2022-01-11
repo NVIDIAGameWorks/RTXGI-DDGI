@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -103,7 +103,7 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
 
         // Sample the distance texture
         coords = float2(DispatchThreadID.x, (DispatchThreadID.y - ymin)) / distanceRect.xy;
-        color.r = (ProbeDistance.SampleLevel(PointClampSampler, coords, 0).r) / GetGlobalConst(ddgivis, distanceTextureScale);
+        color.r = (2.f * ProbeDistance.SampleLevel(PointClampSampler, coords, 0).r) / GetGlobalConst(ddgivis, distanceTextureScale);
 
         // Normalize for display
         color.r = saturate(color.r / GetGlobalConst(ddgivis, distanceDivisor));

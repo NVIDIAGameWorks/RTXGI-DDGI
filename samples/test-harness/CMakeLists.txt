@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019-2021, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
 #
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -496,7 +496,7 @@ if(WIN32 AND RTXGI_API_D3D12_ENABLE)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${RTXGI_API_D3D12_DXIL_PATH}/dxil.dll ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/d3d12/$<CONFIG>
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/bin/dxcompiler.dll ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/d3d12/$<CONFIG>
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/d3d12/$<CONFIG>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${ROOT_DIR}/build/samples/test-harness/
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness/
     )
 endif()
 
@@ -505,7 +505,7 @@ if(WIN32 AND RTXGI_API_VULKAN_ENABLE)
     add_custom_command( TARGET TestHarness-VK POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/bin/dxcompiler.dll ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${ROOT_DIR}/build/samples/test-harness/
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness/
     )
 endif()
 
@@ -516,14 +516,14 @@ if(UNIX AND RTXGI_API_VULKAN_ENABLE)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_SOURCE_DIR}/build/samples/test-harness
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${ROOT_DIR}/build/samples/test-harness
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness
         )
     elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "x86_64")
         add_custom_command( TARGET TestHarness-VK POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_SOURCE_DIR}/build/samples/test-harness
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${ROOT_DIR}/build/samples/test-harness
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness
         )
     endif()
 endif()
