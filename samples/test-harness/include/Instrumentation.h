@@ -14,6 +14,7 @@
 
 #include <queue>
 #include <stack>
+#include <iostream>
 
 namespace Instrumentation
 {
@@ -42,12 +43,14 @@ namespace Instrumentation
             this->sampleSize = sampleSize;
         }
 
+        const static uint32_t FallbackSampleSize = 10;
+
         std::string name = "";
         EStatType type;
 
         uint32_t index = 0;
         uint64_t timestamp = 0;
-        uint32_t sampleSize = 10;
+        uint32_t sampleSize = FallbackSampleSize;
         double elapsed = 0; // milliseconds
         double average = 0;
         double total = 0;
@@ -56,6 +59,15 @@ namespace Instrumentation
         uint32_t GetQueryBeginIndex() { return (index * 2); }
         uint32_t GetQueryEndIndex() { return (index * 2) + 1; }
 
+        void Reset(uint32_t sampleSize = FallbackSampleSize)
+        {
+            elapsed = 0;
+            average = 0;
+            total = 0;
+            samples = {};
+            this->sampleSize = sampleSize;
+        }
+
     };
 
     struct Performance
@@ -63,25 +75,40 @@ namespace Instrumentation
         std::vector<Stat*> gpuTimes;
         std::vector<Stat*> cpuTimes;
 
+        const static uint32_t DefaultSampleSize = 50;
+
         uint32_t GetNumGPUQueries() { return static_cast<uint32_t>(gpuTimes.size() * 2); };
 
-        Stat*& AddCPUStat(std::string name, uint32_t sampleSize = 50)
+        Stat*& AddCPUStat(std::string name, uint32_t sampleSize = DefaultSampleSize)
         {
             cpuTimes.emplace_back(new Stat(EStatType::CPU, name, sampleSize));
             return cpuTimes.back();
         }
 
-        Stat*& AddGPUStat(std::string name, uint32_t sampleSize = 50)
+        Stat*& AddGPUStat(std::string name, uint32_t sampleSize = DefaultSampleSize)
         {
             uint32_t index = static_cast<uint32_t>(gpuTimes.size());
             gpuTimes.emplace_back(new Stat(EStatType::GPU, index, name, sampleSize));
             return gpuTimes.back();
         }
 
-        void AddStat(std::string name, Stat*& cpu, Stat*& gpu, uint32_t sampleSize = 50)
+        void AddStat(std::string name, Stat*& cpu, Stat*& gpu, uint32_t sampleSize = DefaultSampleSize)
         {
             cpu = AddCPUStat(name, sampleSize);
             gpu = AddGPUStat(name, sampleSize);
+        }
+
+        void Reset(uint32_t sampleSize = DefaultSampleSize)
+        {
+            for (Stat* stat : cpuTimes)
+            {
+                stat->Reset(sampleSize);
+            }
+
+            for (Stat* stat : gpuTimes)
+            {
+                stat->Reset(sampleSize);
+            }
         }
 
         void Cleanup()
@@ -102,12 +129,16 @@ namespace Instrumentation
             cpuTimes.clear();
             gpuTimes.clear();
         }
+
     };
 
     void Begin(Stat* s);
     void End(Stat* s);
     void Resolve(Stat* s);
     void EndAndResolve(Stat* s);
+
+    std::ostream& operator<<(std::ostream& os, const Stat& stat);
+    std::ostream& operator<<(std::ostream& os, std::vector<Stat*>& stats);
 
 }
 

@@ -52,9 +52,14 @@ The Test Harness sample application provides [an example ray generation shader](
 
 Computes the 3D grid-space coordinates for the probe at a given probe index in the range [0, numProbes]. Provide these coordinates to ```DDGIGetProbeWorldPosition()``` and ```DDGIGetScrollingProbeIndex()```.
 
-#### ```DDGIGetProbeState(...)```
+#### ```DDGILoadProbeState(...)```
 
-    float DDGIGetProbeState(
+    float DDGILoadProbeState(
+        int probeIndex,
+        RWTexture2D<float4> probeData,
+        DDGIVolumeDescGPU volume)
+
+    float DDGILoadProbeState(
         int probeIndex,
         Texture2D<float4> probeData,
         DDGIVolumeDescGPU volume)

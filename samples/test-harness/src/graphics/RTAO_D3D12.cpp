@@ -434,6 +434,17 @@ namespace Graphics
                 resources.shaderTableHitGroupTableStartAddress = 0;
             }
 
+            /**
+             * Write the RTAO texture resources to disk.
+             */
+            bool WriteRTAOBuffersToDisk(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::string directory)
+            {
+                CoInitialize(NULL);
+                bool success = WriteResourceToDisk(d3d, directory + "\\rtaoraw.png", resources.RTAORaw, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                success &= WriteResourceToDisk(d3d, directory + "\\rtaofiltered.png", resources.RTAOOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                return success;
+            }
+
         } // namespace Graphics::D3D12::RTAO
 
     } // namespace Graphics::D3D12
@@ -469,6 +480,11 @@ namespace Graphics
         void Cleanup(Globals& d3d, Resources& resources)
         {
             Graphics::D3D12::RTAO::Cleanup(resources);
+        }
+
+        bool WriteRTAOBuffersToDisk(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::string directory)
+        {
+            return Graphics::D3D12::RTAO::WriteRTAOBuffersToDisk(d3d, d3dResources, resources, directory);
         }
 
     } // namespace Graphics::RTAO

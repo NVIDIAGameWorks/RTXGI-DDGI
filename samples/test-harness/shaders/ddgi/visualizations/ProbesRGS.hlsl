@@ -164,7 +164,7 @@ void RayGen()
 
                 // Get the probe's location in the probe data texture
                 Texture2D<float4> ProbeData = GetDDGIVolumeProbeDataSRV(volumeIndex);
-                uint2 probeStateTexCoords = DDGIGetProbeDataTexelCoords(probeIndex, volume);
+                uint2 probeStateTexCoords = DDGIGetProbeTexelCoords(probeIndex, volume);
 
                 // Get the probe's state
                 float probeState = ProbeData[probeStateTexCoords].w;
@@ -257,7 +257,7 @@ void RayGenHideInactive()
 
                 // Get the probe's state
                 Texture2D<float4> ProbeData = GetDDGIVolumeProbeDataSRV(volumeIndex);
-                uint2 probeStateTexCoords = DDGIGetProbeDataTexelCoords(probeIndex, volume);
+                uint2 probeStateTexCoords = DDGIGetProbeTexelCoords(probeIndex, volume);
                 float probeState = ProbeData[probeStateTexCoords].w;
 
                 if(probeState == RTXGI_DDGI_PROBE_STATE_INACTIVE) continue;

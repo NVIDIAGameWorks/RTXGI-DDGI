@@ -107,7 +107,7 @@ void RayGen()
 
     // Early out: a "fixed" ray hit a front facing surface. Fixed rays are not blended since their direction
     // is not random and they would bias the irradiance estimate. Don't perform lighting for these rays.
-    if(volume.probeClassificationEnabled && rayIndex < RTXGI_DDGI_NUM_FIXED_RAYS)
+    if((volume.probeRelocationEnabled || volume.probeClassificationEnabled) && rayIndex < RTXGI_DDGI_NUM_FIXED_RAYS)
     {
         // Store the ray front face hit distance (only)
         DDGIStoreProbeRayFrontfaceHit(RayData, texCoords, volume, payload.hitT);

@@ -20,11 +20,11 @@ namespace rtxgi
     {
         static const int major = 1;
         static const int minor = 2;
-        static const int revision = 4;
+        static const int revision = 7;
 
         inline static const char* getVersionString()
         {
-            return "1.2.04";
+            return "1.2.07";
         }
     };
 

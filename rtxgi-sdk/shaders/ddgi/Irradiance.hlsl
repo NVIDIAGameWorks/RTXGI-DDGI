@@ -38,12 +38,14 @@ float3 DDGIGetSurfaceBias(float3 surfaceNormal, float3 cameraDirection, DDGIVolu
  */ 
 float DDGIGetVolumeBlendWeight(float3 worldPosition, DDGIVolumeDescGPU volume)
 {
-    // Get the volume's origin
+    // Get the volume's origin and extent
     float3 origin = volume.origin + (volume.probeScrollOffsets * volume.probeSpacing);
-
-    // Get spatial delta between the world position and the volume
     float3 extent = (volume.probeSpacing * (volume.probeCounts - 1)) * 0.5f;
-    float3 position = abs(worldPosition - origin);
+
+    // Get the delta between the (rotated volume) and the world-space position
+    float3 position = (worldPosition - origin);
+    position = abs(RTXGIQuaternionRotate(position, RTXGIQuaternionConjugate(volume.rotation)));
+
     float3 delta = position - extent;
     if(all(delta < 0)) return 1.f;
 
@@ -99,13 +101,8 @@ float3 DDGIGetVolumeIrradiance(
         int adjacentProbeIndex = DDGIGetScrollingProbeIndex(adjacentProbeCoords, volume);
 
         // Early Out: don't allow inactive probes to contribute to irradiance
-        if (volume.probeClassificationEnabled)
-        {
-            // Get the probe state
-            int2 probeDataCoords = DDGIGetProbeDataTexelCoords(adjacentProbeIndex, volume);
-            int  probeState = resources.probeData[probeDataCoords].w;
-            if (probeState == RTXGI_DDGI_PROBE_STATE_INACTIVE) continue;
-        }
+        int probeState = DDGILoadProbeState(adjacentProbeIndex, resources.probeData, volume);
+        if (probeState == RTXGI_DDGI_PROBE_STATE_INACTIVE) continue;
 
         // Get the adjacent probe's world position
         float3 adjacentProbeWorldPosition = DDGIGetProbeWorldPosition(adjacentProbeCoords, volume, resources.probeData);

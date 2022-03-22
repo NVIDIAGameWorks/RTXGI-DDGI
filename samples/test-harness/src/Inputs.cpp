@@ -64,8 +64,16 @@ void KeyHandler(GLFWwindow* window, int key, int scancode, int action, int mods)
     // Save debug images
     if(IsKeyReleased(key, action, GLFW_KEY_F1))
     {
-        inputPtr->saveImages = true;
         inputPtr->event = Inputs::EInputEvent::SAVE_IMAGE;
+        return;
+    }
+
+    // Run benchmark
+    if (IsKeyReleased(key, action, GLFW_KEY_F2))
+    {
+        inputPtr->event = Inputs::EInputEvent::RUN_BENCHMARK;
+        inputPtr->runBenchmark = true;
+        return;
     }
 
     // Toggle pan inversion

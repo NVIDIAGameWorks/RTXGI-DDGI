@@ -32,5 +32,6 @@ namespace Graphics
         void Update(Globals& globals, GlobalResources& gfxResources, Resources& resources, const Configs::Config& config);
         void Execute(Globals& globals, GlobalResources& gfxResources, Resources& resources);
         void Cleanup(Globals& globals, Resources& resources);
+        bool WriteRTAOBuffersToDisk(Globals& globals, GlobalResources& gfxResources, Resources& resources, std::string directory);
     }
 }

@@ -95,9 +95,9 @@ struct DDGIVolumeDescGPU
     bool     probeScrollClear[3];                // whether probes of a plane need to be cleared due to scrolling movement
 
 #ifndef HLSL
-    rtxgi::DDGIVolumeDescGPUPacked data;
     rtxgi::DDGIVolumeDescGPUPacked GetPackedData()
     {
+        rtxgi::DDGIVolumeDescGPUPacked data;
         data.origin = origin;
         data.probeHysteresis = probeHysteresis;
         data.rotation = rotation;

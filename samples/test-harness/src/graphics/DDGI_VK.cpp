@@ -189,7 +189,7 @@ namespace Graphics
                         GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Irradiance, width, height);
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Irradiance, volumeDesc.probeIrradianceFormat);
 
-                        TextureDesc desc = { width, height, 1, format, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT };
+                        TextureDesc desc = { width, height, 1, format, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT };
                         CHECK(CreateTexture(vk, desc, &volumeResources.unmanaged.probeIrradiance, &volumeResources.unmanaged.probeIrradianceMemory, &volumeResources.unmanaged.probeIrradianceView), "create DDGIVolume irradiance texture!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::string n = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Irradiance";
@@ -205,7 +205,7 @@ namespace Graphics
                         GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Distance, width, height);
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Distance, volumeDesc.probeDistanceFormat);
 
-                        TextureDesc desc = { width, height, 1, format, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT };
+                        TextureDesc desc = { width, height, 1, format, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT };
                         CHECK(CreateTexture(vk, desc, &volumeResources.unmanaged.probeDistance, &volumeResources.unmanaged.probeDistanceMemory, &volumeResources.unmanaged.probeDistanceView), "create DDGIVolume distance texture!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::string n = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Distance";
@@ -222,7 +222,7 @@ namespace Graphics
                         if (width <= 0) return false;
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, volumeDesc.probeDataFormat);
 
-                        TextureDesc desc = { width, height, 1, format, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+                        TextureDesc desc = { width, height, 1, format, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
                         CHECK(CreateTexture(vk, desc, &volumeResources.unmanaged.probeData, &volumeResources.unmanaged.probeDataMemory, &volumeResources.unmanaged.probeDataView), "", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::string n = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Data";
@@ -579,6 +579,7 @@ namespace Graphics
             {
                 volumeDesc.name = config.name;
                 volumeDesc.index = config.index;
+                volumeDesc.rngSeed = config.rngSeed;
                 volumeDesc.origin = { config.origin.x, config.origin.y, config.origin.z };
                 volumeDesc.eulerAngles = { config.eulerAngles.x, config.eulerAngles.y, config.eulerAngles.z, };
                 volumeDesc.probeSpacing = { config.probeSpacing.x, config.probeSpacing.y, config.probeSpacing.z };
@@ -795,7 +796,7 @@ namespace Graphics
                 vkFreeMemory(vk.device, resources.outputMemory, nullptr);
 
                 // Create the output (R16G16B16A16_FLOAT) texture resource
-                TextureDesc desc = { static_cast<uint32_t>(vk.width), static_cast<uint32_t>(vk.height), 1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+                TextureDesc desc = { static_cast<uint32_t>(vk.width), static_cast<uint32_t>(vk.height), 1, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
                 CHECK(CreateTexture(vk, desc, &resources.output, &resources.outputMemory, &resources.outputView), "create DDGI output texture resource!\n", log);
             #ifdef GFX_NAME_OBJECTS
                 SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.output), "DDGI Output", VK_OBJECT_TYPE_IMAGE);
@@ -1367,8 +1368,8 @@ namespace Graphics
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
                 assert(RTXGI_VERSION::minor == 2);
-                assert(RTXGI_VERSION::revision == 4);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.04") == 0);
+                assert(RTXGI_VERSION::revision == 7);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.07") == 0);
 
                 // Reset the command list before initialization
                 CHECK(ResetCmdList(vk), "reset command list!", log);
@@ -1650,6 +1651,37 @@ namespace Graphics
                 }
             }
 
+            /**
+             * Write the DDGI Volume texture resources to disk.
+             */
+            bool WriteVolumesToDisk(Globals& vk, GlobalResources& vkResources, Resources& resources, std::string directory)
+            {
+                CoInitialize(NULL);
+                bool success = true;
+                for (rtxgi::DDGIVolumeBase* volumeBase : resources.volumes)
+                {
+                    std::string baseName = directory + "\\" + volumeBase->GetName();
+                    std::string filename = baseName + "-irradiance.png";
+
+                    rtxgi::vulkan::DDGIVolume* volume = static_cast<DDGIVolume*>(volumeBase);
+                    rtxgi::DDGIVolumeDesc desc = volumeBase->GetDesc();
+                    uint32_t width = 0, height = 0;
+                    GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Irradiance, width, height);
+                    VkFormat format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Irradiance, desc.probeIrradianceFormat);
+                    success &= WriteResourceToDisk(vk, filename, volume->GetProbeIrradiance(), width, height, format, VK_IMAGE_LAYOUT_GENERAL);
+
+                    // not capturing distances because WIC doesn't like two-channel textures
+                    //filename = baseName + "-distance.png";
+                    //success &= WriteResourceToDisk(globals, filename, volume->GetProbeDistance(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+                    filename = baseName + "-data.png";
+                    GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Data, width, height);
+                    format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::RayData, desc.probeDataFormat);
+                    success &= WriteResourceToDisk(vk, filename, volume->GetProbeData(), width, height, format,VK_IMAGE_LAYOUT_GENERAL);
+                }
+                return success;
+            }
+
         } // namespace Graphics::Vulkan::DDGI
 
     } // namespace Graphics::Vulkan
@@ -1685,6 +1717,11 @@ namespace Graphics
         void Cleanup(Globals& vk, Resources& resources)
         {
             Graphics::Vulkan::DDGI::Cleanup(vk.device, resources);
+        }
+
+        bool WriteVolumesToDisk(Globals& vk, GlobalResources& vkResources, Resources& resources, std::string directory)
+        {
+            return Graphics::Vulkan::DDGI::WriteVolumesToDisk(vk, vkResources, resources, directory);
         }
 
     } // namespace Graphics::DDGI

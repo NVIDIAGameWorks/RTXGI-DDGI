@@ -369,11 +369,11 @@ This texture stores world-space offsets and classification states for all probes
   - ```ProbeDataCommon.hlsl``` contains helper functions for reading and writing world-space offset data.
 - Probe classification state is stored in the W channel.
 
-The texture's layout is the same as the irradiance and distance texture altases, except each probe uses just *one texel*. Below is a visualization of the probe data texture's world-space offsets (top) and probe states (bottom).
+The texture's layout is the same as the irradiance and distance texture altases, except here each probe is represented by just *one texel*. Below is a visualization of the probe data texture's world-space offsets (top) and probe states (bottom).
 
 <figure>
 <img src="images/ddgivolume-textures-probedata.jpg" width=800px></img>
-<figcaption><b>Figure 6: The Probe Data texture (zoomed) from the Crytek Sponza scene</b></figcaption>
+<figcaption><b>Figure 6: A visualization of the Probe Data texture (zoomed) for the Crytek Sponza scene</b></figcaption>
 </figure>
 
 

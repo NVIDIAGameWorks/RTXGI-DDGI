@@ -172,6 +172,7 @@ namespace Configs
             if (tokens[3].compare("probeMaxRayDistance") == 0) { Store(data, config.ddgi.volumes[volumeIndex].probeMaxRayDistance); return true; }
             if (tokens[3].compare("probeIrradianceThreshold") == 0) { Store(data, config.ddgi.volumes[volumeIndex].probeIrradianceThreshold); return true; }
             if (tokens[3].compare("probeBrightnessThreshold") == 0) { Store(data, config.ddgi.volumes[volumeIndex].probeBrightnessThreshold); return true; }
+            if (tokens[3].compare("rngSeed") == 0) { Store(data, config.ddgi.volumes[volumeIndex].rngSeed); return true; }
 
             if (tokens[3].compare("probeRelocation") == 0)
             { 

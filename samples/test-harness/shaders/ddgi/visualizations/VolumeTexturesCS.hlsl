@@ -114,36 +114,9 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
         return;
     }
 
-    // Ray Data
-    float2 radianceRect = float2(DDGIVolume.probeNumRays, DDGIVolume.probeCounts.x * DDGIVolume.probeCounts.y * DDGIVolume.probeCounts.z) *GetGlobalConst(ddgivis, rayDataTextureScale);
-    xmax =  radianceRect.x;
-    ymin += distanceRect.y + 5;
-    ymax = (ymin + radianceRect.y);
-    if (DispatchThreadID.x <= xmax && DispatchThreadID.y > ymin && DispatchThreadID.y <= ymax)
-    {
-        Texture2D<float4> RayData = GetDDGIVolumeRayDataSRV(volumeIndex);
-
-        // Sample the ray data texture
-        coords = float2(DispatchThreadID.x, (DispatchThreadID.y - ymin)) / radianceRect.xy;
-
-        if(DDGIVolume.probeRayDataFormat == RTXGI_DDGI_FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)
-        {
-            color = RayData.SampleLevel(PointClampSampler, coords, 0).rgb;
-        }
-        else if(DDGIVolume.probeRayDataFormat == RTXGI_DDGI_FORMAT_PROBE_RAY_DATA_R32G32_FLOAT)
-        {
-            color = RTXGIUintToFloat3(asuint(RayData.SampleLevel(PointClampSampler, coords, 0).r));
-        }
-
-        // Overwrite GBufferA's albedo and mark the pixel to not be lit
-        GBufferA[DispatchThreadID.xy] = float4(color, 0.f);
-
-        return;
-    }
-
     // Relocation offsets
     float2 offsetRect = 0;
-    ymin += radianceRect.y + 5;
+    ymin += distanceRect.y + 5;
     if (DDGIVolume.probeRelocationEnabled)
     {
         offsetRect = numProbes.xy * GetGlobalConst(ddgivis, relocationOffsetTextureScale);
@@ -202,6 +175,33 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
 
             return;
         }
+    }
+
+    // Ray Data
+    float2 radianceRect = float2(DDGIVolume.probeNumRays, DDGIVolume.probeCounts.x * DDGIVolume.probeCounts.y * DDGIVolume.probeCounts.z) *GetGlobalConst(ddgivis, rayDataTextureScale);
+    xmax = radianceRect.x;
+    ymin = ymax + 5;
+    ymax = (ymin + radianceRect.y);
+    if (DispatchThreadID.x <= xmax && DispatchThreadID.y > ymin && DispatchThreadID.y <= ymax)
+    {
+        Texture2D<float4> RayData = GetDDGIVolumeRayDataSRV(volumeIndex);
+
+        // Sample the ray data texture
+        coords = float2(DispatchThreadID.x, (DispatchThreadID.y - ymin)) / radianceRect.xy;
+
+        if (DDGIVolume.probeRayDataFormat == RTXGI_DDGI_FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)
+        {
+            color = RayData.SampleLevel(PointClampSampler, coords, 0).rgb;
+        }
+        else if (DDGIVolume.probeRayDataFormat == RTXGI_DDGI_FORMAT_PROBE_RAY_DATA_R32G32_FLOAT)
+        {
+            color = RTXGIUintToFloat3(asuint(RayData.SampleLevel(PointClampSampler, coords, 0).r));
+        }
+
+        // Overwrite GBufferA's albedo and mark the pixel to not be lit
+        GBufferA[DispatchThreadID.xy] = float4(color, 0.f);
+
+        return;
     }
 
 }

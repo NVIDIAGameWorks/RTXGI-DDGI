@@ -268,7 +268,7 @@ void DDGIProbeRelocationCS(uint3 DispatchThreadID : SV_DispatchThreadID)
 #endif
 
     // Get the probe's texel coordinates in the Probe Data texture
-    uint2 coords = DDGIGetProbeDataTexelCoords(probeIndex, volume);
+    uint2 coords = DDGIGetProbeTexelCoords(probeIndex, volume);
 
     // Read the current world position offset
     float3 offset = DDGILoadProbeDataOffset(ProbeData, coords, volume);
@@ -387,7 +387,7 @@ void DDGIProbeRelocationResetCS(uint3 DispatchThreadID : SV_DispatchThreadID)
 #endif
 
     // Get the probe's texel coordinates in the Probe Data texture
-    uint2 probeDataCoords = DDGIGetProbeDataTexelCoords(DispatchThreadID.x, volume);
+    uint2 probeDataCoords = DDGIGetProbeTexelCoords(DispatchThreadID.x, volume);
 
     // Write the probe offset
     ProbeData[probeDataCoords].xyz = float3(0.f, 0.f, 0.f);

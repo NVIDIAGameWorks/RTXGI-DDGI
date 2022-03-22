@@ -16,6 +16,7 @@
 #include "Graphics.h"
 #include "UI.h"
 #include "Window.h"
+#include "Benchmark.h"
 
 #include "graphics/PathTracing.h"
 #include "graphics/GBuffer.h"
@@ -23,6 +24,8 @@
 #include "graphics/DDGIVisualizations.h"
 #include "graphics/RTAO.h"
 #include "graphics/Composite.h"
+
+#include <sstream>
 
 /**
  * Run the Test Harness.
@@ -57,6 +60,7 @@ int Run(const std::vector<std::string>& arguments)
     perf.AddGPUStat("Frame");
     perf.AddCPUStat("Input");
     perf.AddCPUStat("Update");
+    Benchmark::BenchmarkRun benchmarkRun;
 
     CPU_TIMESTAMP_BEGIN(&startupShutdown);
 
@@ -200,6 +204,12 @@ int Run(const std::vector<std::string>& arguments)
             continue;
         }
 
+        if (input.event == Inputs::EInputEvent::RUN_BENCHMARK)
+        {
+            Benchmark::StartBenchmark(benchmarkRun, perf, config, gfx);
+            input.event = Inputs::EInputEvent::NONE;
+        }
+
         // Reload shaders and PSOs for graphics workloads
         {
             if (config.pathTrace.reload)
@@ -325,16 +335,31 @@ int Run(const std::vector<std::string>& arguments)
         if (!Graphics::SubmitCmdList(gfx)) break;
         if (!Graphics::Present(gfx)) continue;
         if (!Graphics::WaitForGPU(gfx)) break;
+
+        bool saveImages = (input.event == Inputs::EInputEvent::SAVE_IMAGE) || (input.runBenchmark && gfx.frameNumber >= Benchmark::NumBenchmarkFrames);
+
+        if (saveImages)
+        {
+            CreateDirectory(config.scene.screenshotPath.c_str(), NULL);
+            Graphics::WriteBackBufferToDisk(gfx, config.scene.screenshotPath);
+            Graphics::GBuffer::WriteGBufferToDisk(gfx, gfxResources, config.scene.screenshotPath);
+            Graphics::RTAO::WriteRTAOBuffersToDisk(gfx, gfxResources, rtao, config.scene.screenshotPath);
+            Graphics::DDGI::WriteVolumesToDisk(gfx, gfxResources, ddgi, config.scene.screenshotPath);
+            input.event = Inputs::EInputEvent::NONE;
+        }
+
         if (!Graphics::MoveToNextFrame(gfx)) break;
         if (!Graphics::ResetCmdList(gfx)) break;
         CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes.back());
 
     #ifdef GFX_PERF_INSTRUMENTATION
         if (!Graphics::UpdateTimestamps(gfx, gfxResources, perf)) break;
+        if (input.runBenchmark)
+        {
+            input.runBenchmark = Benchmark::UpdateBenchmark(benchmarkRun, perf, config, gfx, log);
+        }
         Graphics::BeginFrame(gfx, gfxResources, perf);
     #endif
-
-        // TODO: add GBuffer image dump code for debugging
 
         CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
     }

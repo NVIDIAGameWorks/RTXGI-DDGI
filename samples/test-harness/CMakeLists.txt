@@ -35,21 +35,25 @@ file(GLOB TEST_HARNESS_CONFIG
 )
 
 file(GLOB TEST_HARNESS_SOURCE
+    "include/Benchmark.h"
     "include/Caches.h"
     "include/Common.h"
     "include/Configs.h"
     "include/Geometry.h"
     "include/Graphics.h"
+    "include/ImageCapture.h"
     "include/Inputs.h"
     "include/Instrumentation.h"
     "include/Scenes.h"
     "include/Shaders.h"
     "include/Textures.h"
     "include/Window.h"
+    "src/Benchmark.cpp"
     "src/Caches.cpp"
     "src/Configs.cpp"
     "src/Geometry.cpp"
     "src/Inputs.cpp"
+    "src/ImageCapture.cpp"
     "src/Instrumentation.cpp"
     "src/main.cpp"
     "src/Scenes.cpp"
@@ -264,6 +268,7 @@ set(GLFW_INCLUDE "${ROOT_DIR}/thirdparty/glfw/include")
 set(IMGUI_INCLUDE "${ROOT_DIR}/thirdparty/imgui")
 set(IMGUI_BACKENDS_INCLUDE "${ROOT_DIR}/thirdparty/imgui/backends")
 set(TINYGLTF_INCLUDE "${ROOT_DIR}/thirdparty/tinygltf")
+set(LIBPNG_INCLUDE "${ROOT_DIR}/thirdparty/libpng" "${CMAKE_BINARY_DIR}/thirdparty/libpng")
 
 # ---- WINDOWS / D3D12 --------------------------------------------------------------------------------------
 
@@ -294,7 +299,7 @@ if(RTXGI_API_D3D12_ENABLE)
     )
 
     # Add dependencies
-    add_dependencies(${TARGET_EXE} glfw tinygltf)
+    add_dependencies(${TARGET_EXE} glfw tinygltf png_static zlibstatic)
 
     # Add the include directories
     target_include_directories(${TARGET_EXE} PRIVATE
@@ -309,6 +314,7 @@ if(RTXGI_API_D3D12_ENABLE)
         ${IMGUI_INCLUDE}
         ${IMGUI_BACKENDS_INCLUDE}
         ${TINYGLTF_INCLUDE}
+        ${LIBPNG_INCLUDE}
     )
 
     # Add statically linked libs
@@ -318,6 +324,8 @@ if(RTXGI_API_D3D12_ENABLE)
         d3d11
         d3d12
         dxgi
+        ../../thirdparty/libpng/$<CONFIG>/libpng16_static
+       ../../thirdparty/zlib/$<CONFIG>/zlibstatic
     )
 
     # Add common compiler definitions for exposed Test Harness options
@@ -330,7 +338,7 @@ if(RTXGI_API_D3D12_ENABLE)
     set_target_properties(${TARGET_EXE} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../bin/d3d12/$<CONFIG>)
 
     # Set the default scene config
-    set_target_properties(${TARGET_EXE} PROPERTIES VS_DEBUGGER_COMMAND_ARGUMENTS ../../../samples/test-harness/config/cornell.ini)
+    set_target_properties(${TARGET_EXE} PROPERTIES VS_DEBUGGER_COMMAND_ARGUMENTS ${CMAKE_SOURCE_DIR}/samples/test-harness/config/cornell.ini)
 
     # Add to the samples folder
     set_target_properties(${TARGET_EXE} PROPERTIES FOLDER "RTXGI Samples")
@@ -376,6 +384,7 @@ if(RTXGI_API_VULKAN_ENABLE)
             ${IMGUI_INCLUDE}
             ${IMGUI_BACKENDS_INCLUDE}
             ${TINYGLTF_INCLUDE}
+            ${LIBPNG_INCLUDE}
         )
 
         # Add VS filters
@@ -425,12 +434,13 @@ if(RTXGI_API_VULKAN_ENABLE)
             ${IMGUI_INCLUDE}
             ${IMGUI_BACKENDS_INCLUDE}
             ${TINYGLTF_INCLUDE}
+            ${LIBPNG_INCLUDE}
         )
 
     endif()
 
     # Add dependencies
-    add_dependencies(${TARGET_EXE} glfw tinygltf)
+    add_dependencies(${TARGET_EXE} glfw tinygltf png_static zlibstatic)
 
     # Add compiler definitions
     target_compile_definitions(${TARGET_EXE} PUBLIC API_VULKAN)
@@ -444,17 +454,17 @@ if(RTXGI_API_VULKAN_ENABLE)
     # Add statically linked libs
     if(WIN32)
         # Note: Even when targeting Vulkan, Windows uses D3D11 GPU-based texture compression with DirectXTex
-        target_link_libraries(${TARGET_EXE} RTXGI-VK ${Vulkan_LIBRARY} ../../thirdparty/glfw/src/$<CONFIG>/glfw3 d3d11)
+        target_link_libraries(${TARGET_EXE} RTXGI-VK ${Vulkan_LIBRARY} ../../thirdparty/glfw/src/$<CONFIG>/glfw3 d3d11 ../../thirdparty/libpng/$<CONFIG>/libpng16_static ../../thirdparty/zlib/$<CONFIG>/zlibstatic)
     elseif(UNIX AND NOT APPLE)
         # Note: UNIX can't use D3D11 GPU-based texture compression with DirectXTex
-        target_link_libraries(${TARGET_EXE} RTXGI-VK -lglfw -lvulkan -ldl -lpthread -lX11 -lXrandr -lXi -lstdc++fs)
+        target_link_libraries(${TARGET_EXE} RTXGI-VK -llibpng16_static -lz -lglfw -lvulkan -ldl -lpthread -lX11 -lXrandr -lXi -lstdc++fs)
     endif()
 
     # Set the binary output directory
     set_target_properties(${TARGET_EXE} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../bin/vulkan/$<CONFIG>)
 
     # Set the default scene config
-    set_target_properties(${TARGET_EXE} PROPERTIES VS_DEBUGGER_COMMAND_ARGUMENTS ../../../samples/test-harness/config/cornell.ini)
+    set_target_properties(${TARGET_EXE} PROPERTIES VS_DEBUGGER_COMMAND_ARGUMENTS ${CMAKE_SOURCE_DIR}/samples/test-harness/config/cornell.ini)
 
     # Add to the samples folder
     set_target_properties(${TARGET_EXE} PROPERTIES FOLDER "RTXGI Samples")
@@ -514,14 +524,14 @@ if(UNIX AND RTXGI_API_VULKAN_ENABLE)
     if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
         add_custom_command( TARGET TestHarness-VK POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_SOURCE_DIR}/build/samples/test-harness
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_BINARY_DIR}/samples/test-harness
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness
         )
     elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "x86_64")
         add_custom_command( TARGET TestHarness-VK POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_SOURCE_DIR}/build/samples/test-harness
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_BINARY_DIR}/samples/test-harness
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness
         )

@@ -372,6 +372,7 @@ namespace Graphics
             {
                 volumeDesc.name = config.name;
                 volumeDesc.index = config.index;
+                volumeDesc.rngSeed = config.rngSeed;
                 volumeDesc.origin = { config.origin.x, config.origin.y, config.origin.z };
                 volumeDesc.eulerAngles = { config.eulerAngles.x, config.eulerAngles.y, config.eulerAngles.z, };
                 volumeDesc.probeSpacing = { config.probeSpacing.x, config.probeSpacing.y, config.probeSpacing.z };
@@ -940,8 +941,8 @@ namespace Graphics
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
                 assert(RTXGI_VERSION::minor == 2);
-                assert(RTXGI_VERSION::revision == 4);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.04") == 0);
+                assert(RTXGI_VERSION::revision == 7);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.07") == 0);
 
                 UINT numVolumes = static_cast<UINT>(config.ddgi.volumes.size());
 
@@ -1181,6 +1182,31 @@ namespace Graphics
                 }
             }
 
+            /**
+             * Write the DDGI Volume texture resources to disk.
+             */
+            bool WriteVolumesToDisk(Globals& globals, GlobalResources& gfxResources, Resources& resources, std::string directory)
+            {
+                CoInitialize(NULL);
+                bool success = true;
+                for (rtxgi::DDGIVolumeBase* volumeBase : resources.volumes)
+                {
+                    std::string baseName = directory + "\\" + volumeBase->GetName();
+                    std::string filename = baseName + "-irradiance.png";
+
+                    rtxgi::d3d12::DDGIVolume* volume = static_cast<DDGIVolume*>(volumeBase);
+                    success &= WriteResourceToDisk(globals, filename, volume->GetProbeIrradiance(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+                    // not capturing distances because WIC doesn't like two-channel textures
+                    //filename = baseName + "-distance.png";
+                    //success &= WriteResourceToDisk(globals, filename, volume->GetProbeDistance(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+                    filename = baseName + "-data.png";
+                    success &= WriteResourceToDisk(globals, filename, volume->GetProbeData(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                }
+                return success;
+            }
+
         } // namespace Graphics::D3D12::RTAO
 
     } // namespace Graphics::D3D12
@@ -1216,6 +1242,11 @@ namespace Graphics
         void Cleanup(Globals& d3d, Resources& resources)
         {
             Graphics::D3D12::DDGI::Cleanup(resources);
+        }
+
+        bool WriteVolumesToDisk(Globals& globals, GlobalResources& gfxResources, Resources& resources, std::string directory)
+        {
+            return Graphics::D3D12::DDGI::WriteVolumesToDisk(globals, gfxResources, resources, directory);
         }
 
     } // namespace Graphics::DDGI

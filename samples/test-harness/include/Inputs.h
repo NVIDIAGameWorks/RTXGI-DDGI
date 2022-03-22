@@ -24,6 +24,7 @@ namespace Inputs
         SAVE_IMAGE,
         CAMERA_MOVEMENT,
         FULLSCREEN_CHANGE,
+        RUN_BENCHMARK,
         COUNT
     };
 
@@ -34,7 +35,7 @@ namespace Inputs
         DirectX::XMINT2 prevMousePos = { INT_MAX, INT_MAX };
         bool mouseLeftBtnDown = false;
         bool mouseRightBtnDown = false;
-        bool saveImages = false;
+        bool runBenchmark = false;
     };
 
     bool Initialize(GLFWwindow* window, Input& input, Configs::Config& config, Scenes::Scene& scene);

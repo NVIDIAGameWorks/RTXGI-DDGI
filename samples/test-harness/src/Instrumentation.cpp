@@ -96,4 +96,20 @@ namespace Instrumentation
         Resolve(s);
     }
 
+    std::ostream& operator<<(std::ostream& os, const Stat& stat)
+    {
+        os << stat.elapsed;
+        return os;
+    }
+
+    std::ostream& operator<<(std::ostream& os, std::vector<Stat*>& stats)
+    {
+        for (std::vector<Stat*>::const_iterator& it = stats.cbegin(); it != stats.cend(); it++)
+        {
+            os << **it << ",";
+        }
+        os << std::endl;
+        return os;
+    }
+
 }

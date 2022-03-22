@@ -397,8 +397,7 @@ namespace Graphics
 
         void BeginRenderPass(Globals& vk);
 
-        /*bool WriteResourceImageToDisk(Globals& gfx, ID3D12Resource* pResource, std::string folder, std::string filename, D3D12_RESOURCE_STATES state);
-        bool WriteResourceImagesToDisk(Globals& gfx, Resources& resources, std::string folder);*/
+        bool WriteResourceToDisk(Globals& vk, std::string file, VkImage image, uint32_t width, uint32_t height, VkFormat imageFormat, VkImageLayout originalLayout);
 
     #ifdef GFX_NAME_OBJECTS
         void SetObjectName(VkDevice device, uint64_t handle, const char* name, VkObjectType type);

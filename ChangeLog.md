@@ -1,5 +1,34 @@
 # RTXGI SDK Change Log
 
+## 1.2.07
+
+### SDK
+
+Features and Improvements:
+- Shader improvements for probe data reads/writes
+  - The probe data texture now uses the same layout as the irradiance and distance textures
+  - This change makes probe data visualizations easier to understand
+- Adds a RWTexture2D variant of ```DDGILoadProbeState()```
+- Uses the ```DDGILoadProbeState()``` convenience function where appropriate
+- Moved the ```data``` member of the ```DDGIVolumeDescGPU``` struct inside the ```GetPackedData()``` function so the struct size is the same on the CPU and GPU
+- Updated stale code comments (non-functional)
+- Bumped SDK revision number and version string
+
+Bug Fixes:
+- ```DDGIGetVolumeBlendWeight```: fixed regression related to volume edge fade not respecting rotations
+
+### Test Harness
+
+Features and Improvements:
+- ```ProbeTraceRGS.hlsl```: no longer performs lighting for fixed rays when probe relocation is enabled (performance optimization)
+- Adds a performance benchmark mode that collects CPU and GPU performance data and outputs the results to ```*.csv``` files
+  - Press the ```F2``` key to run a benchmark
+- Adds the ability to store intermediate textures (back buffer, GBuffer, RTAO, and DDGIVolume textures) to disk
+  - Uses the zlib and libpng libraries for cross-platform compatibility
+  - Press the ```F1``` key to save the current image data to disk
+- ```VolumeTexturesCS.hlsl```: minor updates to the layout order of visualized textures
+- Config file and documentation updates
+
 ## 1.2.04
 
 ### SDK

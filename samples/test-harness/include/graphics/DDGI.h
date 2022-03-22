@@ -36,5 +36,7 @@ namespace Graphics
 
         void AddCommonShaderDefines(Shaders::ShaderProgram& shader, const DDGIVolumeDesc& volumeDesc, bool spirv);
         bool CompileDDGIVolumeShaders(Globals& vk, const DDGIVolumeDesc& volumeDesc, std::vector<Shaders::ShaderProgram>& volumeShaders, bool spirv, std::ofstream& log);
+
+        bool WriteVolumesToDisk(Globals& globals, GlobalResources& gfxResources, Resources& resources, std::string directory);
     }
 }

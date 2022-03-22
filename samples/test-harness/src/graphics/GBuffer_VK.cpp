@@ -537,15 +537,6 @@ namespace Graphics
             }
 
             /**
-             * Write the GBuffer texture resources to disk.
-             */
-            bool WriteGBufferToDisk(Globals& d3d, GlobalResources& vkResources, std::string directory)
-            {
-                // TODO: implement
-                return true;
-            }
-
-            /**
              * Release resources.
              */
             void Cleanup(VkDevice& device, Resources& resources)
@@ -566,6 +557,20 @@ namespace Graphics
                 resources.shaderTableRecordSize = 0;
                 resources.shaderTableMissTableSize = 0;
                 resources.shaderTableHitGroupTableSize = 0;
+            }
+
+            /**
+             * Write the GBuffer texture resources to disk.
+             */
+            bool WriteGBufferToDisk(Globals& vk, GlobalResources& vkResources, std::string directory)
+            {
+                CoInitialize(NULL);
+                // formats should match those from Graphics::Vulkan::CreateRenderTargets() in Vulkan.cpp
+                bool success = WriteResourceToDisk(vk, directory + "\\GBufferA.png", vkResources.rt.GBufferA, vk.width, vk.height, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "\\GBufferB.png", vkResources.rt.GBufferB, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "\\GBufferC.png", vkResources.rt.GBufferC, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "\\GBufferD.png", vkResources.rt.GBufferD, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
+                return success;
             }
 
         } // namespace Graphics::Vulkan::GBuffer
@@ -600,14 +605,14 @@ namespace Graphics
             return Graphics::Vulkan::GBuffer::Execute(vk, vkResources, resources);
         }
 
-        bool WriteGBufferToDisk(Globals& vk, GlobalResources& vkResources, std::string directory)
-        {
-            return Graphics::Vulkan::GBuffer::WriteGBufferToDisk(vk, vkResources, directory);
-        }
-
         void Cleanup(Globals& vk, Resources& resources)
         {
             Graphics::Vulkan::GBuffer::Cleanup(vk.device, resources);
+        }
+
+        bool WriteGBufferToDisk(Globals& vk, GlobalResources& vkResources, std::string directory)
+        {
+            return Graphics::Vulkan::GBuffer::WriteGBufferToDisk(vk, vkResources, directory);
         }
 
     } // namespace Graphics::GBuffer

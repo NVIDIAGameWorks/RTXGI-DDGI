@@ -62,7 +62,7 @@ namespace Graphics
     bool UpdateTimestamps(Globals& gfx, GlobalResources& gfxResources, Instrumentation::Performance& performance);
 #endif
 
-    bool WriteGBufferToDisk(Globals& gfx, GlobalResources& gfxResources, std::string directory);
+    bool WriteBackBufferToDisk(Globals& gfx, std::string directory);
 
     namespace BindlessResourceOffsets
     {

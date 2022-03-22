@@ -19,7 +19,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-# Add Vulkan headers on ARM since there is no official Vulkan SDK
+# Add Vulkan headers on ARM since there is no official ARM Vulkan SDK
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
     add_subdirectory(thirdparty/Vulkan-Headers)
     set(RTXGI_API_VULKAN_SDK "1")
@@ -46,6 +46,26 @@ if(RTXGI_BUILD_SAMPLES)
     add_subdirectory(thirdparty/tinygltf)
     target_compile_definitions(tinygltf PUBLIC _CRT_SECURE_NO_WARNINGS) # suppress the sprintf CRT warnings
     set_target_properties(tinygltf PROPERTIES FOLDER "Thirdparty/")
+
+    # zlib
+    set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
+    set(CMAKE_DEBUG_POSTFIX "" CACHE STRING "override debug postfix")
+    option(ASM686 "" OFF)
+    option(AMD64 "" OFF)
+    add_subdirectory(thirdparty/zlib)
+    target_compile_options(zlib BEFORE PUBLIC /wd4267) # suppress the implicit conversion warning
+    set_target_properties(zlib zlibstatic example minigzip PROPERTIES FOLDER "Thirdparty/zlib" DEBUG_POSTFIX "")
+
+    # libpng
+    option(PNG_BUILD_ZLIB "" ON)
+    option(PNG_STATIC "" ON)
+    option(PNG_SHARED "" OFF)
+    option(PNG_EXECUTABLES "" OFF)
+    option(PNG_FRAMEWORK "" OFF)
+    option(PNG_TESTS "" OFF)
+    set(ZLIB_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/thirdparty/zlib" "${CMAKE_BINARY_DIR}/thirdparty/zlib")
+    add_subdirectory(thirdparty/libpng)
+    set_target_properties(png_static genfiles PROPERTIES FOLDER "Thirdparty/libpng" DEBUG_POSTFIX "")
 
     # Samples
     add_subdirectory(samples)

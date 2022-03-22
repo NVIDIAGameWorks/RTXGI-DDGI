@@ -25,7 +25,7 @@ namespace Graphics
             bool CreateTextures(Globals& vk, GlobalResources& vkResources, Resources& resources, std::ofstream& log)
             {
                 // Create the output (R8G8B8A8_UNORM) texture resource
-                TextureDesc desc = { static_cast<uint32_t>(vk.width), static_cast<uint32_t>(vk.height), 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+                TextureDesc desc = { static_cast<uint32_t>(vk.width), static_cast<uint32_t>(vk.height), 1, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
                 CHECK(CreateTexture(vk, desc, &resources.RTAOOutput, &resources.RTAOOutputMemory, &resources.RTAOOutputView), "create RTAO output texture resource!\n", log);
             #ifdef GFX_NAME_OBJECTS
                 SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.RTAOOutput), "RTAO Output", VK_OBJECT_TYPE_IMAGE);
@@ -651,6 +651,18 @@ namespace Graphics
                 resources.shaderTableHitGroupTableStartAddress = 0;
             }
 
+            /**
+             * Write the RTAO texture resources to disk.
+             */
+            bool WriteRTAOBuffersToDisk(Globals& vk, GlobalResources& vkResources, Resources& resources, std::string directory)
+            {
+                CoInitialize(NULL);
+                // format should match those from CreateTextures() function above
+                bool success = WriteResourceToDisk(vk, directory + "\\rtaoraw.png", resources.RTAORaw, vk.width, vk.height, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "\\rtaofiltered.png", resources.RTAOOutput, vk.width, vk.height, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
+                return success;
+            }
+
         } // namespace Graphics::Vulkan::RTAO
 
     } // namespace Graphics::Vulkan
@@ -686,6 +698,11 @@ namespace Graphics
         void Cleanup(Globals& vk, Resources& resources)
         {
             Graphics::Vulkan::RTAO::Cleanup(vk.device, resources);
+        }
+
+        bool WriteRTAOBuffersToDisk(Globals& vk, GlobalResources& vkResources, Resources& resources, std::string directory)
+        {
+            return Graphics::Vulkan::RTAO::WriteRTAOBuffersToDisk(vk, vkResources, resources, directory);
         }
 
     } // namespace Graphics::RTAO

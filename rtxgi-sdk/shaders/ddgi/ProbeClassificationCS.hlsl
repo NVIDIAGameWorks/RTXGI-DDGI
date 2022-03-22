@@ -288,7 +288,7 @@ void DDGIProbeClassificationCS(uint3 DispatchThreadID : SV_DispatchThreadID)
     }
 
     // Get the probe's texel coordinates in the Probe Data texture
-    uint2 probeDataCoords = DDGIGetProbeDataTexelCoords(probeIndex, volume);
+    uint2 probeDataCoords = DDGIGetProbeTexelCoords(probeIndex, volume);
 
     // Early out: number of backface hits has been exceeded. The probe is probably inside geometry.
     if(((float)backfaceCount / (float)RTXGI_DDGI_NUM_FIXED_RAYS) > volume.probeBackfaceThreshold)
@@ -369,7 +369,7 @@ void DDGIProbeClassificationResetCS(uint3 DispatchThreadID : SV_DispatchThreadID
 #endif
 
     // Get the probe's texel coordinates in the Probe Data texture
-    uint2 probeDataCoords = DDGIGetProbeDataTexelCoords(DispatchThreadID.x, volume);
+    uint2 probeDataCoords = DDGIGetProbeTexelCoords(DispatchThreadID.x, volume);
 
     ProbeData[probeDataCoords].w = RTXGI_DDGI_PROBE_STATE_ACTIVE;
 }

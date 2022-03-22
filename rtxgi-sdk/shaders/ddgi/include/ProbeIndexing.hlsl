@@ -172,21 +172,16 @@ int3 DDGIGetBaseProbeGridCoords(float3 worldPosition, DDGIVolumeDescGPU volume)
 //------------------------------------------------------------------------
 
 /**
- * Computes the normalized texture UVs for the Probe Irradiance and Probe Distance textures
- * used in blending given the probe index and 2D normalized octant coordinates [-1, 1].
- * 
+ * Computes the 2D texture coordinates of the probe at the given probe index.
+ *
  * When infinite scrolling is enbled, probeIndex is expected to be the scroll adjusted probe index.
  * Obtain the adjusted index with DDGIGetScrollingProbeIndex().
  */
-float2 DDGIGetProbeUV(int probeIndex, float2 octantCoordinates, int numTexels, DDGIVolumeDescGPU volume)
+uint2 DDGIGetProbeTexelCoords(int probeIndex, DDGIVolumeDescGPU volume)
 {
     // Find the probe's plane index
     int probesPerPlane = DDGIGetProbesPerPlane(volume.probeCounts);
     int planeIndex = int(probeIndex / probesPerPlane);
-
-    // Account for the border texels
-    float probeInteriorTexels = float(numTexels);
-    float probeTexels = (probeInteriorTexels + 2.f);
 
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     int gridSpaceX = (probeIndex % volume.probeCounts.x);
@@ -208,6 +203,25 @@ float2 DDGIGetProbeUV(int probeIndex, float2 octantCoordinates, int numTexels, D
     int y = gridSpaceY % volume.probeCounts.y;
 #endif
 
+    return uint2(x, y);
+}
+
+/**
+ * Computes the normalized texture UVs for the Probe Irradiance and Probe Distance textures
+ * (used in blending) given the probe index and 2D normalized octant coordinates [-1, 1].
+ * 
+ * When infinite scrolling is enbled, probeIndex is expected to be the scroll adjusted probe index.
+ * Obtain the adjusted index with DDGIGetScrollingProbeIndex().
+ */
+float2 DDGIGetProbeUV(int probeIndex, float2 octantCoordinates, int numTexels, DDGIVolumeDescGPU volume)
+{
+    // Get the probe's texel coordinates, assuming one texel per probe
+    uint2 coords = DDGIGetProbeTexelCoords(probeIndex, volume);
+
+    // Adjust for the number of interior and border texels
+    float probeInteriorTexels = float(numTexels);
+    float probeTexels = (probeInteriorTexels + 2.f);
+
 #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
     float textureWidth = probeTexels * (volume.probeCounts.x * volume.probeCounts.y);
     float textureHeight = probeTexels * volume.probeCounts.z;
@@ -219,34 +233,33 @@ float2 DDGIGetProbeUV(int probeIndex, float2 octantCoordinates, int numTexels, D
     float textureHeight = probeTexels * volume.probeCounts.y;
 #endif
 
-    float2 uv = float2(x * probeTexels, y * probeTexels) + (probeTexels * 0.5f);
+    float2 uv = float2(coords.x * probeTexels, coords.y * probeTexels) + (probeTexels * 0.5f);
     uv += octantCoordinates.xy * (probeInteriorTexels * 0.5f);
     uv /= float2(textureWidth, textureHeight);
     return uv;
 }
 
-/**
- * Computes the 2D texture coordinates of the probe at the given probe index
- * for the Probe Data texture used in relocation and classification.
- *
- * When infinite scrolling is enbled, probeIndex is expected to be the scroll adjusted probe index.
- * Obtain the adjusted index with DDGIGetScrollingProbeIndex().
- */
-uint2 DDGIGetProbeDataTexelCoords(int probeIndex, DDGIVolumeDescGPU volume)
-{
-    // Compute the probe texel coordinates for this probe
-#if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
-    return uint2(probeIndex % (volume.probeCounts.x * volume.probeCounts.y), probeIndex / (volume.probeCounts.x * volume.probeCounts.y));
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
-    return uint2(probeIndex % (volume.probeCounts.y * volume.probeCounts.z), probeIndex / (volume.probeCounts.y * volume.probeCounts.z));
-#elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
-    return uint2(probeIndex % (volume.probeCounts.x * volume.probeCounts.z), probeIndex / (volume.probeCounts.x * volume.probeCounts.z));
-#endif
-}
-
 //------------------------------------------------------------------------
 // Probe Classification
 //------------------------------------------------------------------------
+
+/**
+ * Loads and returns the probe's classification state (from a RWTexture2D).
+ */
+float DDGILoadProbeState(int probeIndex, RWTexture2D<float4> probeData, DDGIVolumeDescGPU volume)
+{
+    float state = RTXGI_DDGI_PROBE_STATE_ACTIVE;
+    if (volume.probeClassificationEnabled)
+    {
+        // Get the probe's texel coordinates in the Probe Data texture
+        int2 probeDataCoords = DDGIGetProbeTexelCoords(probeIndex, volume);
+
+        // Get the probe's classification state
+        state = probeData[probeDataCoords].w;
+    }
+
+    return state;
+}
 
 /**
  * Loads and returns the probe's classification state (from a Texture2D).
@@ -257,7 +270,7 @@ float DDGILoadProbeState(int probeIndex, Texture2D<float4> probeData, DDGIVolume
     if (volume.probeClassificationEnabled)
     {
         // Get the probe's texel coordinates in the Probe Data texture
-        int2 probeDataCoords = DDGIGetProbeDataTexelCoords(probeIndex, volume);
+        int2 probeDataCoords = DDGIGetProbeTexelCoords(probeIndex, volume);
 
         // Get the probe's classification state
         state = probeData.Load(int3(probeDataCoords, 0)).w;

@@ -406,13 +406,8 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
     }
 
     // Early Out: don't blend rays for probes that are inactive
-    if(volume.probeClassificationEnabled)
-    {
-        // Get the probe state
-        int2 probeDataCoords = DDGIGetProbeDataTexelCoords(probeIndex, volume);
-        int  probeState = ProbeData[probeDataCoords].w;
-        if (probeState == RTXGI_DDGI_PROBE_STATE_INACTIVE) return;
-    }
+    int probeState = DDGILoadProbeState(probeIndex, ProbeData, volume);
+    if (probeState == RTXGI_DDGI_PROBE_STATE_INACTIVE) return;
 
     // Visualize the probe index
 #if RTXGI_DDGI_BLEND_RADIANCE && RTXGI_DDGI_DEBUG_PROBE_INDEXING

@@ -128,7 +128,7 @@ namespace rtxgi
 
             ID3D12Resource*                   constantsBuffer = nullptr;                    // Constants structured buffer resource pointer (device)
 
-            // Provide these resources if you use DDGIVolume::Upload() to transfer constants to the GPU
+            // Provide these resources if you use UploadDDGIVolumeConstants() to transfer constants to the GPU
             ID3D12Resource*                   constantsBufferUpload = nullptr;              // [Optional] Constants structured buffer resource pointer (upload)
             UINT64                            constantsBufferSizeInBytes = 0;               // [Optional] Size (in bytes) of the constants structured buffer
         };
@@ -261,7 +261,7 @@ namespace rtxgi
             ID3D12Device*               m_device = nullptr;                                 // D3D12 device pointer
         #endif
 
-            // Constants (if you use the DDGIVolume::Upload() to transfer constants to the GPU)
+            // Constants (if you use UploadDDGIVolumeConstants() to transfer constants to the GPU)
             ID3D12Resource*             m_constantsBuffer = nullptr;                        // Structured buffer that stores the volume's constants (device)
             ID3D12Resource*             m_constantsBufferUpload = nullptr;                  // Structured buffer that stores the volume's constants (upload)
             UINT64                      m_constantsBufferSizeInBytes = 0;                   // Size (in bytes) of the structured buffer that stores *all* volumes constants

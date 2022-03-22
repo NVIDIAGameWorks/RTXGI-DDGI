@@ -142,7 +142,7 @@ namespace rtxgi
 
             VkBuffer                constantsBuffer = nullptr;                              // Constants structured buffer (device)
 
-            // Provide these resources if you use DDGIVolume::Upload() to transfer constants to the GPU
+            // Provide these resources if you use UploadDDGIVolumeConstants() to transfer constants to the GPU
             VkBuffer                constantsBufferUpload = nullptr;                        // [Optional] Constants structured buffer (upload)
             VkDeviceMemory          constantsBufferUploadMemory = nullptr;                  // [Optional] Constants structured buffer memory (upload)
             uint64_t                constantsBufferSizeInBytes = 0;                         // [Optional] Size (in bytes) of the constants structured buffer
@@ -307,7 +307,7 @@ namespace rtxgi
             VkDescriptorPool            m_descriptorPool = nullptr;                            // Vulkan descriptor pool handle
         #endif
 
-            // Constants (if you use the DDGIVolume::Upload() to transfer constants to the GPU)
+            // Constants (if you use UploadDDGIVolumeConstants() to transfer constants to the GPU)
             VkBuffer                    m_constantsBuffer = nullptr;                           // Structured buffer that stores the volume's constants (device)
             VkBuffer                    m_constantsBufferUpload = nullptr;                     // Structured buffer that stores the volume's constants (upload)
             VkDeviceMemory              m_constantsBufferUploadMemory = nullptr;               // Memory for the volume's constants upload structured buffer

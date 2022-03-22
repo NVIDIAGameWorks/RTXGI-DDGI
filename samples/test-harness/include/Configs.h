@@ -33,6 +33,7 @@ namespace Configs
     {
         std::string        name = "";
         uint32_t           index = 0;
+        uint32_t           rngSeed = 0;
 
         bool               insertPerfMarkers = false;
         bool               showProbes = false;

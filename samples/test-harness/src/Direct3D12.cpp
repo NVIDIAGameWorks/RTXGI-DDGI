@@ -10,6 +10,7 @@
 
 #include "Graphics.h"
 #include "UI.h"
+#include "ImageCapture.h"
 
 #include <wincodec.h>
 #include <ScreenGrab12.h>
@@ -1592,6 +1593,25 @@ namespace Graphics
         // Debug Functions
         //----------------------------------------------------------------------------------------------------------
 
+        IWICImagingFactory2* _GetWIC()
+        {
+            static INIT_ONCE s_initOnce = INIT_ONCE_STATIC_INIT;
+
+            IWICImagingFactory2* factory = nullptr;
+            (void)InitOnceExecuteOnce(&s_initOnce,
+                [](PINIT_ONCE, PVOID, PVOID* ifactory) -> BOOL
+                {
+                    return SUCCEEDED(CoCreateInstance(
+                        CLSID_WICImagingFactory2,
+                        nullptr,
+                        CLSCTX_INPROC_SERVER,
+                        __uuidof(IWICImagingFactory2),
+                        ifactory)) ? TRUE : FALSE;
+                }, nullptr, reinterpret_cast<LPVOID*>(&factory));
+
+            return factory;
+        }
+
         /**
          * Write an image to disk from the given D3D12 resource.
          */
@@ -1599,7 +1619,208 @@ namespace Graphics
         {
             CoInitialize(NULL);
             std::wstring filename = std::wstring(file.begin(), file.end());
-            if(FAILED(SaveWICTextureToFile(d3d.cmdQueue, pResource, GUID_ContainerFormatPng, filename.c_str(), state, state))) return false;
+            //if(FAILED(SaveWICTextureToFile(d3d.cmdQueue, pResource, GUID_ContainerFormatPng, filename.c_str(), state, state))) return false;
+
+            // copied from SaveWICTextureToFile() from DirectXTK, but using libpng instead of WIC
+            const D3D12_RESOURCE_DESC desc = pResource->GetDesc();
+            UINT64 totalResourceSize = 0, fpRowPitch = 0;
+            UINT fpRowCount = 0;
+            // Get the rowcount, pitch and size of the top mip
+            d3d.device->GetCopyableFootprints(
+                &desc,
+                0,
+                1,
+                0,
+                nullptr,
+                &fpRowCount,
+                &fpRowPitch,
+                &totalResourceSize);
+            // Round up the srcPitch to multiples of 256
+            UINT64 dstRowPitch = (fpRowPitch + 255) & ~0xFF;
+            ID3D12Resource* pStaging = nullptr;
+
+            D3D12_HEAP_PROPERTIES sourceHeapProperties = {};
+            D3D12_HEAP_FLAGS sourceHeapFlags = {};
+            HRESULT hr = pResource->GetHeapProperties(&sourceHeapProperties, &sourceHeapFlags);
+            ID3D12CommandAllocator* commandAlloc = nullptr;
+            hr = d3d.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAlloc));
+            ID3D12GraphicsCommandList* commandList = nullptr;
+            hr = d3d.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAlloc, nullptr, IID_PPV_ARGS(&commandList));
+            ID3D12Fence* fence = nullptr;
+            hr = d3d.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+            D3D12_HEAP_PROPERTIES defaultHeapProperties = {}, readBackHeapProperties = {};
+            defaultHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+            defaultHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+            defaultHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+            defaultHeapProperties.CreationNodeMask = 1;
+            defaultHeapProperties.VisibleNodeMask = 1;
+            readBackHeapProperties.Type = D3D12_HEAP_TYPE_READBACK;
+            readBackHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+            readBackHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+            readBackHeapProperties.CreationNodeMask = 1;
+            readBackHeapProperties.VisibleNodeMask = 1;
+            // Readback resources must be buffers
+            D3D12_RESOURCE_DESC bufferDesc = {};
+            bufferDesc.Alignment = desc.Alignment;
+            bufferDesc.DepthOrArraySize = 1;
+            bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            bufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+            bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
+            bufferDesc.Height = 1;
+            bufferDesc.Width = dstRowPitch * desc.Height;
+            bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+            bufferDesc.MipLevels = 1;
+            bufferDesc.SampleDesc.Count = 1;
+            bufferDesc.SampleDesc.Quality = 0;
+            // Create a staging texture
+            hr = d3d.device->CreateCommittedResource(
+                &readBackHeapProperties,
+                D3D12_HEAP_FLAG_NONE,
+                &bufferDesc,
+                D3D12_RESOURCE_STATE_COPY_DEST,
+                nullptr,
+                IID_PPV_ARGS(&pStaging));
+
+            {
+                D3D12_RESOURCE_BARRIER barrierDesc = {};
+                barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barrierDesc.Transition.pResource = pResource;
+                barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                barrierDesc.Transition.StateBefore = state;
+                barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+                commandList->ResourceBarrier(1, &barrierDesc);
+            }
+
+            // Get the copy target location
+            D3D12_PLACED_SUBRESOURCE_FOOTPRINT bufferFootprint = {};
+            bufferFootprint.Footprint.Width = static_cast<UINT>(desc.Width);
+            bufferFootprint.Footprint.Height = desc.Height;
+            bufferFootprint.Footprint.Depth = 1;
+            bufferFootprint.Footprint.RowPitch = static_cast<UINT>(dstRowPitch);
+            bufferFootprint.Footprint.Format = desc.Format;
+
+            D3D12_TEXTURE_COPY_LOCATION copySrc = {}, copyDest = {};
+            copySrc.pResource = pResource;
+            copySrc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            copySrc.SubresourceIndex = 0;
+            copyDest.pResource = pStaging;
+            copyDest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            copyDest.PlacedFootprint = bufferFootprint;
+
+            // Copy the texture
+            commandList->CopyTextureRegion(&copyDest, 0, 0, 0, &copySrc, nullptr);
+
+            {
+                D3D12_RESOURCE_BARRIER barrierDesc = {};
+                barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barrierDesc.Transition.pResource = pResource;
+                barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+                barrierDesc.Transition.StateAfter = state;
+                commandList->ResourceBarrier(1, &barrierDesc);
+            }
+
+            hr = commandList->Close();
+
+            // Execute the command list
+            d3d.cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(&commandList));
+            // Signal the fence
+            hr = d3d.cmdQueue->Signal(fence, 1);
+            // Block until the copy is complete
+            while (fence->GetCompletedValue() < 1)
+                SwitchToThread();
+
+            UINT64 imageSize = dstRowPitch * fpRowCount;
+            unsigned char* pMappedMemory = nullptr;
+            D3D12_RANGE readRange = { 0, static_cast<SIZE_T>(imageSize) };
+            D3D12_RANGE writeRange = { 0, 0 };
+            hr = pStaging->Map(0, &readRange, (void**)&pMappedMemory);
+
+            // convert to RGBA8 UNORM using WIC
+            std::vector<unsigned char> converted(desc.Width * desc.Height * 4);
+            {
+                // Determine source format's WIC equivalent
+                WICPixelFormatGUID pfGuid;
+                bool sRGB = false;
+                switch (desc.Format)
+                {
+                case DXGI_FORMAT_R32G32B32A32_FLOAT:            pfGuid = GUID_WICPixelFormat128bppRGBAFloat; break;
+                case DXGI_FORMAT_R16G16B16A16_FLOAT:            pfGuid = GUID_WICPixelFormat64bppRGBAHalf; break;
+                case DXGI_FORMAT_R16G16B16A16_UNORM:            pfGuid = GUID_WICPixelFormat64bppRGBA; break;
+                case DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM:    pfGuid = GUID_WICPixelFormat32bppRGBA1010102XR; break;
+                case DXGI_FORMAT_R10G10B10A2_UNORM:             pfGuid = GUID_WICPixelFormat32bppRGBA1010102; break;
+                case DXGI_FORMAT_B5G5R5A1_UNORM:                pfGuid = GUID_WICPixelFormat16bppBGRA5551; break;
+                case DXGI_FORMAT_B5G6R5_UNORM:                  pfGuid = GUID_WICPixelFormat16bppBGR565; break;
+                case DXGI_FORMAT_R32_FLOAT:                     pfGuid = GUID_WICPixelFormat32bppGrayFloat; break;
+                case DXGI_FORMAT_R16_FLOAT:                     pfGuid = GUID_WICPixelFormat16bppGrayHalf; break;
+                case DXGI_FORMAT_R16_UNORM:                     pfGuid = GUID_WICPixelFormat16bppGray; break;
+                case DXGI_FORMAT_R8_UNORM:                      pfGuid = GUID_WICPixelFormat8bppGray; break;
+                case DXGI_FORMAT_A8_UNORM:                      pfGuid = GUID_WICPixelFormat8bppAlpha; break;
+
+                case DXGI_FORMAT_R8G8B8A8_UNORM:
+                    pfGuid = GUID_WICPixelFormat32bppRGBA;
+                    break;
+
+                case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+                    pfGuid = GUID_WICPixelFormat32bppRGBA;
+                    sRGB = true;
+                    break;
+
+                case DXGI_FORMAT_B8G8R8A8_UNORM:
+                    pfGuid = GUID_WICPixelFormat32bppBGRA;
+                    break;
+
+                case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+                    pfGuid = GUID_WICPixelFormat32bppBGRA;
+                    sRGB = true;
+                    break;
+
+                case DXGI_FORMAT_B8G8R8X8_UNORM:
+                    pfGuid = GUID_WICPixelFormat32bppBGR;
+                    break;
+
+                case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+                    pfGuid = GUID_WICPixelFormat32bppBGR;
+                    sRGB = true;
+                    break;
+
+                default:
+                    return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+                }
+
+                IWICImagingFactory2* pWIC = _GetWIC();
+                IWICBitmap* bitmap = nullptr;
+                hr = pWIC->CreateBitmapFromMemory(static_cast<UINT>(desc.Width), desc.Height, pfGuid,
+                    static_cast<UINT>(dstRowPitch), static_cast<UINT>(imageSize),
+                    static_cast<BYTE*>(pMappedMemory), &bitmap);
+
+                IWICFormatConverter* converter = nullptr;
+                hr = pWIC->CreateFormatConverter(&converter);
+                hr = converter->Initialize(bitmap, GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeMedianCut);
+
+                WICRect rect = { 0, 0, static_cast<INT>(desc.Width), static_cast<INT>(desc.Height) };
+                converter->CopyPixels(&rect, static_cast<UINT>(desc.Width * 4), static_cast<UINT>(converted.size()), converted.data());
+
+                converter->Release();
+                bitmap->Release();
+            }
+
+            {
+                // libpng wants pointers to each row
+                std::vector<unsigned char*> rows(desc.Height, nullptr);
+                for (uint32_t i = 0; i < desc.Height; i++)
+                {
+                    rows[i] = &converted[desc.Width * 4 * i];
+                }
+                ImageCapture::CapturePng(file, static_cast<uint32_t>(desc.Width), static_cast<uint32_t>(desc.Height), rows);
+            }
+            pStaging->Unmap(0, &writeRange);
+
+            pStaging->Release();
+            fence->Release();
+            commandList->Release();
+            commandAlloc->Release();
+
             return true;
         }
 
@@ -2324,6 +2545,15 @@ namespace Graphics
             Cleanup(d3d);
         }
 
+        /**
+         * Write the back buffer texture resources to disk.
+         */
+        bool WriteBackBufferToDisk(Globals& d3d, std::string directory)
+        {
+            CoInitialize(NULL);
+            bool success = WriteResourceToDisk(d3d, directory + "\\backbuffer.png", d3d.backBuffer[d3d.frameIndex], D3D12_RESOURCE_STATE_PRESENT);
+            return success;
+        }
     }
 
     /**
@@ -2434,5 +2664,13 @@ namespace Graphics
     void Cleanup(Globals& gfx, GlobalResources& gfxResources)
     {
         Graphics::D3D12::Cleanup(gfx, gfxResources);
+    }
+
+    /**
+     * Write the back buffer texture resources to disk.
+     */
+    bool WriteBackBufferToDisk(Globals& d3d, std::string directory)
+    {
+        return Graphics::D3D12::WriteBackBufferToDisk(d3d, directory);
     }
 }
