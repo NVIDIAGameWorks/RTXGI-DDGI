@@ -554,9 +554,11 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
     epsilon *= 1e-9f;
 
     // Normalize the blended irradiance (or filtered distance), if the combined weight is not close to zero.
-    // To match the Monte Carlo Estimator, we should divide by N. Instead, we are dividing by
-    // N * sum(cos(theta)) (the sum of the weights) to reduce variance.
-    // To account for this, we must multiply in a factor of 1/2.
+    // To match the Monte Carlo Estimator of Irradiance, we should divide by N (the number of radiance samples).
+    // Instead, we are dividing by N * sum(cos(theta)) (the sum of the weights) to reduce variance. To account 
+    // for this, we must multiply in a factor of 1/2. For distance, note that we are *not* dividing by the sum
+    // of the cosine weights, but to avoid branching here are still dividing by 2. This means distance values
+    // sampled from texture need to be multiplied by 2 (see Irradiance.hlsl line 138).
     result.rgb *= 1.f / (2.f * max(result.a, epsilon));
 
     float  hysteresis = volume.probeHysteresis;
