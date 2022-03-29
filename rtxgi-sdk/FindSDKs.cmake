@@ -35,7 +35,7 @@ endif()
 # If on Windows or x86 Linux, locate the Vulkan SDK path if it is not already provided
 if(NOT RTXGI_API_VULKAN_SDK AND NOT (${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64"))
     # Search for a suitable Vulkan SDK
-    find_package(Vulkan "1.2.170" OPTIONAL_COMPONENTS)
+    find_package(Vulkan "1.2.170")
     if(Vulkan_FOUND)
         string(REPLACE "Include" "" VK_SDK ${Vulkan_INCLUDE_DIR})
         set(RTXGI_API_VULKAN_SDK "1")
