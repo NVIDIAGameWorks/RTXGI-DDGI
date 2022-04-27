@@ -115,7 +115,7 @@ int DDGIGetProbeIndex(uint2 texCoords, int probeNumTexels, DDGIVolumeDescGPU vol
 //------------------------------------------------------------------------
 
 /**
- * Computes the 3D grid-space coordinates for the probe at the given probe index in the range [0, numProbes].
+ * Computes the 3D grid-space coordinates for the probe at the given probe index in the range [0, numProbes-1].
  * The opposite of DDGIGetProbeIndex(probeCoords,...).
  */
 int3 DDGIGetProbeCoords(int probeIndex, DDGIVolumeDescGPU volume)
@@ -294,25 +294,21 @@ int DDGIGetScrollingProbeIndex(int3 probeCoords, DDGIVolumeDescGPU volume)
 }
 
 /**
- * Clears probes in a given plane of probes that have been scrolled to new positions.
+ * Clears probe irradiance and distance data for a plane of probes that have been scrolled to new positions.
  */
-bool DDGIResetScrolledPlane(RWTexture2D<float4> output, uint2 outputCoords, int3 probeCoords, int planeIndex, DDGIVolumeDescGPU volume)
+bool DDGIClearScrolledPlane(RWTexture2D<float4> output, uint2 outputCoords, int3 probeCoords, int planeIndex, DDGIVolumeDescGPU volume)
 {
     if (volume.probeScrollClear[planeIndex])
     {
-        int v;
-        if (volume.probeScrollOffsets[planeIndex] > 0)
-        {
-            // 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1,...
-            v = (volume.probeScrollOffsets[planeIndex] % volume.probeCounts[planeIndex]) - 1;
-        }
-        else
-        {
-            // 8, 7, 6, 5, 4, 3, 2, 1, 0, 8, 7,...
-            v = (volume.probeScrollOffsets[planeIndex] % volume.probeCounts[planeIndex]) + volume.probeCounts[planeIndex];
-        }
+        int offset = volume.probeScrollOffsets[planeIndex];
+        int probeCount = volume.probeCounts[planeIndex];
+        int direction = volume.probeScrollDirections[planeIndex];
 
-        if (probeCoords[planeIndex] == v)
+        int coord = 0;
+        if(direction) coord = (probeCount + (offset - 1)) % probeCount; // scrolling in positive direction
+        else coord = (probeCount + (offset % probeCount)) % probeCount; // scrolling in negative direction
+
+        if (probeCoords[planeIndex] == coord)
         {
             output[outputCoords] = float4(0.f, 0.f, 0.f, 0.f);
             return true;

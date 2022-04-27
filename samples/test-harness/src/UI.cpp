@@ -847,15 +847,14 @@ namespace Graphics
                         }
                     }
 
-                    // Probe Relocation and Classification options
-                    if (config.ddgi.volumes[config.ddgi.selectedVolume].probeRelocationEnabled || config.ddgi.volumes[config.ddgi.selectedVolume].probeClassificationEnabled)
+                    // Probe Fixed Ray Backface Threshold (blending)
+                    if(config.ddgi.volumes[config.ddgi.selectedVolume].probeRelocationEnabled || config.ddgi.volumes[config.ddgi.selectedVolume].probeClassificationEnabled)
                     {
                         ImGui::Indent(20.f);
 
-                        // Relocation / Classification backface threshold
-                        if (AddSlider(desc.probeBackfaceThreshold, 0.f, 1.f, 0.01f, "##volumeProbeBackfaceThreshold", "Probe Backface Threshold", "Adjust the ratio of backfaces a probe can hit before it is deactivated"))
+                        if (AddSlider(desc.probeFixedRayBackfaceThreshold, 0.f, 1.f, 0.01f, "##volumeProbeFixedRayBackfaceThreshold", "Probe Fixed Ray Backface Threshold", "Adjust the ratio of backfaces a probe's fixed rays can hit before the probe is considered inside geometry"))
                         {
-                            volume->SetProbeBackfaceThreshold(desc.probeBackfaceThreshold);
+                            volume->SetProbeFixedRayBackfaceThreshold(desc.probeFixedRayBackfaceThreshold);
                         }
 
                         ImGui::Unindent(20.f);
@@ -971,6 +970,12 @@ namespace Graphics
                     if (AddSlider(desc.probeBrightnessThreshold, 0.f, 1.f, 0.01f, "###volumeProbeBrightnessThreshold", "Probe Brightness Threshold", "Adjust the probe brightness threshold. This specifies a threshold value used during probe radiance blending that determines the maximum allowed difference in brightness between the previous and current irradiance values. This prevents impulses from drastically changing a texel�s irradiance in a single update cycle."))
                     {
                         volume->SetProbeBrightnessThreshold(desc.probeBrightnessThreshold);
+                    }
+
+                    // Probe Random Ray Backface Threshold (blending)
+                    if (AddSlider(desc.probeRandomRayBackfaceThreshold, 0.f, 1.f, 0.01f, "##volumeProbeRandomRayBackfaceThreshold", "Probe Random Ray Backface Threshold", "Adjust the ratio of backfaces a probe's random rays can hit before the probe is considered inside geometry"))
+                    {
+                        volume->SetProbeRandomRayBackfaceThreshold(desc.probeRandomRayBackfaceThreshold);
                     }
 
                     AddTextSeparator();

@@ -1,5 +1,33 @@
 # RTXGI SDK Change Log
 
+## 1.2.11
+
+### SDK
+
+Features and Improvements:
+- Improved flexibility for specifying thresholds for probe ray backface hits
+  - The backface hit threshold used in ```ProbeBlendingCS``` is now adjustable
+  - Thresholds for random rays (blending) and fixed rays (relocation/classification) can now be specified separately
+  - **Note:** this change modifies the ```DDGIVolumeDescGPU``` struct
+- Improved lighting responsiveness after a probe is scrolled (and cleared)
+  - Drops hysteresis to zero for the first update cycle after a probe is scrolled and cleared
+  - **Note:** hysteresis is now set to zero for all probe texels where the previous irradiance is zero in all color channels
+- Renames ```DDGIResetScrolledPlane()``` to ```DDGIClearScrolledPlane()``` to better reflect its purpose
+- Adds option to use shared memory during probe scroll clear testing
+  - When enabled, scroll clear tests will only run for the first thread of a blending thread group
+  - ```RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY``` is now a required define for ```ProbeBlendingCS.hlsl```
+  - Can be a performance win on some hardware
+
+Bug Fixes:
+- Fixes issue where some probes were not being cleared properly during scrolling events ([Issue #62](https://github.com/NVIDIAGameWorks/RTXGI/issues/62))
+  - **Note:** this change modifies the ```DDGIVolumeDescGPU``` struct
+
+### Test Harness
+
+Features and Improvements:
+- Improves support for loading GLTF files that contain geometry primitives without assigned materials ([Issue #61](https://github.com/NVIDIAGameWorks/RTXGI/issues/61))
+- Updates UI to reflect the separate random and fixed probe ray threshold options
+
 ## 1.2.07
 
 ### SDK

@@ -125,6 +125,7 @@ namespace Graphics
             #if RTXGI_DDGI_BLEND_SHARED_MEMORY
                 Shaders::AddDefine(shader, L"RTXGI_DDGI_BLEND_RAYS_PER_PROBE", numRays.c_str());
             #endif
+                Shaders::AddDefine(shader, L"RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY", std::to_wstring(volumeDesc.probeBlendingUseScrollSharedMemory));
 
             #if !RTXGI_DDGI_RESOURCE_MANAGEMENT && !RTXGI_DDGI_USE_SHADER_CONFIG_FILE && !RTXGI_DDGI_BINDLESS_RESOURCES
                 if (spirv) Shaders::AddDefine(shader, L"OUTPUT_REGISTER", L"2"); // Note: this register differs for irradiance vs. distance
@@ -153,6 +154,7 @@ namespace Graphics
             #if RTXGI_DDGI_BLEND_SHARED_MEMORY
                 Shaders::AddDefine(shader, L"RTXGI_DDGI_BLEND_RAYS_PER_PROBE", numRays.c_str());
             #endif
+                Shaders::AddDefine(shader, L"RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY", std::to_wstring(volumeDesc.probeBlendingUseScrollSharedMemory));
 
             #if !RTXGI_DDGI_RESOURCE_MANAGEMENT && !RTXGI_DDGI_USE_SHADER_CONFIG_FILE && !RTXGI_DDGI_BINDLESS_RESOURCES
                 if (spirv) Shaders::AddDefine(shader, L"OUTPUT_REGISTER", L"3"); // Note: this register differs for irradiance vs. distance

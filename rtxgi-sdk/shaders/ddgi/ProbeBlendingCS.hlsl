@@ -204,6 +204,13 @@
 
 #endif
 
+// RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY must be passed in as a define at shader compilation time.
+// This define specifies if probe blending will use shared memory to improve performance.
+// Ex: RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY [0|1]
+#ifndef RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY
+#error Required define RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY is not defined for ProbeBlendingCS.hlsl!
+#endif // RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY
+
 // RTXGI_DDGI_BLEND_RADIANCE must be passed in as a define at shader compilation time.
 // This define specifies whether the shader blends radiance or distance values.
 // Ex: RTXGI_DDGI_BLEND_RADIANCE [0|1]
@@ -251,7 +258,7 @@
 #else
     #define RAY_DATA_REG_DECL 
     #define OUTPUT_REG_DECL 
-    #define PROBE_DATA_REG_DECL
+    #define PROBE_DATA_REG_DECL 
 #endif
 
 #else
@@ -354,8 +361,12 @@ groupshared float  RayDistance[RTXGI_DDGI_BLEND_RAYS_PER_PROBE];
 groupshared float3 RayDirection[RTXGI_DDGI_BLEND_RAYS_PER_PROBE];
 #endif // RTXGI_DDGI_BLEND_SHARED_MEMORY
 
+#if RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY
+groupshared bool scrollClear;
+#endif // RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY
+
 [numthreads(RTXGI_DDGI_PROBE_NUM_TEXELS, RTXGI_DDGI_PROBE_NUM_TEXELS, 1)]
-void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint GroupIndex : SV_GroupIndex)
+void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupThreadIndex : SV_GroupThreadID, uint GroupIndex : SV_GroupIndex)
 {
     float4 result = float4(0.f, 0.f, 0.f, 0.f);
 
@@ -391,19 +402,44 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
     RWTexture2D<float4> ProbeData = RWTex2D[uavOffset + (volumeIndex * 4) + 3];
 #endif
 
-    // Clear and Early Out: probe scrolling has caused this probe to need to be cleared
-    if(IsVolumeMovementScrolling(volume))
+    // Determine if a scrolled probe should be cleared
+    // Using shared memory may or may not be worth it depending on the target HW
+#if RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY
+    // Initialize groupshared variable to not clear the probe texels (no scroll has occured)
+    scrollClear = false;
+
+    // Check if probe scrolling should clear this probe's texels
+    uint groupThreadIdx = (GroupThreadIndex.x + GroupThreadIndex.y);
+    if(groupThreadIdx == 0 && IsVolumeMovementScrolling(volume))
     {
         // Get the probe's grid coordinates
         int3 probeCoords = DDGIGetProbeCoords(probeIndex, volume);
 
-        // Reset probe planes that have been scrolled
-        bool reset = false;
-        reset |= DDGIResetScrolledPlane(Output, atlasTexCoords, probeCoords, 0, volume);
-        reset |= DDGIResetScrolledPlane(Output, atlasTexCoords, probeCoords, 1, volume);
-        reset |= DDGIResetScrolledPlane(Output, atlasTexCoords, probeCoords, 2, volume);
-        if(reset) return;
+        // Clear probes that have been scrolled
+        scrollClear |= DDGIClearScrolledPlane(Output, atlasTexCoords, probeCoords, 0, volume);
+        scrollClear |= DDGIClearScrolledPlane(Output, atlasTexCoords, probeCoords, 1, volume);
+        scrollClear |= DDGIClearScrolledPlane(Output, atlasTexCoords, probeCoords, 2, volume);
     }
+
+    // Wait for all threads in the group to finish their shared memory operations
+    GroupMemoryBarrierWithGroupSync();
+
+    // Early out: this probe has been scrolled and cleared
+    if(scrollClear) return;
+#else
+    if (IsVolumeMovementScrolling(volume))
+    {
+        // Get the probe's grid coordinates
+        int3 probeCoords = DDGIGetProbeCoords(probeIndex, volume);
+
+        // Clear probes that have been scrolled
+        bool scrollClear = false;
+        scrollClear |= DDGIClearScrolledPlane(Output, atlasTexCoords, probeCoords, 0, volume);
+        scrollClear |= DDGIClearScrolledPlane(Output, atlasTexCoords, probeCoords, 1, volume);
+        scrollClear |= DDGIClearScrolledPlane(Output, atlasTexCoords, probeCoords, 2, volume);
+        if(scrollClear) return;
+    }
+#endif // RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY
 
     // Early Out: don't blend rays for probes that are inactive
     int probeState = DDGILoadProbeState(probeIndex, ProbeData, volume);
@@ -466,13 +502,6 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
 
 #endif // RTXGI_DDGI_BLEND_SHARED_MEMORY
 
-#if RTXGI_DDGI_BLEND_RADIANCE
-    // Backface hits are ignored when blending radiance
-    // Allow a maximum of 10% of the rays to hit backfaces. If that limit is exceeded, don't blend anything into this probe.
-    uint backfaces = 0;
-    uint maxBackfaces = (volume.probeNumRays) * 0.1f;
-#endif
-
     int rayIndex = 0;
 
     // If relocation or classification are enabled, don't blend the fixed rays since they will bias the result
@@ -480,6 +509,14 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
     {
         rayIndex = RTXGI_DDGI_NUM_FIXED_RAYS;
     }
+
+#if RTXGI_DDGI_BLEND_RADIANCE
+    // Backface hits are ignored when blending radiance
+    // If more than the backface threshold of the rays hit backfaces, the probe is probably inside geometry
+    // In this case, don't blend anything into the probe
+    uint backfaces = 0;
+    uint maxBackfaces = uint((volume.probeNumRays - rayIndex) * volume.probeRandomRayBackfaceThreshold);
+#endif
 
     // Blend each ray's radiance or distance values to compute irradiance or fitered distance
     for ( /*rayIndex*/; rayIndex < volume.probeNumRays; rayIndex++)
@@ -515,7 +552,10 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
         if (probeRayDistance < 0.f)
         {
             backfaces++;
+
+            // Early out: only blend ray radiance into the probe if the backface threshold hasn't been exceeded
             if (backfaces >= maxBackfaces) return;
+
             continue;
         }
 
@@ -562,8 +602,13 @@ void DDGIProbeBlendingCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint Grou
     // Irradiance.hlsl line 138).
     result.rgb *= 1.f / (2.f * max(result.a, epsilon));
 
-    float  hysteresis = volume.probeHysteresis;
+    // Get the previous irradiance in the probe
     float3 previous = Output[atlasTexCoords].rgb;
+
+    // Get the history weight (hysteresis) to use for the probe texel's previous value
+    // If the probe was previously cleared to completely black, set the hysteresis to zero
+    float  hysteresis = volume.probeHysteresis;
+    if (dot(previous, previous) == 0) hysteresis = 0.f;
 
 #if RTXGI_DDGI_BLEND_RADIANCE
     // Tone-mapping gamma adjustment

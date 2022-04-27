@@ -328,7 +328,7 @@ void DDGIProbeRelocationCS(uint3 DispatchThreadID : SV_DispatchThreadID)
 
     float3 fullOffset = float3(1e27f, 1e27f, 1e27f);
 
-    if (closestBackfaceIndex != -1 && ((float)backfaceCount / numRays) > volume.probeBackfaceThreshold)
+    if (closestBackfaceIndex != -1 && ((float)backfaceCount / numRays) > volume.probeFixedRayBackfaceThreshold)
     {
         // If at least one backface triangle is hit AND backfaces are hit by enough probe rays,
         // assume the probe is inside geometry and move it outside of the geometry.

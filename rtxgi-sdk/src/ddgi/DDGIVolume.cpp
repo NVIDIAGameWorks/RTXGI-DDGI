@@ -10,6 +10,8 @@
 
 #include "rtxgi/ddgi/DDGIVolume.h"
 
+#include <algorithm>
+
 namespace rtxgi
 {
     //------------------------------------------------------------------------
@@ -101,10 +103,14 @@ namespace rtxgi
         descGPU.probeNormalBias = m_desc.probeNormalBias;
         descGPU.probeViewBias = m_desc.probeViewBias;
         descGPU.probeDistanceExponent = m_desc.probeDistanceExponent;
+
+        descGPU.probeIrradianceEncodingGamma = m_desc.probeIrradianceEncodingGamma;
         descGPU.probeIrradianceThreshold = m_desc.probeIrradianceThreshold;
         descGPU.probeBrightnessThreshold = m_desc.probeBrightnessThreshold;
-        descGPU.probeIrradianceEncodingGamma = m_desc.probeIrradianceEncodingGamma;
-        descGPU.probeBackfaceThreshold = m_desc.probeBackfaceThreshold;
+
+        descGPU.probeRandomRayBackfaceThreshold = std::clamp(m_desc.probeRandomRayBackfaceThreshold, 0.f, 1.f);
+        descGPU.probeFixedRayBackfaceThreshold = std::clamp(m_desc.probeFixedRayBackfaceThreshold, 0.f, 1.f);
+
         descGPU.probeMinFrontfaceDistance = m_desc.probeMinFrontfaceDistance;
 
         // 15-bits used for scroll offsets (plus 1 sign bit), maximum magnitude of 32,767
@@ -119,6 +125,9 @@ namespace rtxgi
         descGPU.probeScrollClear[0] = m_probeScrollClear[0];
         descGPU.probeScrollClear[1] = m_probeScrollClear[1];
         descGPU.probeScrollClear[2] = m_probeScrollClear[2];
+        descGPU.probeScrollDirections[0] = (m_probeScrollDirections[0] > 0);
+        descGPU.probeScrollDirections[1] = (m_probeScrollDirections[1] > 0);
+        descGPU.probeScrollDirections[2] = (m_probeScrollDirections[2] > 0);
 
         return descGPU;
     }
@@ -250,9 +259,12 @@ namespace rtxgi
         m_probeScrollClear[1] = false;
         m_probeScrollClear[2] = false;
 
+        // Reset scroll offsets to not overflow (eventually)
+        ScrollReset();
+
         // Get the world-space translation and direction between the (effective) origin and the scroll anchor
         float3 translation = m_probeScrollAnchor - GetOrigin();
-        int3   translationDirection = { Sign(translation.x), Sign(translation.y), Sign(translation.z) };
+        m_probeScrollDirections = { Sign(translation.x), Sign(translation.y), Sign(translation.z) };
 
         // Get the number of grid cells between the (effective) origin and the scroll anchor
         int3 scroll =
@@ -266,25 +278,18 @@ namespace rtxgi
         {
             m_probeScrollOffsets.x += scroll.x;
             m_probeScrollClear[0] = true;
-
-            ScrollReset(0, translationDirection.x);
         }
 
         if (scroll.y != 0)
         {
-            // Increment the scroll offsets
             m_probeScrollOffsets.y += scroll.y;
             m_probeScrollClear[1] = true;
-
-            ScrollReset(1, translationDirection.y);
         }
 
         if (scroll.z != 0)
         {
             m_probeScrollOffsets.z += scroll.z;
             m_probeScrollClear[2] = true;
-
-            ScrollReset(2, translationDirection.z);
         }
     }
 
@@ -354,13 +359,16 @@ namespace rtxgi
     // Private Helper Functions
     //------------------------------------------------------------------------
 
-    void DDGIVolumeBase::ScrollReset(int axis, int direction)
+    void DDGIVolumeBase::ScrollReset()
     {
-        // Reset the volume's origin and scroll offsets (if necessary) for the given axis
-        if (m_probeScrollOffsets[(size_t)axis] != 0 && (m_probeScrollOffsets[(size_t)axis] % m_desc.probeCounts[(size_t)axis] == 0))
+        // Reset the volume's origin and scroll offsets (if necessary) for each axis
+        for(int planeIndex = 0; planeIndex < 3; planeIndex++)
         {
-            m_desc.origin[(size_t)axis] += ((float)m_desc.probeCounts[(size_t)axis] * m_desc.probeSpacing[(size_t)axis]) * (float)direction;
-            m_probeScrollOffsets[(size_t)axis] = 0;
+            if (m_probeScrollOffsets[planeIndex] != 0 && (m_probeScrollOffsets[planeIndex] % m_desc.probeCounts[planeIndex] == 0))
+            {
+                m_desc.origin[planeIndex] += ((float)m_desc.probeCounts[planeIndex] * m_desc.probeSpacing[planeIndex]) * (float)m_probeScrollDirections[planeIndex];
+                m_probeScrollOffsets[planeIndex] = 0;
+            }
         }
     }
 

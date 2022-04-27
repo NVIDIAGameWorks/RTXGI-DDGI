@@ -105,7 +105,13 @@ namespace rtxgi
         // texel's irradiance in a single update cycle.
         float           probeBrightnessThreshold = 0.10f;
 
-        // Bias values for Indirect Lighting.
+        // Probe blending assumes probes with more than this ratio of backface hits are inside of geometry
+        float           probeRandomRayBackfaceThreshold = 0.1f;
+
+        // Probe relocation and probe classification assume probes with more than this ratio of backface hits are inside of geometry
+        float           probeFixedRayBackfaceThreshold = 0.25f;
+
+        // Bias values for indirect lighting.
         float           probeViewBias = 0.1f;                   // A small offset along the camera view ray applied to the shaded surface point to avoid numerical instabilities when determining visibility
         float           probeNormalBias = 0.1f;                 // A small offset along the surface normal applied to the shaded surface point to avoid numerical instabilities when determining visibility
 
@@ -114,6 +120,9 @@ namespace rtxgi
         uint32_t        probeIrradianceFormat = 0;              // Texel format index for the irradiance texture, used with GetDDGIVolumeTextureFormat()
         uint32_t        probeDistanceFormat = 0;                // Texel format index for the distance texture, used with GetDDGIVolumeTextureFormat()
         uint32_t        probeDataFormat = 0;                    // Texel format index for the probe data texture, used with GetDDGIVolumeTextureFormat()
+
+        // Using shared memory for scroll tests in probe blending can be a performance win on some hardware by reducing the compute workload.
+        bool            probeBlendingUseScrollSharedMemory = false;
 
         // Probe relocation moves probes to more useful positions.
         bool            probeRelocationEnabled = false;
@@ -125,10 +134,6 @@ namespace rtxgi
         // Probe classification marks probes with states to reduce the ray tracing and blending workloads.
         bool            probeClassificationEnabled = false;
         bool            probeClassificationNeedsReset = false;
-
-        // Probe relocation and probe classification assume probes with more
-        // than this ratio of backface hits are inside of geometry.
-        float           probeBackfaceThreshold = 0.25f;
 
         // The type of movement the volume supports:
         // 0: Default movement
@@ -242,6 +247,10 @@ namespace rtxgi
 
         void SetProbeBrightnessThreshold(float value) { m_desc.probeBrightnessThreshold = value; }
 
+        void SetProbeRandomRayBackfaceThreshold(float value) { m_desc.probeRandomRayBackfaceThreshold = value; }
+        
+        void SetProbeFixedRayBackfaceThreshold(float value) { m_desc.probeFixedRayBackfaceThreshold = value; }
+
         // Probe Relocation Setters
         void SetProbeRelocationEnabled(bool value) { m_desc.probeRelocationEnabled = value; }
 
@@ -253,8 +262,6 @@ namespace rtxgi
         void SetProbeClassificationEnabled(bool value) { m_desc.probeClassificationEnabled = value; }
 
         void SetProbeClassificationNeedsReset(bool value) { m_desc.probeClassificationNeedsReset = value; }
-
-        void SetProbeBackfaceThreshold(float value) { m_desc.probeBackfaceThreshold = value; }
 
         //------------------------------------------------------------------------
         // Getters
@@ -300,11 +307,15 @@ namespace rtxgi
 
         float GetProbeDistanceExponent() const { return m_desc.probeDistanceExponent; }
 
+        float GetProbeIrradianceEncodingGamma() const { return m_desc.probeIrradianceEncodingGamma; }
+
         float GetProbeIrradianceThreshold() const { return m_desc.probeIrradianceThreshold; }
 
         float GetProbeBrightnessThreshold() const { return m_desc.probeBrightnessThreshold; }
 
-        float GetProbeIrradianceEncodingGamma() const { return m_desc.probeIrradianceEncodingGamma; }
+        float GetProbeRandomRayBackfaceThreshold() const { return m_desc.probeRandomRayBackfaceThreshold; }
+
+        float GetProbeFixedRayBackfaceThreshold() const { return m_desc.probeFixedRayBackfaceThreshold; }
 
         float3 GetEulerAngles() const { return m_desc.eulerAngles; }
 
@@ -325,8 +336,6 @@ namespace rtxgi
         bool GetProbeClassificationEnabled() const { return m_desc.probeClassificationEnabled; }
 
         bool GetProbeClassificationNeedsReset() const { return m_desc.probeClassificationNeedsReset; }
-
-        float GetProbeBackfaceThreshold() const { return m_desc.probeBackfaceThreshold; }
 
     protected:
 
@@ -355,13 +364,14 @@ namespace rtxgi
 
         float3         m_probeScrollAnchor = { 0.f, 0.f, 0.f };                // The anchor position for a scrolling volume to target for it's effective origin
         int3           m_probeScrollOffsets = { 0, 0, 0 };                     // Grid-space space offsets for scrolling movement
+        int3           m_probeScrollDirections = { 0, 0, 0 };                  // Direction of scrolling movement
         bool           m_probeScrollClear[3] = { 0, 0, 0 };                    // If probes of a plane need to be cleared due to scrolling movement
 
         bool           m_insertPerfMarkers = false;                            // Toggles whether the volume will insert performance markers in the graphics command list.
 
     private:
 
-        void ScrollReset(int planeIndex, int direction);
+        void ScrollReset();
 
     };
 }

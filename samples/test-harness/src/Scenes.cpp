@@ -158,7 +158,7 @@ namespace Scenes
         }
     }
 
-    /*
+    /**
      * Parse the glTF materials into our format.
      */
     void ParseGLTFMaterials(const tinygltf::Model& gltfData, Scene& scene)
@@ -204,7 +204,16 @@ namespace Scenes
         // If there are no materials, create a default material
         if (scene.materials.size() == 0)
         {
-            Material mat;
+            Material mat = {};
+            mat.name = "Default Material";
+            mat.data.albedo = { 1.f, 1.f, 1.f };
+            mat.data.opacity = 1.f;
+            mat.data.roughness = 1.f;
+            mat.data.albedoTexIdx = -1;
+            mat.data.roughnessMetallicTexIdx = -1;
+            mat.data.normalTexIdx = -1;
+            mat.data.emissiveTexIdx = -1;
+
             scene.materials.push_back(mat);
         }
     }
@@ -271,19 +280,20 @@ namespace Scenes
 
             for (uint32_t primitiveIndex = 0; primitiveIndex < static_cast<uint32_t>(gltfMesh.primitives.size()); primitiveIndex++)
             {
-                // Get references to the mesh primitive and material
+                // Get a reference to the mesh primitive
                 const tinygltf::Primitive& p = gltfMesh.primitives[primitiveIndex];
-                const tinygltf::Material& mat = gltfData.materials[p.material];
 
                 MeshPrimitive m;
                 m.index = geometryIndex;
                 m.material = p.material;
 
-                // Set to the default material if one is not assigned
+                // Set the mesh primitive's material to the default material if one is not assigned or if no materials exist in the GLTF
                 if (m.material == -1) m.material = 0;
 
-                // If the mesh material is blended or masked, it is not opaque
-                if (strcmp(mat.alphaMode.c_str(), "OPAQUE") != 0) m.opaque = false;
+                // Get a reference to the mesh primitive's material
+                // If the mesh primitive material is blended or masked, it is not opaque
+                const Material& mat = scene.materials[m.material];
+                if (mat.data.alphaMode != 0) m.opaque = false;
 
                 // Get data indices
                 int indicesIndex = p.indices;
@@ -869,7 +879,7 @@ namespace Scenes
         camera.data.forward = { cameraForward.x, cameraForward.y, cameraForward.z };
     }
 
-    /*
+    /**
      * Releases memory used by the scene.
      */
     void Cleanup(Scene& scene)

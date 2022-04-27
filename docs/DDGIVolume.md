@@ -177,6 +177,7 @@ Compute shader code that updates (blends) either radiance or distance values int
 - ```RTXGI_DDGI_BLEND_RADIANCE``` specifies the blending mode (0: distance, 1: radiance).
 - ```RTXGI_DDGI_BLEND_SHARED_MEMORY``` toggles shared memory use. This can substantially improve performance at the cost of higher register and shared memory use (potentially lowering occupancy).
 - ```RTXGI_DDGI_BLEND_RAYS_PER_PROBE``` specifies the number of rays traced per probe. Required when shared memory is enabled.
+- ```RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY``` toggles the use of shared memory to store the result of probe scroll clear tests. When enabled, the scroll clear tests are performed by the group's first thread and written to shared memory for use by the rest of the thread group . This can reduce the compute workload and improve performance on some hardware.
 
 **Debug Defines**
 

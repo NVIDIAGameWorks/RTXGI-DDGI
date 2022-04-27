@@ -941,8 +941,8 @@ namespace Graphics
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
                 assert(RTXGI_VERSION::minor == 2);
-                assert(RTXGI_VERSION::revision == 7);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.07") == 0);
+                assert(RTXGI_VERSION::revision == 11);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.11") == 0);
 
                 UINT numVolumes = static_cast<UINT>(config.ddgi.volumes.size());
 
