@@ -138,13 +138,13 @@ namespace rtxgi
         //------------------------------------------------------------------------
 
         /**
-        * Get the DXGI_FORMAT type of the given texture resource.
-        */
+         * Get the DXGI_FORMAT type of the given texture resource.
+         */
         DXGI_FORMAT GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType type, UINT format);
 
         /**
-        * Get the root signature descriptor for a DDGIVolume (when not using bindless resource access).
-        */
+         * Get the root signature descriptor for a DDGIVolume (when not using bindless resource access).
+         */
         bool GetDDGIVolumeRootSignatureDesc(UINT constsOffset, UINT uavOffset, ID3DBlob*& signature);
 
         //------------------------------------------------------------------------

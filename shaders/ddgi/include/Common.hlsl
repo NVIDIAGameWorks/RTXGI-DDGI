@@ -27,7 +27,8 @@
 
 // Probe irradiance texture formats
 #define RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R10G10B10A2_FLOAT 0
-#define RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R32G32B32A32_FLOAT 1
+#define RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R16G16B16A16_FLOAT 1
+#define RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R32G32B32A32_FLOAT 2
 
 // The number of fixed rays that are used by probe relocation and classification.
 // These rays directions are always the same to produce temporally stable results.

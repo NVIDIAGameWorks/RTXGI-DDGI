@@ -90,17 +90,18 @@ namespace rtxgi
             else if (type == EDDGIVolumeTextureType::Irradiance)
             {
                 if (format == 0) return DXGI_FORMAT_R10G10B10A2_UNORM;
-                else if(format == 1) return DXGI_FORMAT_R32G32B32A32_FLOAT;
+                else if (format == 1) return DXGI_FORMAT_R16G16B16A16_FLOAT;
+                else if (format == 2) return DXGI_FORMAT_R32G32B32A32_FLOAT;
             }
             else if (type == EDDGIVolumeTextureType::Distance)
             {
-                if (format == 0) return DXGI_FORMAT_R16G16_FLOAT ;  // Note: in large environments FP16 may not be sufficient
-                else if(format == 1) return DXGI_FORMAT_R32G32_FLOAT;
+                if (format == 0) return DXGI_FORMAT_R16G16_FLOAT;  // Note: in large environments FP16 may not be sufficient
+                else if (format == 1) return DXGI_FORMAT_R32G32_FLOAT;
             }
             else if (type == EDDGIVolumeTextureType::Data)
             {
                 if (format == 0) return DXGI_FORMAT_R16G16B16A16_FLOAT;
-                else if(format == 1) return DXGI_FORMAT_R32G32B32A32_FLOAT;
+                else if (format == 1) return DXGI_FORMAT_R32G32B32A32_FLOAT;
             }
             return DXGI_FORMAT_UNKNOWN;
         }
