@@ -299,7 +299,7 @@ if(RTXGI_API_D3D12_ENABLE)
     )
 
     # Add dependencies
-    add_dependencies(${TARGET_EXE} glfw tinygltf png_static zlibstatic)
+    add_dependencies(${TARGET_EXE} glfw tinygltf png_static zlib)
 
     # Add the include directories
     target_include_directories(${TARGET_EXE} PRIVATE
@@ -318,15 +318,7 @@ if(RTXGI_API_D3D12_ENABLE)
     )
 
     # Add statically linked libs
-    target_link_libraries(${TARGET_EXE}
-        RTXGI-D3D12
-        ../../thirdparty/glfw/src/$<CONFIG>/glfw3
-        d3d11
-        d3d12
-        dxgi
-        ../../thirdparty/libpng/$<CONFIG>/libpng16_static
-       ../../thirdparty/zlib/$<CONFIG>/zlibstatic
-    )
+    target_link_libraries(${TARGET_EXE} RTXGI-D3D12 glfw png_static zlib d3d11 d3d12 dxgi)
 
     # Add common compiler definitions for exposed Test Harness options
     SetupOptions(${TARGET_EXE})
@@ -440,7 +432,7 @@ if(RTXGI_API_VULKAN_ENABLE)
     endif()
 
     # Add dependencies
-    add_dependencies(${TARGET_EXE} glfw tinygltf png_static zlibstatic)
+    add_dependencies(${TARGET_EXE} glfw tinygltf png_static zlib)
 
     # Add compiler definitions
     target_compile_definitions(${TARGET_EXE} PUBLIC API_VULKAN)
@@ -454,10 +446,10 @@ if(RTXGI_API_VULKAN_ENABLE)
     # Add statically linked libs
     if(WIN32)
         # Note: Even when targeting Vulkan, Windows uses D3D11 GPU-based texture compression with DirectXTex
-        target_link_libraries(${TARGET_EXE} RTXGI-VK ${Vulkan_LIBRARY} ../../thirdparty/glfw/src/$<CONFIG>/glfw3 d3d11 ../../thirdparty/libpng/$<CONFIG>/libpng16_static ../../thirdparty/zlib/$<CONFIG>/zlibstatic)
+        target_link_libraries(${TARGET_EXE} RTXGI-VK ${Vulkan_LIBRARY} glfw png_static zlib d3d11)
     elseif(UNIX AND NOT APPLE)
         # Note: UNIX can't use D3D11 GPU-based texture compression with DirectXTex
-        target_link_libraries(${TARGET_EXE} RTXGI-VK -llibpng16_static -lz -lglfw -lvulkan -ldl -lpthread -lX11 -lXrandr -lXi -lstdc++fs)
+        target_link_libraries(${TARGET_EXE} RTXGI-VK -lglfw -lvulkan -ldl -lpthread -lX11 -lXrandr -lXi -lstdc++fs)
     endif()
 
     # Set the binary output directory

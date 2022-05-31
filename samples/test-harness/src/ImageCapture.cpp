@@ -14,20 +14,23 @@
 
 namespace ImageCapture
 {
+    /**
+     * Write image data to a PNG format file.
+     */
     bool CapturePng(std::string file, uint32_t width, uint32_t height, std::vector<unsigned char*>& rows)
     {
+    #if (defined(_WIN32) || defined(WIN32))
         FILE* fp = nullptr;
         errno_t ferror = fopen_s(&fp, file.c_str(), "wb");
-        if (ferror != 0)
-        {
-            return false;
-        }
+        if (ferror != 0) return false;
+    #elif __linux__
+        FILE* fp = fopen(file.c_str(), "wb");
+        if (ferror != nullptr) return false;
+    #endif
 
         png_structp pngWrite = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-        if (!pngWrite)
-        {
-            return false;
-        }
+        if (!pngWrite) return false;
+
         png_infop pngInfo = png_create_info_struct(pngWrite);
         if (!pngInfo)
         {
@@ -54,13 +57,15 @@ namespace ImageCapture
             PNG_COMPRESSION_TYPE_DEFAULT,
             PNG_FILTER_TYPE_DEFAULT
         );
-        png_write_info(pngWrite, pngInfo); 
-        // stripping alpha channel for captured images
+        png_write_info(pngWrite, pngInfo);
+
+        // Removing the alpha channel for captured images
         // too bad if there's useful data there...
         png_set_filler(pngWrite, 0, PNG_FILLER_AFTER);
         png_write_image(pngWrite, rows.data());
         png_write_end(pngWrite, NULL);
         fclose(fp);
+
         png_destroy_write_struct(&pngWrite, &pngInfo);
 
         return true;

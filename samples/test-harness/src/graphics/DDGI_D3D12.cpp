@@ -941,8 +941,8 @@ namespace Graphics
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
                 assert(RTXGI_VERSION::minor == 2);
-                assert(RTXGI_VERSION::revision == 11);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.11") == 0);
+                assert(RTXGI_VERSION::revision == 12);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.12") == 0);
 
                 UINT numVolumes = static_cast<UINT>(config.ddgi.volumes.size());
 
@@ -1191,7 +1191,7 @@ namespace Graphics
                 bool success = true;
                 for (rtxgi::DDGIVolumeBase* volumeBase : resources.volumes)
                 {
-                    std::string baseName = directory + "\\" + volumeBase->GetName();
+                    std::string baseName = directory + "/" + volumeBase->GetName();
                     std::string filename = baseName + "-irradiance.png";
 
                     rtxgi::d3d12::DDGIVolume* volume = static_cast<DDGIVolume*>(volumeBase);

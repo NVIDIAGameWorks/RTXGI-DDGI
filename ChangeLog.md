@@ -1,5 +1,23 @@
 # RTXGI SDK Change Log
 
+## 1.2.12
+
+### SDK
+
+Features and Improvements:
+- Adds support to DDGI probes for 16-bit / channel irradiance
+
+### Test Harness
+
+Features and Improvements:
+- Improvements to the benchmark mode
+- Swaps to [zlib-ng](https://github.com/zlib-ng/zlib-ng) since it is more CMake/Git friendly
+- Other improvements for CMake
+- Adds SDK version number to the debug UI
+
+Bug Fixes:
+- Fixes compilation regressions on Linux
+
 ## 1.2.11
 
 ### SDK

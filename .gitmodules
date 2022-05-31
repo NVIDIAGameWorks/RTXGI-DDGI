@@ -18,7 +18,7 @@
 	path = thirdparty/libpng
 	url = https://github.com/glennrp/libpng.git
 	branch = libpng16
-[submodule "thirdparty/zlib"]
-	path = thirdparty/zlib
-	url = https://github.com/madler/zlib.git
-	branch = master
+[submodule "thirdparty/zlib-ng"]
+	path = thirdparty/zlib-ng
+	url = https://github.com/zlib-ng/zlib-ng.git
+	branch = stable

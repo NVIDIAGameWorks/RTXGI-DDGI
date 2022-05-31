@@ -29,8 +29,8 @@ namespace Instrumentation
     {
         Stat() {}
         Stat(EStatType type) { this->type = type; }
-        Stat(EStatType type, std::string name, uint32_t sampleSize) 
-        { 
+        Stat(EStatType type, std::string name, uint32_t sampleSize)
+        {
             this->type = type;
             this->name = name;
             this->sampleSize = sampleSize;
@@ -137,7 +137,7 @@ namespace Instrumentation
     void Resolve(Stat* s);
     void EndAndResolve(Stat* s);
 
-    std::ostream& operator<<(std::ostream& os, const Stat& stat);
+    std::ostream& operator<<(std::ostream& os, Stat& stat);
     std::ostream& operator<<(std::ostream& os, std::vector<Stat*>& stats);
 
 }

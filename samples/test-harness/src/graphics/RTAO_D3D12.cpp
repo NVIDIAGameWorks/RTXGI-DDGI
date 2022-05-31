@@ -440,8 +440,8 @@ namespace Graphics
             bool WriteRTAOBuffersToDisk(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::string directory)
             {
                 CoInitialize(NULL);
-                bool success = WriteResourceToDisk(d3d, directory + "\\rtaoraw.png", resources.RTAORaw, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                success &= WriteResourceToDisk(d3d, directory + "\\rtaofiltered.png", resources.RTAOOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                bool success = WriteResourceToDisk(d3d, directory + "/rtaoraw.png", resources.RTAORaw, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                success &= WriteResourceToDisk(d3d, directory + "/rtaofiltered.png", resources.RTAOOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 return success;
             }
 

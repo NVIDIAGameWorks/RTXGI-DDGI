@@ -10,17 +10,26 @@
 
 #include "Benchmark.h"
 
+#include <filesystem>
 namespace Benchmark
 {
     void StartBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx)
     {
+    #if defined(_WIN32) || defined(WIN32)
+        CreateDirectory(config.scene.screenshotPath.c_str(), NULL);
+    #elif __linux__
+        std::filesystem::create_directories(config.scene.screenshotPath.c_str());
+    #endif
+
+        benchmarkRun.numFramesBenched = 0;
         benchmarkRun.cpuTimingCsv.str("");
         benchmarkRun.gpuTimingCsv.str("");
-        // Clear timer history if beginning benchmark mode, this should not break timers that are currently running
+
+        // Clear timer history when starting benchmark mode
         perf.Reset(NumBenchmarkFrames);
         if (config.app.renderMode == ERenderMode::DDGI)
         {
-            // reload ddgi configs in order to reset RNG state
+            // Reload ddgi configs to reset the RNG state
             config.ddgi.reload = true;
         }
         gfx.frameNumber = 1;
@@ -28,65 +37,91 @@ namespace Benchmark
 
     bool UpdateBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx, std::ofstream& log)
     {
-        // if benchmark is currently running, make a csv row for the frame's timings
-        benchmarkRun.cpuTimingCsv << gfx.frameNumber << ",";
-        benchmarkRun.gpuTimingCsv << gfx.frameNumber << ",";
-
-        // print the timer values to the row
-        benchmarkRun.cpuTimingCsv << perf.cpuTimes;
-        benchmarkRun.gpuTimingCsv << perf.gpuTimes;
-
-        // if benchmark is done, print the timing results to files
-        if (gfx.frameNumber >= NumBenchmarkFrames)
+        // If the benchmark is currently running, make a row for the frame's timings
+        if(benchmarkRun.numFramesBenched < NumBenchmarkFrames)
         {
-            // generate the header row of the csvs
-            std::stringstream header;
-            header << "FrameIndex,";
-            for (std::vector<Instrumentation::Stat*>::const_iterator& it = perf.cpuTimes.cbegin(); it != perf.cpuTimes.cend(); it++)
-            {
-                Instrumentation::Stat* stat = *it;
-                header << stat->name << ",";
-            }
-            std::string cpuHeader = header.str();
+            benchmarkRun.cpuTimingCsv << gfx.frameNumber << ",";
+            benchmarkRun.gpuTimingCsv << gfx.frameNumber << ",";
+            benchmarkRun.cpuTimingCsv << perf.cpuTimes;
+            benchmarkRun.gpuTimingCsv << perf.gpuTimes;
+        }
+        else
+        {
+            // If the benchmark is done, write the timing results to disk
+            size_t index;
+            std::string cpuHeader = "";
+            std::string gpuHeader = "";
 
-            header.str("");
-            header << "FrameIndex,";
-            for (std::vector<Instrumentation::Stat*>::const_iterator& it = perf.gpuTimes.cbegin(); it != perf.gpuTimes.cend(); it++)
-            {
-                Instrumentation::Stat* stat = *it;
-                header << stat->name << ",";
-            }
-            std::string gpuHeader = header.str();
+            std::vector<float> cpuAverages;
+            std::vector<float> gpuAverages;
 
-            // write csv to file
+            // Generate the average timing rows for the CPU
+            cpuHeader.append("Average,");
+            for (index = 0; index < perf.cpuTimes.size(); index++)
+            {
+                cpuHeader.append(std::to_string(perf.cpuTimes[index]->average));
+                cpuHeader.append(",");
+            }
+
+            // Generate the header rows for the CPU time categories
+            cpuHeader.append("\n");
+            cpuHeader.append("FrameIndex,");
+            for (index = 0; index < perf.cpuTimes.size(); index++)
+            {
+                cpuHeader.append(perf.cpuTimes[index]->name.c_str());
+                cpuHeader.append(",");
+            }
+
+            // Generate the average timing rows for the GPU
+            gpuHeader.append("Average,");
+            for (index = 0; index < perf.gpuTimes.size(); index++)
+            {
+                gpuHeader.append(std::to_string(perf.gpuTimes[index]->average));
+                gpuHeader.append(",");
+            }
+
+            // Generate the header rows for the GPU time categories
+            gpuHeader.append("\n");
+            gpuHeader.append("FrameIndex,");
+            for (index = 0; index < perf.gpuTimes.size(); index++)
+            {
+                gpuHeader.append(perf.gpuTimes[index]->name);
+                gpuHeader.append(",");
+            }
+
+            // Write the CPU times to file
             std::ofstream csv;
-            csv.open(config.scene.screenshotPath + "\\benchmarkCpu.csv", std::ios::out);
+            csv.open(config.scene.screenshotPath + "/benchmarkCpu.csv", std::ios::out);
             if (csv.is_open())
             {
                 csv << cpuHeader << std::endl << benchmarkRun.cpuTimingCsv.str();
             }
             csv.close();
-            csv.open(config.scene.screenshotPath + "\\benchmarkGpu.csv", std::ios::out);
+
+            // Write the GPU times to file
+            csv.open(config.scene.screenshotPath + "/benchmarkGpu.csv", std::ios::out);
             if (csv.is_open())
             {
                 csv << gpuHeader << std::endl << benchmarkRun.gpuTimingCsv.str();
             }
             csv.close();
-            log << "wrote benchmark results to csv." << std::endl;
+            log << "Wrote benchmark results to csv." << std::endl;
 
-            // print averages to the log file
+            // Print averages to the log file
             log << "Benchmark Timings:" << std::endl;
             for (Instrumentation::Stat* stat : perf.cpuTimes)
             {
-                log << "\t" << stat->name << "=" << stat->average << "ms(CPU)" << std::endl;;
+                log << "\t" << stat->name << "=" << stat->average << "ms(CPU)" << std::endl;
             }
             for (Instrumentation::Stat* stat : perf.gpuTimes)
             {
-                log << "\t" << stat->name << "=" << stat->average << "ms(GPU)" << std::endl;;
+                log << "\t" << stat->name << "=" << stat->average << "ms(GPU)" << std::endl;
             }
 
             return false;
         }
+
+        benchmarkRun.numFramesBenched++;
         return true;
     }
 }

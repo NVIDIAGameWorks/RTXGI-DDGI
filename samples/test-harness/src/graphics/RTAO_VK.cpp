@@ -656,10 +656,12 @@ namespace Graphics
              */
             bool WriteRTAOBuffersToDisk(Globals& vk, GlobalResources& vkResources, Resources& resources, std::string directory)
             {
+            #if (defined(_WIN32) || defined(WIN32))
                 CoInitialize(NULL);
-                // format should match those from CreateTextures() function above
-                bool success = WriteResourceToDisk(vk, directory + "\\rtaoraw.png", resources.RTAORaw, vk.width, vk.height, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
-                success &= WriteResourceToDisk(vk, directory + "\\rtaofiltered.png", resources.RTAOOutput, vk.width, vk.height, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
+            #endif
+                // Formats should match those from CreateTextures() function above
+                bool success = WriteResourceToDisk(vk, directory + "/rtaoraw.png", resources.RTAORaw, vk.width, vk.height, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "/rtaofiltered.png", resources.RTAOOutput, vk.width, vk.height, VK_FORMAT_R8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
                 return success;
             }
 

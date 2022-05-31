@@ -3248,8 +3248,8 @@ namespace Graphics
     #endif
 
         /**
-        * Release Vulkan resources.
-        */
+         * Release Vulkan resources.
+         */
         void Cleanup(Globals& vk, GlobalResources& resources)
         {
             Cleanup(vk.device, resources);
@@ -3261,9 +3261,10 @@ namespace Graphics
          */
         bool WriteBackBufferToDisk(Globals& vk, std::string directory)
         {
+        #if (defined(_WIN32) || defined(WIN32))
             CoInitialize(NULL);
-            bool success = WriteResourceToDisk(vk, directory + "\\backbuffer.png", vk.swapChainImage[vk.frameIndex], vk.width, vk.height, vk.swapChainFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-            return success;
+        #endif
+            return WriteResourceToDisk(vk, directory + "/backbuffer.png", vk.swapChainImage[vk.frameIndex], vk.width, vk.height, vk.swapChainFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         }
 
     }

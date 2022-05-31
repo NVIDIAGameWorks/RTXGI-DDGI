@@ -2551,7 +2551,7 @@ namespace Graphics
         bool WriteBackBufferToDisk(Globals& d3d, std::string directory)
         {
             CoInitialize(NULL);
-            bool success = WriteResourceToDisk(d3d, directory + "\\backbuffer.png", d3d.backBuffer[d3d.frameIndex], D3D12_RESOURCE_STATE_PRESENT);
+            bool success = WriteResourceToDisk(d3d, directory + "/backbuffer.png", d3d.backBuffer[d3d.frameIndex], D3D12_RESOURCE_STATE_PRESENT);
             return success;
         }
     }

@@ -237,7 +237,7 @@ namespace Graphics
             // Application
             if (ImGui::CollapsingHeader("Application", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_CollapsingHeader))
             {
-                ImGui::Text("%s", config.app.gpuName.c_str());
+                ImGui::Text("RTXGI SDK Version: %s", RTXGI_VERSION::getVersionString());
                 ImGui::Text("API: %s", config.app.api.c_str());
 
                 // Rendering mode
@@ -247,7 +247,7 @@ namespace Graphics
                 }
                 else if (config.app.renderMode == ERenderMode::DDGI)
                 {
-                    ImGui::Text("Render Mode: RTXGI");
+                    ImGui::Text("Render Mode: DDGI");
 
                 #if RTXGI_DDGI_RESOURCE_MANAGEMENT
                     ImGui::Text("RTXGI Resource Mode: Managed");
@@ -280,6 +280,7 @@ namespace Graphics
             {
                 ImGui::Text("Frame Number: %i", gfx.frameNumber);
                 ImGui::Text("Frame Time Average: %.3f ms/frame (%.1f FPS) ", 1000.f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+                ImGui::Text("Device: %s", config.app.gpuName.c_str());
                 ImGui::Checkbox("Detailed Performance", &config.app.showPerf);
                 ImGui::SameLine(); AddQuestionMark("Shows detailed performance information. Press 'J' on the keyboard for a shortcut.");
             }

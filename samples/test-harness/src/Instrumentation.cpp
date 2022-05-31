@@ -49,8 +49,8 @@ namespace Instrumentation
 #endif
 
     /**
-    * Get the number of milliseconds between the timer's start and the current time.
-    */
+     * Get the number of milliseconds between the timer's start and the current time.
+     */
     void GetElapsed(Stat* s)
     {
     #if defined(_WIN32) || defined(WIN32)
@@ -96,17 +96,17 @@ namespace Instrumentation
         Resolve(s);
     }
 
-    std::ostream& operator<<(std::ostream& os, const Stat& stat)
+    std::ostream& operator<<(std::ostream& os, Stat* stat)
     {
-        os << stat.elapsed;
+        if(stat) os << stat->elapsed;
         return os;
     }
 
     std::ostream& operator<<(std::ostream& os, std::vector<Stat*>& stats)
     {
-        for (std::vector<Stat*>::const_iterator& it = stats.cbegin(); it != stats.cend(); it++)
+        for (size_t index = 0; index < stats.size(); index++)
         {
-            os << **it << ",";
+            os << stats[index] << ",";
         }
         os << std::endl;
         return os;

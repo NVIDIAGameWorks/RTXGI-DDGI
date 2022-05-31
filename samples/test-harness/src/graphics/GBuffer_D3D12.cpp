@@ -325,10 +325,10 @@ namespace Graphics
             bool WriteGBufferToDisk(Globals& d3d, GlobalResources& d3dResources, std::string directory)
             {
                 CoInitialize(NULL);
-                bool success = WriteResourceToDisk(d3d, directory + "\\GBufferA.png", d3dResources.rt.GBufferA, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                success &= WriteResourceToDisk(d3d, directory + "\\GBufferB.png", d3dResources.rt.GBufferB, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                success &= WriteResourceToDisk(d3d, directory + "\\GBufferC.png", d3dResources.rt.GBufferC, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                success &= WriteResourceToDisk(d3d, directory + "\\GBufferD.png", d3dResources.rt.GBufferD, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                bool success = WriteResourceToDisk(d3d, directory + "/GBufferA.png", d3dResources.rt.GBufferA, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                success &= WriteResourceToDisk(d3d, directory + "/GBufferB.png", d3dResources.rt.GBufferB, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                success &= WriteResourceToDisk(d3d, directory + "/GBufferC.png", d3dResources.rt.GBufferC, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                success &= WriteResourceToDisk(d3d, directory + "/GBufferD.png", d3dResources.rt.GBufferD, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 return success;
             }
 

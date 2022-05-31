@@ -26,6 +26,26 @@
 #include "graphics/Composite.h"
 
 #include <sstream>
+#include <filesystem>
+
+void WriteImages(
+    Configs::Config& config,
+    Graphics::Globals& gfx,
+    Graphics::GlobalResources& gfxResources,
+    Graphics::RTAO::Resources& rtao,
+    Graphics::DDGI::Resources& ddgi)
+{
+#if defined(_WIN32) || defined(WIN32)
+    CreateDirectory(config.scene.screenshotPath.c_str(), NULL);
+#elif __linux__
+    std::filesystem::create_directories(config.scene.screenshotPath.c_str());
+#endif
+
+    Graphics::WriteBackBufferToDisk(gfx, config.scene.screenshotPath);
+    Graphics::GBuffer::WriteGBufferToDisk(gfx, gfxResources, config.scene.screenshotPath);
+    Graphics::RTAO::WriteRTAOBuffersToDisk(gfx, gfxResources, rtao, config.scene.screenshotPath);
+    Graphics::DDGI::WriteVolumesToDisk(gfx, gfxResources, ddgi, config.scene.screenshotPath);
+}
 
 /**
  * Run the Test Harness.
@@ -200,10 +220,11 @@ int Run(const std::vector<std::string>& arguments)
             if (!Graphics::Composite::Resize(gfx, gfxResources, composite, log)) break;           // Composite
             Windows::ResetWindowEvent();
 
-            CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+            CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
             continue;
         }
 
+        // Initialize the benchmark
         if (input.event == Inputs::EInputEvent::RUN_BENCHMARK)
         {
             Benchmark::StartBenchmark(benchmarkRun, perf, config, gfx);
@@ -216,7 +237,7 @@ int Run(const std::vector<std::string>& arguments)
             {
                 if (!Graphics::PathTracing::Reload(gfx, gfxResources, pt, log)) break;
                 config.pathTrace.reload = false;
-                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
             #ifdef GFX_PERF_INSTRUMENTATION
                 Graphics::BeginFrame(gfx, gfxResources, perf);
             #endif
@@ -228,7 +249,7 @@ int Run(const std::vector<std::string>& arguments)
                 if (!Graphics::DDGI::Reload(gfx, gfxResources, ddgi, config, log)) break;
                 if (!Graphics::DDGI::Visualizations::Reload(gfx, gfxResources, ddgi, ddgiVis, log)) break;
                 config.ddgi.reload = false;
-                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
             #ifdef GFX_PERF_INSTRUMENTATION
                 Graphics::BeginFrame(gfx, gfxResources, perf);
             #endif
@@ -239,7 +260,7 @@ int Run(const std::vector<std::string>& arguments)
             {
                 if (!Graphics::RTAO::Reload(gfx, gfxResources, rtao, log)) break;
                 config.rtao.reload = false;
-                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
             #ifdef GFX_PERF_INSTRUMENTATION
                 Graphics::BeginFrame(gfx, gfxResources, perf);
             #endif
@@ -250,7 +271,7 @@ int Run(const std::vector<std::string>& arguments)
             {
                 if (!Graphics::Composite::Reload(gfx, gfxResources, composite, log)) break;
                 config.postProcess.reload = false;
-                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
             #ifdef GFX_PERF_INSTRUMENTATION
                 Graphics::BeginFrame(gfx, gfxResources, perf);
             #endif
@@ -266,7 +287,7 @@ int Run(const std::vector<std::string>& arguments)
         {
             Graphics::ToggleFullscreen(gfx);
             input.event = Inputs::EInputEvent::NONE;
-            CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+            CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
         #ifdef GFX_PERF_INSTRUMENTATION
             Graphics::BeginFrame(gfx, gfxResources, perf);
         #endif
@@ -336,32 +357,30 @@ int Run(const std::vector<std::string>& arguments)
         if (!Graphics::Present(gfx)) continue;
         if (!Graphics::WaitForGPU(gfx)) break;
 
-        bool saveImages = (input.event == Inputs::EInputEvent::SAVE_IMAGE) || (input.runBenchmark && gfx.frameNumber >= Benchmark::NumBenchmarkFrames);
-
-        if (saveImages)
+        // Image Capture
+        if (input.event == Inputs::EInputEvent::SAVE_IMAGE)
         {
-            CreateDirectory(config.scene.screenshotPath.c_str(), NULL);
-            Graphics::WriteBackBufferToDisk(gfx, config.scene.screenshotPath);
-            Graphics::GBuffer::WriteGBufferToDisk(gfx, gfxResources, config.scene.screenshotPath);
-            Graphics::RTAO::WriteRTAOBuffersToDisk(gfx, gfxResources, rtao, config.scene.screenshotPath);
-            Graphics::DDGI::WriteVolumesToDisk(gfx, gfxResources, ddgi, config.scene.screenshotPath);
+            WriteImages(config, gfx, gfxResources, rtao, ddgi);
             input.event = Inputs::EInputEvent::NONE;
         }
 
         if (!Graphics::MoveToNextFrame(gfx)) break;
         if (!Graphics::ResetCmdList(gfx)) break;
         CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes.back());
+        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
 
     #ifdef GFX_PERF_INSTRUMENTATION
         if (!Graphics::UpdateTimestamps(gfx, gfxResources, perf)) break;
         if (input.runBenchmark)
         {
             input.runBenchmark = Benchmark::UpdateBenchmark(benchmarkRun, perf, config, gfx, log);
+            if (benchmarkRun.numFramesBenched == Benchmark::NumBenchmarkFrames)
+            {
+                WriteImages(config, gfx, gfxResources, rtao, ddgi);
+            }
         }
         Graphics::BeginFrame(gfx, gfxResources, perf);
     #endif
-
-        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
     }
 
     Graphics::WaitForGPU(gfx);

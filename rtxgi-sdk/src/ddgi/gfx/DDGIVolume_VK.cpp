@@ -156,7 +156,8 @@ namespace rtxgi
             else if (type == EDDGIVolumeTextureType::Irradiance)
             {
                 if (format == 0) return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
-                else if (format == 1) return VK_FORMAT_R32G32B32A32_SFLOAT;
+                else if (format == 1) return VK_FORMAT_R16G16B16A16_SFLOAT;
+                else if (format == 2) return VK_FORMAT_R32G32B32A32_SFLOAT;
             }
             else if (type == EDDGIVolumeTextureType::Distance)
             {

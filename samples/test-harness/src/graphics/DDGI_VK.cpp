@@ -1368,8 +1368,8 @@ namespace Graphics
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
                 assert(RTXGI_VERSION::minor == 2);
-                assert(RTXGI_VERSION::revision == 11);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.11") == 0);
+                assert(RTXGI_VERSION::revision == 12);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.12") == 0);
 
                 // Reset the command list before initialization
                 CHECK(ResetCmdList(vk), "reset command list!", log);
@@ -1656,24 +1656,30 @@ namespace Graphics
              */
             bool WriteVolumesToDisk(Globals& vk, GlobalResources& vkResources, Resources& resources, std::string directory)
             {
+            #if (defined(_WIN32) || defined(WIN32))
                 CoInitialize(NULL);
+            #endif
                 bool success = true;
                 for (rtxgi::DDGIVolumeBase* volumeBase : resources.volumes)
                 {
-                    std::string baseName = directory + "\\" + volumeBase->GetName();
+                    std::string baseName = directory + "/" + volumeBase->GetName();
                     std::string filename = baseName + "-irradiance.png";
 
+                    // Get the DDGIVolume
                     rtxgi::vulkan::DDGIVolume* volume = static_cast<DDGIVolume*>(volumeBase);
                     rtxgi::DDGIVolumeDesc desc = volumeBase->GetDesc();
+
+                    // Write probe irradiance
                     uint32_t width = 0, height = 0;
                     GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Irradiance, width, height);
                     VkFormat format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Irradiance, desc.probeIrradianceFormat);
                     success &= WriteResourceToDisk(vk, filename, volume->GetProbeIrradiance(), width, height, format, VK_IMAGE_LAYOUT_GENERAL);
 
-                    // not capturing distances because WIC doesn't like two-channel textures
+                    // not storing distance data because WIC doesn't like two-channel textures
                     //filename = baseName + "-distance.png";
                     //success &= WriteResourceToDisk(globals, filename, volume->GetProbeDistance(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
+                    // Write ray data
                     filename = baseName + "-data.png";
                     GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Data, width, height);
                     format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::RayData, desc.probeDataFormat);

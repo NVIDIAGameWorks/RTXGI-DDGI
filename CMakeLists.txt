@@ -47,14 +47,11 @@ if(RTXGI_BUILD_SAMPLES)
     target_compile_definitions(tinygltf PUBLIC _CRT_SECURE_NO_WARNINGS) # suppress the sprintf CRT warnings
     set_target_properties(tinygltf PROPERTIES FOLDER "Thirdparty/")
 
-    # zlib
-    set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
-    set(CMAKE_DEBUG_POSTFIX "" CACHE STRING "override debug postfix")
-    option(ASM686 "" OFF)
-    option(AMD64 "" OFF)
-    add_subdirectory(thirdparty/zlib)
-    target_compile_options(zlib BEFORE PUBLIC /wd4267) # suppress the implicit conversion warning
-    set_target_properties(zlib zlibstatic example minigzip PROPERTIES FOLDER "Thirdparty/zlib" DEBUG_POSTFIX "")
+    # zlib-ng
+    option(ZLIB_COMPAT "" ON)
+    option(ZLIB_ENABLE_TESTS "" OFF)
+    add_subdirectory(thirdparty/zlib-ng)
+    set_target_properties(zlib PROPERTIES FOLDER "Thirdparty/")
 
     # libpng
     option(PNG_BUILD_ZLIB "" ON)
@@ -63,9 +60,12 @@ if(RTXGI_BUILD_SAMPLES)
     option(PNG_EXECUTABLES "" OFF)
     option(PNG_FRAMEWORK "" OFF)
     option(PNG_TESTS "" OFF)
-    set(ZLIB_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/thirdparty/zlib" "${CMAKE_BINARY_DIR}/thirdparty/zlib")
+    if(UNIX AND NOT APPLE)
+        set(ZLIB_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/thirdparty/zlib-ng" "${CMAKE_BINARY_DIR}/thirdparty/zlib-ng")
+    endif()
+    set(ZLIB_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/thirdparty/zlib-ng" "${CMAKE_BINARY_DIR}/thirdparty/zlib-ng")
     add_subdirectory(thirdparty/libpng)
-    set_target_properties(png_static genfiles PROPERTIES FOLDER "Thirdparty/libpng" DEBUG_POSTFIX "")
+    set_target_properties(png_static genfiles PROPERTIES FOLDER "Thirdparty/libpng")
 
     # Samples
     add_subdirectory(samples)

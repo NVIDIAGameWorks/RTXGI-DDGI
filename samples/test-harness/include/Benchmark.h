@@ -22,6 +22,7 @@ namespace Benchmark
 
     struct BenchmarkRun
     {
+        uint32_t numFramesBenched = 0;
         std::stringstream cpuTimingCsv;
         std::stringstream gpuTimingCsv;
     };

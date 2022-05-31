@@ -564,12 +564,14 @@ namespace Graphics
              */
             bool WriteGBufferToDisk(Globals& vk, GlobalResources& vkResources, std::string directory)
             {
+            #if (defined(_WIN32) || defined(WIN32))
                 CoInitialize(NULL);
-                // formats should match those from Graphics::Vulkan::CreateRenderTargets() in Vulkan.cpp
-                bool success = WriteResourceToDisk(vk, directory + "\\GBufferA.png", vkResources.rt.GBufferA, vk.width, vk.height, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
-                success &= WriteResourceToDisk(vk, directory + "\\GBufferB.png", vkResources.rt.GBufferB, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
-                success &= WriteResourceToDisk(vk, directory + "\\GBufferC.png", vkResources.rt.GBufferC, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
-                success &= WriteResourceToDisk(vk, directory + "\\GBufferD.png", vkResources.rt.GBufferD, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
+            #endif
+                // Formats should match those from Graphics::Vulkan::CreateRenderTargets() in Vulkan.cpp
+                bool success = WriteResourceToDisk(vk, directory + "/GBufferA.png", vkResources.rt.GBufferA, vk.width, vk.height, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "/GBufferB.png", vkResources.rt.GBufferB, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "/GBufferC.png", vkResources.rt.GBufferC, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "/GBufferD.png", vkResources.rt.GBufferD, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
                 return success;
             }
 
