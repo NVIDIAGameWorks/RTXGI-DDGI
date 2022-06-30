@@ -12,9 +12,21 @@
 
 #include <stdint.h>
 #include <string>
+
+#if defined(_WIN32) || defined(WIN32)
+#include <wincodec.h>
+#include <d3d12.h>
 #include <vector>
+#endif
 
 namespace ImageCapture
 {
-    bool CapturePng(std::string file, uint32_t width, uint32_t height, std::vector<unsigned char*>& rows);
+    const static uint32_t NumChannels = 4;
+    bool CapturePng(std::string file, uint32_t width, uint32_t height, const unsigned char* data);
+
+#if defined(_WIN32) || defined(WIN32)
+    IWICImagingFactory2* CreateWICImagingFactory();
+    HRESULT ConvertTextureResource(const D3D12_RESOURCE_DESC desc, UINT64 imageSize, UINT64 dstRowPitch, unsigned char* pMappedMemory, std::vector<unsigned char>& converted);
+#endif
+
 }

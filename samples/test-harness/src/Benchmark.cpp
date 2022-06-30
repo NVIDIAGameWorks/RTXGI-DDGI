@@ -11,15 +11,12 @@
 #include "Benchmark.h"
 
 #include <filesystem>
+
 namespace Benchmark
 {
     void StartBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx)
     {
-    #if defined(_WIN32) || defined(WIN32)
-        CreateDirectory(config.scene.screenshotPath.c_str(), NULL);
-    #elif __linux__
         std::filesystem::create_directories(config.scene.screenshotPath.c_str());
-    #endif
 
         benchmarkRun.numFramesBenched = 0;
         benchmarkRun.cpuTimingCsv.str("");

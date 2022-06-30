@@ -47,26 +47,13 @@ if(RTXGI_BUILD_SAMPLES)
     target_compile_definitions(tinygltf PUBLIC _CRT_SECURE_NO_WARNINGS) # suppress the sprintf CRT warnings
     set_target_properties(tinygltf PROPERTIES FOLDER "Thirdparty/")
 
-    # zlib-ng
-    option(ZLIB_COMPAT "" ON)
-    option(ZLIB_ENABLE_TESTS "" OFF)
-    add_subdirectory(thirdparty/zlib-ng)
-    set_target_properties(zlib PROPERTIES FOLDER "Thirdparty/")
-
-    # libpng
-    option(PNG_BUILD_ZLIB "" ON)
-    option(PNG_STATIC "" ON)
-    option(PNG_SHARED "" OFF)
-    option(PNG_EXECUTABLES "" OFF)
-    option(PNG_FRAMEWORK "" OFF)
-    option(PNG_TESTS "" OFF)
-    if(UNIX AND NOT APPLE)
-        set(ZLIB_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/thirdparty/zlib-ng" "${CMAKE_BINARY_DIR}/thirdparty/zlib-ng")
-    endif()
-    set(ZLIB_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/thirdparty/zlib-ng" "${CMAKE_BINARY_DIR}/thirdparty/zlib-ng")
-    add_subdirectory(thirdparty/libpng)
-    set_target_properties(png_static genfiles PROPERTIES FOLDER "Thirdparty/libpng")
-
     # Samples
     add_subdirectory(samples)
+
+    # Set the default project. If D3D is an option, set it as default.
+    if(RTXGI_API_D3D12_ENABLE)
+        set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT TestHarness-D3D12)
+    elseif(NOT RTXGI_API_D3D12_ENABLE AND RTXGI_API_VULKAN_ENABLE)
+        set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT TestHarness-VK)
+    endif()
 endif()

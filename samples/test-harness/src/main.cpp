@@ -35,11 +35,7 @@ void WriteImages(
     Graphics::RTAO::Resources& rtao,
     Graphics::DDGI::Resources& ddgi)
 {
-#if defined(_WIN32) || defined(WIN32)
-    CreateDirectory(config.scene.screenshotPath.c_str(), NULL);
-#elif __linux__
     std::filesystem::create_directories(config.scene.screenshotPath.c_str());
-#endif
 
     Graphics::WriteBackBufferToDisk(gfx, config.scene.screenshotPath);
     Graphics::GBuffer::WriteGBufferToDisk(gfx, gfxResources, config.scene.screenshotPath);
@@ -209,6 +205,13 @@ int Run(const std::vector<std::string>& arguments)
             // Get the new back buffer dimensions from GLFW
             int width, height;
             glfwGetFramebufferSize(gfx.window, &width, &height);
+
+            // Wait for the window to have valid dimensions
+            while(width == 0 || height == 0)
+            {
+                glfwGetFramebufferSize(gfx.window, &width, &height);
+                glfwWaitEvents();
+            }
 
             // Resize all screen-space buffers
             if (!Graphics::Resize(gfx, gfxResources, width, height, log)) break;                  // Back buffers and GBuffer textures

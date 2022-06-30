@@ -25,6 +25,7 @@ namespace Graphics
     {
         static const D3D12_HEAP_PROPERTIES defaultHeapProps = { D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0 };
         static const D3D12_HEAP_PROPERTIES uploadHeapProps = { D3D12_HEAP_TYPE_UPLOAD, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0 };
+        static const D3D12_HEAP_PROPERTIES readbackHeapProps = { D3D12_HEAP_TYPE_READBACK, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0 };
 
         bool Check(HRESULT hr, std::string fileName, uint32_t lineNumber);
         #define D3DCHECK(hr) if(!Check(hr, __FILE__, __LINE__)) { return false; }
@@ -40,6 +41,7 @@ namespace Graphics
         {
             DEFAULT = 0,
             UPLOAD = 1,
+            READBACK = 2
         };
 
         struct BufferDesc

@@ -420,8 +420,8 @@ namespace Graphics
         }
 
         /**
-        * Create the fences.
-        */
+         * Create the fences.
+         */
         bool CreateFences(Globals& vk)
         {
             VkFenceCreateInfo fenceCreateInfo = {};
@@ -476,7 +476,7 @@ namespace Graphics
                 surfaceCapabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR : surfaceCapabilities.currentTransform;
 
             // Get the swap chain's format and color space
-            // TODO: Get rid of this and use B8G8R8A8Unorm and SrgbNonlinear?
+            // TODO: use B8G8R8A8Unorm and SrgbNonlinear?
             if (!GetSwapChainFormatAndColorSpace(vk.physicalDevice, vk.surface, &vk.swapChainFormat, &vk.swapChainColorSpace)) return false;
 
             // Describe the swap chain
@@ -500,7 +500,14 @@ namespace Graphics
 
             if (surfaceCapabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
             {
+                // Allow the back buffer to be a copy destination
                 swapchainCreateInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            }
+
+            if (surfaceCapabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
+            {
+                // Allow the back buffer to be a copy source
+                swapchainCreateInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
             }
 
             // Create the swap chain
@@ -558,8 +565,8 @@ namespace Graphics
         }
 
         /**
-        * Create the render pass.
-        */
+         * Create the render pass.
+         */
         bool CreateRenderPass(Globals& vk)
         {
             // Describe the render pass
@@ -599,8 +606,8 @@ namespace Graphics
         }
 
         /**
-        * Create the frame buffers.
-        */
+         * Create the frame buffers.
+         */
         bool CreateFrameBuffers(Globals& vk)
         {
             for (uint32_t bufferIndex = 0; bufferIndex < 2; bufferIndex++)
@@ -626,8 +633,8 @@ namespace Graphics
         }
 
         /**
-        * Create the command pool.
-        */
+         * Create the command pool.
+         */
         bool CreateCommandPool(Globals& vk)
         {
             // Describe the command pool
@@ -645,8 +652,8 @@ namespace Graphics
         }
 
         /**
-        * Create the command buffers.
-        */
+         * Create the command buffers.
+         */
         bool CreateCommandBuffers(Globals& vk)
         {
             uint32_t numCommandBuffers = 2;
@@ -780,8 +787,8 @@ namespace Graphics
         }
 
         /**
-        * Create the samplers.
-        */
+         * Create the samplers.
+         */
         bool CreateSamplers(Globals& vk, Resources& resources)
         {
             // Describe a bilinear sampler
@@ -1360,8 +1367,8 @@ namespace Graphics
         }
 
         /**
-        * Create the shared render targets.
-        */
+         * Create the shared render targets.
+         */
         bool CreateRenderTargets(Globals& vk, Resources& resources)
         {
             // Create the GBufferA (R8G8B8A8_UNORM) texture resource
@@ -1436,8 +1443,8 @@ namespace Graphics
         }
 
         /**
-        * Release Vulkan resources.
-        */
+         * Release Vulkan resources.
+         */
         void Cleanup(VkDevice& device, Resources& resources)
         {
             // Buffers
@@ -1541,8 +1548,8 @@ namespace Graphics
         }
 
         /**
-        * Release core Vulkan resources.
-        */
+         * Release core Vulkan resources.
+         */
         void Cleanup(Globals& vk)
         {
             uint32_t resourceIndex;
@@ -1930,8 +1937,8 @@ namespace Graphics
         }
 
         /**
-        * Create the scene textures.
-        */
+         * Create the scene textures.
+         */
         bool CreateSceneTextures(Globals& vk, Resources &resources, const Scenes::Scene &scene, std::ofstream& log)
         {
             // Early out if there are no scene textures
@@ -1997,47 +2004,51 @@ namespace Graphics
          */
         bool WriteResourceToDisk(Globals& vk, std::string file, VkImage image, uint32_t width, uint32_t height, VkFormat imageFormat, VkImageLayout originalLayout)
         {
-            VkCommandPool pool;
-            VkCommandBuffer cmd;
+            bool result = false;
+            VkCommandPool commandPool = nullptr;
+            VkCommandBuffer commandBuffer = nullptr;
+            VkImage linearScreenshotImage = nullptr;
+            VkImage optimalScreenshotImage = nullptr;
+            VkDeviceMemory linearScreenshotImageMemory;
+            VkDeviceMemory optimalScreenshotImageMemory;
 
-            // create custom command pool
+            // Create a command pool
             {
                 VkCommandPoolCreateInfo commandPoolCreateInfo = {};
                 commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
                 commandPoolCreateInfo.queueFamilyIndex = vk.queueFamilyIndex;
                 commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-                VKCHECK(vkCreateCommandPool(vk.device, &commandPoolCreateInfo, nullptr, &pool));
-#ifdef GFX_NAME_OBJECTS
-                SetObjectName(vk.device, reinterpret_cast<uint64_t>(pool), "Image capture Command Pool", VK_OBJECT_TYPE_COMMAND_POOL);
-#endif
+                VKCHECK(vkCreateCommandPool(vk.device, &commandPoolCreateInfo, nullptr, &commandPool));
+            #ifdef GFX_NAME_OBJECTS
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(commandPool), "Image Capture Command Pool", VK_OBJECT_TYPE_COMMAND_POOL);
+            #endif
             }
 
-            // create custom command buffer
+            // Create and begin the command buffer
             {
                 uint32_t numCommandBuffers = 1;
 
                 VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
                 commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
                 commandBufferAllocateInfo.commandBufferCount = numCommandBuffers;
-                commandBufferAllocateInfo.commandPool = pool;
+                commandBufferAllocateInfo.commandPool = commandPool;
                 commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
-                VKCHECK(vkAllocateCommandBuffers(vk.device, &commandBufferAllocateInfo, &cmd));
+                VKCHECK(vkAllocateCommandBuffers(vk.device, &commandBufferAllocateInfo, &commandBuffer));
+            #ifdef GFX_NAME_OBJECTS
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(commandBuffer), "Image capture Command Buffer", VK_OBJECT_TYPE_COMMAND_BUFFER);
+            #endif
 
-#ifdef GFX_NAME_OBJECTS
-                SetObjectName(vk.device, reinterpret_cast<uint64_t>(cmd), "Image capture Command Buffer", VK_OBJECT_TYPE_COMMAND_BUFFER);
-#endif
+                // Begin the command buffer
                 VkCommandBufferBeginInfo commandBufferBeginInfo = {};
                 commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-                VKCHECK(vkBeginCommandBuffer(cmd, &commandBufferBeginInfo));
+                VKCHECK(vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo));
             }
 
-            // using vr_sli_vk demo for reference
-            VkImage linearScreenshotImage, optimalScreenshotImage;
-            VkDeviceMemory linearScreenshotImageMemory, optimalScreenshotImageMemory;
+            // Create intermediate texture resources
             {
-                // same as CreateTexture() but don't create a view
+                // Describe the image
                 VkImageCreateInfo imageCreateInfo = {};
                 imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
                 imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -2053,26 +2064,35 @@ namespace Graphics
                 imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
                 imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
+                // Create the image (linear layout)
                 VKCHECK(vkCreateImage(vk.device, &imageCreateInfo, nullptr, &linearScreenshotImage));
+
+                // Create the image (optimal tiling)
                 imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
                 imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
                 VKCHECK(vkCreateImage(vk.device, &imageCreateInfo, nullptr, &optimalScreenshotImage));
 
+                // Get the memory requirements for the linear image
                 AllocateMemoryDesc desc = {};
                 vkGetImageMemoryRequirements(vk.device, linearScreenshotImage, &desc.requirements);
                 desc.properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
                 desc.flags = 0;
 
+                // Allocate and bind the memory for the linear image
                 if (!AllocateMemory(vk, desc, &linearScreenshotImageMemory)) return false;
                 VKCHECK(vkBindImageMemory(vk.device, linearScreenshotImage, linearScreenshotImageMemory, 0));
 
+                // Get the memory requirements for the optimal tiled image
                 vkGetImageMemoryRequirements(vk.device, optimalScreenshotImage, &desc.requirements);
                 desc.properties = 0;
                 desc.flags = 0;
+
+                // Allocate and bind the memory for the optimal tiled image
                 if (!AllocateMemory(vk, desc, &optimalScreenshotImageMemory)) return false;
                 VKCHECK(vkBindImageMemory(vk.device, optimalScreenshotImage, optimalScreenshotImageMemory, 0));
             }
 
+            // Barriers
             {
                 ImageBarrierDesc barrier =
                 {
@@ -2082,15 +2102,19 @@ namespace Graphics
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                     { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
                 };
-                SetImageMemoryBarrier(cmd, linearScreenshotImage, barrier);
-                SetImageMemoryBarrier(cmd, optimalScreenshotImage, barrier);
+
+                // Transition the intermediate images to copy destinations
+                SetImageMemoryBarrier(commandBuffer, linearScreenshotImage, barrier);
+                SetImageMemoryBarrier(commandBuffer, optimalScreenshotImage, barrier);
+
+                // Transition the source image to a copy source
                 barrier.oldLayout = originalLayout;
                 barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                SetImageMemoryBarrier(cmd, image, barrier);
+                SetImageMemoryBarrier(commandBuffer, image, barrier);
             }
 
+            // Copy the source image to the optimal tiled image
             {
-                // blit image (format conversion if necessary)
                 VkImageBlit region = {};
                 VkImageSubresourceLayers subres = {};
                 subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -2103,9 +2127,17 @@ namespace Graphics
                 region.srcOffsets[1] = { (int32_t) width, (int32_t) height, 1 };
                 region.dstOffsets[0] = {};
                 region.dstOffsets[1] = { (int32_t) width, (int32_t) height, 1 };
-                vkCmdBlitImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, optimalScreenshotImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_NEAREST);
+
+                vkCmdBlitImage(
+                    commandBuffer,
+                    image,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    optimalScreenshotImage,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1, &region, VK_FILTER_NEAREST);
             }
 
+            // Barriers
             {
                 ImageBarrierDesc barrier =
                 {
@@ -2115,19 +2147,24 @@ namespace Graphics
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                     { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
                 };
-                SetImageMemoryBarrier(cmd, optimalScreenshotImage, barrier);
+
+                // Transition the optimal tiled image to a copy source
+                SetImageMemoryBarrier(commandBuffer, optimalScreenshotImage, barrier);
+
+                // Transition the source image to a copy source
                 barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
                 barrier.newLayout = originalLayout;
-                SetImageMemoryBarrier(cmd, image, barrier);
+                SetImageMemoryBarrier(commandBuffer, image, barrier);
             }
 
+            // Copy optimal tiled image to linear image (for CPU copy)
             {
-                // copy to linear tiling image for CPU copy
                 VkImageSubresourceLayers subResource = {};
                 subResource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 subResource.baseArrayLayer = 0;
                 subResource.mipLevel = 0;
                 subResource.layerCount = 1;
+
                 VkImageCopy region = {};
                 region.srcSubresource = subResource;
                 region.dstSubresource = subResource;
@@ -2136,16 +2173,17 @@ namespace Graphics
                 region.extent.width = width;
                 region.extent.height = height;
                 region.extent.depth = 1;
+
                 vkCmdCopyImage(
-                    cmd,
+                    commandBuffer,
                     optimalScreenshotImage,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                     linearScreenshotImage,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    1, &region
-                );
+                    1, &region);
             }
 
+            // Transition the linear image to general read
             {
                 ImageBarrierDesc barrier =
                 {
@@ -2155,17 +2193,17 @@ namespace Graphics
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                     { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
                 };
-                SetImageMemoryBarrier(cmd, linearScreenshotImage, barrier);
+                SetImageMemoryBarrier(commandBuffer, linearScreenshotImage, barrier);
             }
 
+            // Execute GPU work
             {
-                // Execute GPU work to finish initialization
-                VKCHECK(vkEndCommandBuffer(cmd));
+                VKCHECK(vkEndCommandBuffer(commandBuffer));
 
                 VkSubmitInfo submitInfo = {};
                 submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
                 submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &cmd;
+                submitInfo.pCommandBuffers = &commandBuffer;
 
                 VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
                 VKCHECK(vkQueueWaitIdle(vk.queue));
@@ -2173,45 +2211,39 @@ namespace Graphics
                 WaitForGPU(vk);
             }
 
-            // copy screenshot image to cpu-side memory
+            // Copy the linear image to CPU memory
             {
-                unsigned char* rawData = nullptr;
-
                 VkImageSubresource subResource{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0 };
                 VkSubresourceLayout subResourceLayout;
                 vkGetImageSubresourceLayout(vk.device, linearScreenshotImage, &subResource, &subResourceLayout);
 
-                VkResult result = vkMapMemory(vk.device, linearScreenshotImageMemory, 0, VK_WHOLE_SIZE, 0, (void**)&rawData);
-                if (result != VK_SUCCESS)
-                {
-                    return false;
-                }
+                // Map the linear image memory
+                unsigned char* pData = nullptr;
+                VKCHECK(vkMapMemory(vk.device, linearScreenshotImageMemory, 0, VK_WHOLE_SIZE, 0, (void**)&pData));
 
-                // libpng wants pointers to each row
-                std::vector<unsigned char*> rows(height, nullptr);
-                for (uint32_t i = 0; i < height; i++)
-                {
-                    rows[i] = rawData + i * subResourceLayout.rowPitch;
-                }
+                // Copy linear image to CPU memory
+                std::vector<unsigned char> converted(width * height * ImageCapture::NumChannels);
+                memcpy(converted.data(), pData, converted.size());
 
-                // output the image file to disk
-                ImageCapture::CapturePng(file, width, height, rows);
+                // Write the resource to disk as a PNG file (using STB)
+                result = ImageCapture::CapturePng(file, width, height, converted.data());
 
+                // Unmap the linear image memory
                 vkUnmapMemory(vk.device, linearScreenshotImageMemory);
             }
 
+            // Clean up
             {
-                // tear-down screenshot images
                 vkFreeMemory(vk.device, linearScreenshotImageMemory, nullptr);
                 vkDestroyImage(vk.device, linearScreenshotImage, nullptr);
                 vkFreeMemory(vk.device, optimalScreenshotImageMemory, nullptr);
                 vkDestroyImage(vk.device, optimalScreenshotImage, nullptr);
-                // tear-down temporary command list and pool
-                vkFreeCommandBuffers(vk.device, pool, 1, &cmd);
-                vkDestroyCommandPool(vk.device, pool, nullptr);
+
+                vkFreeCommandBuffers(vk.device, commandPool, 1, &commandBuffer);
+                vkDestroyCommandPool(vk.device, commandPool, nullptr);
             }
 
-            return true;
+            return result;
         }
 
     #ifdef GFX_NAME_OBJECTS
@@ -2844,7 +2876,7 @@ namespace Graphics
             vkCmdBeginRenderPass(vk.cmdBuffer[vk.frameIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
         }
 
-        /*
+        /**
          * Initialize Vulkan.
          */
         bool Initialize(const Configs::Config& config, Scenes::Scene& scene, Globals& vk, Resources& resources, std::ofstream& log)
@@ -3007,6 +3039,9 @@ namespace Graphics
             vk.scissor.extent.width = vk.width;
             vk.scissor.extent.height = vk.height;
 
+            // Wait for the GPU to finish up any work
+            VKCHECK(vkDeviceWaitIdle(vk.device));
+
             // Release the swapchain and associated resources
             CleanupSwapchain(vk);
 
@@ -3081,8 +3116,8 @@ namespace Graphics
         }
 
         /**
-        * Reset the command list.
-        */
+         * Reset the command list.
+         */
         bool ResetCmdList(Globals& vk)
         {
             // Start the command buffer for the next frame
@@ -3093,8 +3128,8 @@ namespace Graphics
         }
 
         /**
-        * Submit the command list.
-        */
+         * Submit the command list.
+         */
         bool SubmitCmdList(Globals& vk)
         {
             // Close the command buffer
@@ -3119,8 +3154,8 @@ namespace Graphics
         }
 
         /**
-        * Swap the back buffers.
-        */
+         * Swap the back buffers.
+         */
         bool Present(Globals& vk)
         {
             // Present
@@ -3143,16 +3178,16 @@ namespace Graphics
         }
 
         /*
-        * Wait for pending GPU work to complete.
-        */
+         * Wait for pending GPU work to complete.
+         */
         bool WaitForGPU(Globals& vk)
         {
             return (vkDeviceWaitIdle(vk.device) == VK_SUCCESS);
         }
 
         /**
-        * Prepare to render the next frame.
-        */
+         * Prepare to render the next frame.
+         */
         bool MoveToNextFrame(Globals& vk)
         {
             if (vk.vsyncChanged)
@@ -3261,9 +3296,6 @@ namespace Graphics
          */
         bool WriteBackBufferToDisk(Globals& vk, std::string directory)
         {
-        #if (defined(_WIN32) || defined(WIN32))
-            CoInitialize(NULL);
-        #endif
             return WriteResourceToDisk(vk, directory + "/backbuffer.png", vk.swapChainImage[vk.frameIndex], vk.width, vk.height, vk.swapChainFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         }
 

@@ -1,5 +1,26 @@
 # RTXGI SDK Change Log
 
+## 1.2.12a
+
+### SDK
+- No changes
+
+### Test Harness
+Features and Improvements:
+- Uses stb (stb_image_write) for image saving and screenshot functionality (included with the tinygltf dependency)
+- Removes zlib-ng and libpng dependencies
+- Updates Windows DXC (packman) dependencies to version 1.6.2112 which includes ```dxil.dll```
+- Now using std::filesystem on Windows and Linux
+- CMake
+  - Adds option to select in CMake whether to use the DXC & DXIL binaries from Packman or an installed Win10 SDK  (Windows only)
+  - Properly sets the default startup project for RTXGI.sln (it really works now!)
+  - Adds arguments to automatically set the available config ini files for the SmartCmdArgs extension
+  - Removes DirectXTK ```ScreenGrab[.h|.cpp]``` files
+
+Bug Fixes:
+- Fixes VK validation layer error related to the back buffer not being marked as a possible copy source
+- Fixes D3D12 and VK swapchain creation failures (causing a crash) when alt+tabbing or minimizing the application when in fullscreen mode
+
 ## 1.2.12
 
 ### SDK

@@ -1,0 +1,29 @@
+{
+  "FileVersion": 2,
+  "Items": [
+    {
+      "Command": "Scene Configs",
+      "Items": [
+        {
+          "Command": "../../../samples/test-harness/config/cornell.ini",
+		  "DefaultChecked": true
+        },
+        {
+          "Command": "../../../samples/test-harness/config/furnace.ini"
+        },
+        {
+          "Command": "../../../samples/test-harness/config/multi-cornell.ini"
+        },
+        {
+          "Command": "../../../samples/test-harness/config/sponza.ini"
+        },
+        {
+          "Command": "../../../samples/test-harness/config/tunnel.ini"
+        },
+		{
+          "Command": "../../../samples/test-harness/config/two-rooms.ini"
+        }
+      ]
+    }
+  ]
+}

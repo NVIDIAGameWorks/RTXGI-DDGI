@@ -191,14 +191,6 @@ file(GLOB THIRD_PARTY_DIRECTXTEX_GPU_COMPRESS_SOURCE
     "src/thirdparty/directxtex/BCDirectCompute.cpp"
 )
 
-file(GLOB THIRD_PARTY_DIRECTXTK_INCLUDE
-    "include/thirdparty/directxtk/ScreenGrab12.h"
-)
-
-file(GLOB THIRD_PARTY_DIRECTXTK_SOURCE
-    "src/thirdparty/directxtk/ScreenGrab12.cpp"
-)
-
 file(GLOB THIRD_PARTY_IMGUI_SOURCE
     "../../thirdparty/imgui/imgui.cpp"
     "../../thirdparty/imgui/imgui_demo.cpp"
@@ -235,6 +227,13 @@ option(RTXGISAMPLES_TEST_HARNESS_DDGI_DEBUG_BORDER_COPY_INDEXING "Enable a borde
 # Setup the Test Harness options
 function(SetupOptions ARG_TARGET_EXE)
 
+    if(WIN32)
+        # Setup the dxcompiler and dxil binary options
+        set(RTXGISAMPLES_DXC_BINARIES "Packman" CACHE STRING "The dxcompiler and dxil binaries to use")
+        set(RTXGISAMPLES_DXC_BINARIES "Win10 SDK" CACHE STRING "The dxcompiler and dxil binaries to use")
+        set_property(CACHE RTXGISAMPLES_DXC_BINARIES PROPERTY STRINGS "Packman" "Win10 SDK")
+    endif()
+
     # Set GFX object naming
     if(RTXGISAMPLES_GFX_NAME_OBJECTS)
         target_compile_definitions(${ARG_TARGET_EXE} PRIVATE GFX_NAME_OBJECTS)
@@ -268,7 +267,6 @@ set(GLFW_INCLUDE "${ROOT_DIR}/thirdparty/glfw/include")
 set(IMGUI_INCLUDE "${ROOT_DIR}/thirdparty/imgui")
 set(IMGUI_BACKENDS_INCLUDE "${ROOT_DIR}/thirdparty/imgui/backends")
 set(TINYGLTF_INCLUDE "${ROOT_DIR}/thirdparty/tinygltf")
-set(LIBPNG_INCLUDE "${ROOT_DIR}/thirdparty/libpng" "${CMAKE_BINARY_DIR}/thirdparty/libpng")
 
 # ---- WINDOWS / D3D12 --------------------------------------------------------------------------------------
 
@@ -293,13 +291,12 @@ if(RTXGI_API_D3D12_ENABLE)
         ${THIRD_PARTY_DIRECTXTEX_SOURCE}
         ${THIRD_PARTY_DIRECTXTEX_GPU_COMPRESS_SOURCE}
         ${THIRD_PARTY_DIRECTXTK_INCLUDE}
-        ${THIRD_PARTY_DIRECTXTK_SOURCE}
         ${THIRD_PARTY_IMGUI_SOURCE}
         ${THIRD_PARTY_IMGUI_D3D12_SOURCE}
     )
 
     # Add dependencies
-    add_dependencies(${TARGET_EXE} glfw tinygltf png_static zlib)
+    add_dependencies(${TARGET_EXE} glfw tinygltf)
 
     # Add the include directories
     target_include_directories(${TARGET_EXE} PRIVATE
@@ -309,16 +306,16 @@ if(RTXGI_API_D3D12_ENABLE)
         "include/thirdparty/directxtex"
         "include/thirdparty/directxtk"
         "include/thirdparty/dxc"
+        "include/thirdparty/stb"
         ${DIRECTXMATH_INCLUDE}
         ${GLFW_INCLUDE}
         ${IMGUI_INCLUDE}
         ${IMGUI_BACKENDS_INCLUDE}
         ${TINYGLTF_INCLUDE}
-        ${LIBPNG_INCLUDE}
     )
 
     # Add statically linked libs
-    target_link_libraries(${TARGET_EXE} RTXGI-D3D12 glfw png_static zlib d3d11 d3d12 dxgi)
+    target_link_libraries(${TARGET_EXE} RTXGI-D3D12 glfw d3d11 d3d12 dxgi)
 
     # Add common compiler definitions for exposed Test Harness options
     SetupOptions(${TARGET_EXE})
@@ -371,12 +368,12 @@ if(RTXGI_API_VULKAN_ENABLE)
             "include/thirdparty"
             "include/thirdparty/directxtex"
             "include/thirdparty/dxc"
+            "include/thirdparty/stb"
             ${DIRECTXMATH_INCLUDE}
             ${GLFW_INCLUDE}
             ${IMGUI_INCLUDE}
             ${IMGUI_BACKENDS_INCLUDE}
             ${TINYGLTF_INCLUDE}
-            ${LIBPNG_INCLUDE}
         )
 
         # Add VS filters
@@ -422,17 +419,17 @@ if(RTXGI_API_VULKAN_ENABLE)
             "include/thirdparty/directxmath"
             "include/thirdparty/directxtex"
             "include/thirdparty/dxc"
+            "include/thirdparty/stb"
             ${GLFW_INCLUDE}
             ${IMGUI_INCLUDE}
             ${IMGUI_BACKENDS_INCLUDE}
             ${TINYGLTF_INCLUDE}
-            ${LIBPNG_INCLUDE}
         )
 
     endif()
 
     # Add dependencies
-    add_dependencies(${TARGET_EXE} glfw tinygltf png_static zlib)
+    add_dependencies(${TARGET_EXE} glfw tinygltf)
 
     # Add compiler definitions
     target_compile_definitions(${TARGET_EXE} PUBLIC API_VULKAN)
@@ -446,7 +443,7 @@ if(RTXGI_API_VULKAN_ENABLE)
     # Add statically linked libs
     if(WIN32)
         # Note: Even when targeting Vulkan, Windows uses D3D11 GPU-based texture compression with DirectXTex
-        target_link_libraries(${TARGET_EXE} RTXGI-VK ${Vulkan_LIBRARY} glfw png_static zlib d3d11)
+        target_link_libraries(${TARGET_EXE} RTXGI-VK ${Vulkan_LIBRARY} glfw d3d11)
     elseif(UNIX AND NOT APPLE)
         # Note: UNIX can't use D3D11 GPU-based texture compression with DirectXTex
         target_link_libraries(${TARGET_EXE} RTXGI-VK -lglfw -lvulkan -ldl -lpthread -lX11 -lXrandr -lXi -lstdc++fs)
@@ -462,7 +459,7 @@ if(RTXGI_API_VULKAN_ENABLE)
     set_target_properties(${TARGET_EXE} PROPERTIES FOLDER "RTXGI Samples")
 endif() # VULKAN_ENABLE
 
-if(WIN32)
+if(WIN32 AND MSVC)
 
     # Add VS filters
     source_group("Config" FILES ${TEST_HARNESS_CONFIG})
@@ -477,55 +474,62 @@ if(WIN32)
     source_group("Source Files/Thirdparty/DirectXTex" FILES ${THIRD_PARTY_DIRECTXTEX_SOURCE} ${THIRD_PARTY_DIRECTXTEX_GPU_COMPRESS_SOURCE})
     source_group("Source Files/Thirdparty/ImGui" FILES ${THIRD_PARTY_IMGUI_SOURCE} ${THIRD_PARTY_IMGUI_D3D12_SOURCE} ${THIRD_PARTY_IMGUI_VULKAN_SOURCE})
 
-    # D3D12 only toolkit files
-    if(RTXGI_API_D3D12_ENABLE)
-        source_group("Header Files/Thirdparty/DirectXTK" FILES ${THIRD_PARTY_DIRECTXTK_INCLUDE})
-        source_group("Source Files/Thirdparty/DirectXTK" FILES ${THIRD_PARTY_DIRECTXTK_SOURCE})
-    endif()
+    # Set arguments for Visual Studio Smart Command Line Arguments extension
+    # https://github.com/MBulli/SmartCommandlineArgs
+    configure_file("${ROOT_DIR}/samples/test-harness/.args" "${CMAKE_BINARY_DIR}/samples/test-harness/TestHarness-D3D12.args.json" COPYONLY)
+    configure_file("${ROOT_DIR}/samples/test-harness/.args" "${CMAKE_BINARY_DIR}/samples/test-harness/TestHarness-VK.args.json" COPYONLY)
+endif() # WIN32 and MSVC
 
-    # Set the default project. If D3D is an option, set it as default.
-    if(RTXGI_API_D3D12_ENABLE)
-        set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT TestHarness-D3D12)
-    elseif(NOT RTXGI_API_D3D12_ENABLE AND RTXGI_API_VULKAN_ENABLE)
-        set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT TestHarness-VK)
+# Set the dxc binaries location (Windows only)
+if(WIN32)
+    if(${RTXGISAMPLES_DXC_BINARIES} MATCHES "Packman")
+        set(DXC_BINARY  ${ROOT_DIR}/dxc/bin/dxcompiler.dll)
+        set(DXIL_BINARY ${ROOT_DIR}/dxc/bin/dxil.dll)
+    elseif(${RTXGISAMPLES_DXC_BINARIES} MATCHES "Win10 SDK")
+        set(DXC_BINARY  ${RTXGI_API_D3D12_DXIL_PATH}/dxcompiler.dll)
+        set(DXIL_BINARY ${RTXGI_API_D3D12_DXIL_PATH}/dxil.dll)
     endif()
-
-endif() # WIN32
+endif()
 
 if(WIN32 AND RTXGI_API_D3D12_ENABLE)
-    # Copy required DLLs and logo images to the working directories
+    # Copy required DLLs next to the executable
     add_custom_command( TARGET TestHarness-D3D12 POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${RTXGI_API_D3D12_DXIL_PATH}/dxil.dll ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/d3d12/$<CONFIG>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/bin/dxcompiler.dll ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/d3d12/$<CONFIG>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DXIL_BINARY} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/d3d12/$<CONFIG>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DXC_BINARY} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/d3d12/$<CONFIG>
+    )
+
+    # Copy logo image to the working directories
+    add_custom_command( TARGET TestHarness-D3D12 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/d3d12/$<CONFIG>
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness/
     )
 endif()
 
 if(WIN32 AND RTXGI_API_VULKAN_ENABLE)
-    # Copy required DLLs and logo images to the working directories
+    # Copy required DLLs next to the executable
     add_custom_command( TARGET TestHarness-VK POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/bin/dxcompiler.dll ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DXC_BINARY} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
+    )
+
+    # Copy logo image to the working directories
+    add_custom_command( TARGET TestHarness-VK POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness/
     )
 endif()
 
 if(UNIX AND RTXGI_API_VULKAN_ENABLE)
-    # Copy required shared libraries and logo images to the working directories
-    if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
+    if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64" OR ${CMAKE_SYSTEM_PROCESSOR} MATCHES "x86_64")
+        # Copy required shared libraries next to the executable
         add_custom_command( TARGET TestHarness-VK POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_BINARY_DIR}/samples/test-harness
+        )
+
+       # Copy logo image to the working directories
+       add_custom_command( TARGET TestHarness-VK POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness
-        )
-    elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "x86_64")
-        add_custom_command( TARGET TestHarness-VK POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/dxc/lib/libdxcompiler.so ${CMAKE_BINARY_DIR}/samples/test-harness
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vulkan/$<CONFIG>
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ROOT_DIR}/docs/nvidia.jpg ${CMAKE_BINARY_DIR}/samples/test-harness
-        )
+       )
     endif()
 endif()

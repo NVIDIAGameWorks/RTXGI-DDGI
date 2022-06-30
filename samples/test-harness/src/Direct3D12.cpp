@@ -12,9 +12,6 @@
 #include "UI.h"
 #include "ImageCapture.h"
 
-#include <wincodec.h>
-#include <ScreenGrab12.h>
-
 namespace Graphics
 {
     using namespace DirectX;
@@ -766,8 +763,8 @@ namespace Graphics
         }
 
         /**
-        * Create the global (bindless) root signature.
-        */
+         * Create the global (bindless) root signature.
+         */
         bool CreateGlobalRootSignature(Globals& d3d, Resources& resources)
         {
             D3D12_DESCRIPTOR_RANGE ranges[9];
@@ -899,8 +896,8 @@ namespace Graphics
         }
 
         /**
-        * Create the shared render targets.
-        */
+         * Create the shared render targets.
+         */
         bool CreateRenderTargets(Globals& d3d, Resources& resources)
         {
             // Create the GBufferA (R8G8B8A8_UNORM) texture resource
@@ -1030,8 +1027,8 @@ namespace Graphics
         }
 
         /**
-        * Release core D3D12 resources.
-        */
+         * Release core D3D12 resources.
+         */
         void Cleanup(Globals& d3d)
         {
             // Leave fullscreen mode if necessary
@@ -1593,39 +1590,18 @@ namespace Graphics
         // Debug Functions
         //----------------------------------------------------------------------------------------------------------
 
-        IWICImagingFactory2* _GetWIC()
-        {
-            static INIT_ONCE s_initOnce = INIT_ONCE_STATIC_INIT;
-
-            IWICImagingFactory2* factory = nullptr;
-            (void)InitOnceExecuteOnce(&s_initOnce,
-                [](PINIT_ONCE, PVOID, PVOID* ifactory) -> BOOL
-                {
-                    return SUCCEEDED(CoCreateInstance(
-                        CLSID_WICImagingFactory2,
-                        nullptr,
-                        CLSCTX_INPROC_SERVER,
-                        __uuidof(IWICImagingFactory2),
-                        ifactory)) ? TRUE : FALSE;
-                }, nullptr, reinterpret_cast<LPVOID*>(&factory));
-
-            return factory;
-        }
-
         /**
          * Write an image to disk from the given D3D12 resource.
          */
         bool WriteResourceToDisk(Globals& d3d, std::string file, ID3D12Resource* pResource, D3D12_RESOURCE_STATES state)
         {
-            CoInitialize(NULL);
-            std::wstring filename = std::wstring(file.begin(), file.end());
-            //if(FAILED(SaveWICTextureToFile(d3d.cmdQueue, pResource, GUID_ContainerFormatPng, filename.c_str(), state, state))) return false;
-
-            // copied from SaveWICTextureToFile() from DirectXTK, but using libpng instead of WIC
+            // Get the resource descriptor
             const D3D12_RESOURCE_DESC desc = pResource->GetDesc();
-            UINT64 totalResourceSize = 0, fpRowPitch = 0;
+
+            // Get the row count, pitch, and size of the top mip level
+            UINT64 totalResourceSize = 0;
+            UINT64 fpRowPitch = 0;
             UINT fpRowCount = 0;
-            // Get the rowcount, pitch and size of the top mip
             d3d.device->GetCopyableFootprints(
                 &desc,
                 0,
@@ -1635,31 +1611,28 @@ namespace Graphics
                 &fpRowCount,
                 &fpRowPitch,
                 &totalResourceSize);
+
             // Round up the srcPitch to multiples of 256
             UINT64 dstRowPitch = (fpRowPitch + 255) & ~0xFF;
-            ID3D12Resource* pStaging = nullptr;
 
+            // Get the heap properties
             D3D12_HEAP_PROPERTIES sourceHeapProperties = {};
             D3D12_HEAP_FLAGS sourceHeapFlags = {};
-            HRESULT hr = pResource->GetHeapProperties(&sourceHeapProperties, &sourceHeapFlags);
+            D3DCHECK(pResource->GetHeapProperties(&sourceHeapProperties, &sourceHeapFlags));
+
+            // Create a command allocator
             ID3D12CommandAllocator* commandAlloc = nullptr;
-            hr = d3d.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAlloc));
+            D3DCHECK(d3d.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAlloc)));
+
+            // Create a command list
             ID3D12GraphicsCommandList* commandList = nullptr;
-            hr = d3d.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAlloc, nullptr, IID_PPV_ARGS(&commandList));
+            D3DCHECK(d3d.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAlloc, nullptr, IID_PPV_ARGS(&commandList)));
+
+            // Create fence
             ID3D12Fence* fence = nullptr;
-            hr = d3d.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
-            D3D12_HEAP_PROPERTIES defaultHeapProperties = {}, readBackHeapProperties = {};
-            defaultHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-            defaultHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-            defaultHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-            defaultHeapProperties.CreationNodeMask = 1;
-            defaultHeapProperties.VisibleNodeMask = 1;
-            readBackHeapProperties.Type = D3D12_HEAP_TYPE_READBACK;
-            readBackHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-            readBackHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-            readBackHeapProperties.CreationNodeMask = 1;
-            readBackHeapProperties.VisibleNodeMask = 1;
-            // Readback resources must be buffers
+            D3DCHECK(d3d.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
+
+            // Describe the read-back buffer resource
             D3D12_RESOURCE_DESC bufferDesc = {};
             bufferDesc.Alignment = desc.Alignment;
             bufferDesc.DepthOrArraySize = 1;
@@ -1672,26 +1645,29 @@ namespace Graphics
             bufferDesc.MipLevels = 1;
             bufferDesc.SampleDesc.Count = 1;
             bufferDesc.SampleDesc.Quality = 0;
-            // Create a staging texture
-            hr = d3d.device->CreateCommittedResource(
-                &readBackHeapProperties,
+
+            // Create a staging texture resource
+            ID3D12Resource* pStaging = nullptr;
+            D3DCHECK(d3d.device->CreateCommittedResource(
+                &readbackHeapProps,
                 D3D12_HEAP_FLAG_NONE,
                 &bufferDesc,
                 D3D12_RESOURCE_STATE_COPY_DEST,
                 nullptr,
-                IID_PPV_ARGS(&pStaging));
+                IID_PPV_ARGS(&pStaging)));
 
             {
-                D3D12_RESOURCE_BARRIER barrierDesc = {};
-                barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-                barrierDesc.Transition.pResource = pResource;
-                barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-                barrierDesc.Transition.StateBefore = state;
-                barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-                commandList->ResourceBarrier(1, &barrierDesc);
+                // Transition the staging texture resource to a copy source
+                D3D12_RESOURCE_BARRIER barrier = {};
+                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barrier.Transition.pResource = pResource;
+                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                barrier.Transition.StateBefore = state;
+                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+                commandList->ResourceBarrier(1, &barrier);
             }
 
-            // Get the copy target location
+            // Describe the copy footprint of the resource
             D3D12_PLACED_SUBRESOURCE_FOOTPRINT bufferFootprint = {};
             bufferFootprint.Footprint.Width = static_cast<UINT>(desc.Width);
             bufferFootprint.Footprint.Height = desc.Height;
@@ -1699,129 +1675,68 @@ namespace Graphics
             bufferFootprint.Footprint.RowPitch = static_cast<UINT>(dstRowPitch);
             bufferFootprint.Footprint.Format = desc.Format;
 
-            D3D12_TEXTURE_COPY_LOCATION copySrc = {}, copyDest = {};
+            // Describe the copy source resource
+            D3D12_TEXTURE_COPY_LOCATION copySrc = {};
             copySrc.pResource = pResource;
             copySrc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
             copySrc.SubresourceIndex = 0;
+
+            // Describe the copy destination resource
+            D3D12_TEXTURE_COPY_LOCATION copyDest = {};
             copyDest.pResource = pStaging;
             copyDest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
             copyDest.PlacedFootprint = bufferFootprint;
 
-            // Copy the texture
+            // Schedule the texture copy
             commandList->CopyTextureRegion(&copyDest, 0, 0, 0, &copySrc, nullptr);
 
             {
-                D3D12_RESOURCE_BARRIER barrierDesc = {};
-                barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-                barrierDesc.Transition.pResource = pResource;
-                barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-                barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
-                barrierDesc.Transition.StateAfter = state;
-                commandList->ResourceBarrier(1, &barrierDesc);
+                // Transition the staging texture resource to the specified state
+                D3D12_RESOURCE_BARRIER barrier = {};
+                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barrier.Transition.pResource = pResource;
+                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+                barrier.Transition.StateAfter = state;
+                commandList->ResourceBarrier(1, &barrier);
             }
 
-            hr = commandList->Close();
+            // Close the command list
+            D3DCHECK(commandList->Close());
 
             // Execute the command list
             d3d.cmdQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList**>(&commandList));
+
             // Signal the fence
-            hr = d3d.cmdQueue->Signal(fence, 1);
+            D3DCHECK(d3d.cmdQueue->Signal(fence, 1));
+
             // Block until the copy is complete
             while (fence->GetCompletedValue() < 1)
                 SwitchToThread();
 
+            // Map the staging texture resource
+            unsigned char* pData = nullptr;
             UINT64 imageSize = dstRowPitch * fpRowCount;
-            unsigned char* pMappedMemory = nullptr;
             D3D12_RANGE readRange = { 0, static_cast<SIZE_T>(imageSize) };
-            D3D12_RANGE writeRange = { 0, 0 };
-            hr = pStaging->Map(0, &readRange, (void**)&pMappedMemory);
+            D3DCHECK(pStaging->Map(0, &readRange, (void**)&pData));
 
-            // convert to RGBA8 UNORM using WIC
-            std::vector<unsigned char> converted(desc.Width * desc.Height * 4);
-            {
-                // Determine source format's WIC equivalent
-                WICPixelFormatGUID pfGuid;
-                bool sRGB = false;
-                switch (desc.Format)
-                {
-                case DXGI_FORMAT_R32G32B32A32_FLOAT:            pfGuid = GUID_WICPixelFormat128bppRGBAFloat; break;
-                case DXGI_FORMAT_R16G16B16A16_FLOAT:            pfGuid = GUID_WICPixelFormat64bppRGBAHalf; break;
-                case DXGI_FORMAT_R16G16B16A16_UNORM:            pfGuid = GUID_WICPixelFormat64bppRGBA; break;
-                case DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM:    pfGuid = GUID_WICPixelFormat32bppRGBA1010102XR; break;
-                case DXGI_FORMAT_R10G10B10A2_UNORM:             pfGuid = GUID_WICPixelFormat32bppRGBA1010102; break;
-                case DXGI_FORMAT_B5G5R5A1_UNORM:                pfGuid = GUID_WICPixelFormat16bppBGRA5551; break;
-                case DXGI_FORMAT_B5G6R5_UNORM:                  pfGuid = GUID_WICPixelFormat16bppBGR565; break;
-                case DXGI_FORMAT_R32_FLOAT:                     pfGuid = GUID_WICPixelFormat32bppGrayFloat; break;
-                case DXGI_FORMAT_R16_FLOAT:                     pfGuid = GUID_WICPixelFormat16bppGrayHalf; break;
-                case DXGI_FORMAT_R16_UNORM:                     pfGuid = GUID_WICPixelFormat16bppGray; break;
-                case DXGI_FORMAT_R8_UNORM:                      pfGuid = GUID_WICPixelFormat8bppGray; break;
-                case DXGI_FORMAT_A8_UNORM:                      pfGuid = GUID_WICPixelFormat8bppAlpha; break;
+            // Convert the resource to RGBA8 UNORM (using WIC)
+            std::vector<unsigned char> converted(desc.Width * desc.Height * ImageCapture::NumChannels);
+            D3DCHECK(ImageCapture::ConvertTextureResource(desc, imageSize, dstRowPitch, pData, converted));
 
-                case DXGI_FORMAT_R8G8B8A8_UNORM:
-                    pfGuid = GUID_WICPixelFormat32bppRGBA;
-                    break;
+            // Write the resource to disk as a PNG file (using STB)
+            bool result = ImageCapture::CapturePng(file, static_cast<uint32_t>(desc.Width), static_cast<uint32_t>(desc.Height), converted.data());
 
-                case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
-                    pfGuid = GUID_WICPixelFormat32bppRGBA;
-                    sRGB = true;
-                    break;
+            // Unmap the staging texture
+            pStaging->Unmap(0, nullptr);
 
-                case DXGI_FORMAT_B8G8R8A8_UNORM:
-                    pfGuid = GUID_WICPixelFormat32bppBGRA;
-                    break;
+            // Clean up
+            SAFE_RELEASE(pStaging);
+            SAFE_RELEASE(fence);
+            SAFE_RELEASE(commandList);
+            SAFE_RELEASE(commandAlloc);
 
-                case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-                    pfGuid = GUID_WICPixelFormat32bppBGRA;
-                    sRGB = true;
-                    break;
-
-                case DXGI_FORMAT_B8G8R8X8_UNORM:
-                    pfGuid = GUID_WICPixelFormat32bppBGR;
-                    break;
-
-                case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
-                    pfGuid = GUID_WICPixelFormat32bppBGR;
-                    sRGB = true;
-                    break;
-
-                default:
-                    return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
-                }
-
-                IWICImagingFactory2* pWIC = _GetWIC();
-                IWICBitmap* bitmap = nullptr;
-                hr = pWIC->CreateBitmapFromMemory(static_cast<UINT>(desc.Width), desc.Height, pfGuid,
-                    static_cast<UINT>(dstRowPitch), static_cast<UINT>(imageSize),
-                    static_cast<BYTE*>(pMappedMemory), &bitmap);
-
-                IWICFormatConverter* converter = nullptr;
-                hr = pWIC->CreateFormatConverter(&converter);
-                hr = converter->Initialize(bitmap, GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeMedianCut);
-
-                WICRect rect = { 0, 0, static_cast<INT>(desc.Width), static_cast<INT>(desc.Height) };
-                converter->CopyPixels(&rect, static_cast<UINT>(desc.Width * 4), static_cast<UINT>(converted.size()), converted.data());
-
-                converter->Release();
-                bitmap->Release();
-            }
-
-            {
-                // libpng wants pointers to each row
-                std::vector<unsigned char*> rows(desc.Height, nullptr);
-                for (uint32_t i = 0; i < desc.Height; i++)
-                {
-                    rows[i] = &converted[desc.Width * 4 * i];
-                }
-                ImageCapture::CapturePng(file, static_cast<uint32_t>(desc.Width), static_cast<uint32_t>(desc.Height), rows);
-            }
-            pStaging->Unmap(0, &writeRange);
-
-            pStaging->Release();
-            fence->Release();
-            commandList->Release();
-            commandAlloc->Release();
-
-            return true;
+            return result;
         }
 
         //----------------------------------------------------------------------------------------------------------
@@ -1881,8 +1796,8 @@ namespace Graphics
         }
 
         /**
-        * Create a D3D12 root signature.
-        */
+         * Create a D3D12 root signature.
+         */
         ID3D12RootSignature* CreateRootSignature(Globals& d3d, const D3D12_ROOT_SIGNATURE_DESC& desc)
         {
             ID3DBlob* sig = nullptr;
@@ -1907,8 +1822,8 @@ namespace Graphics
         }
 
         /**
-        * Create a buffer resource.
-        */
+         * Create a buffer resource.
+         */
         bool CreateBuffer(Globals& d3d, const BufferDesc& info, ID3D12Resource** ppResource)
         {
             // Describe the upload buffer resource
@@ -1942,8 +1857,8 @@ namespace Graphics
         }
 
         /**
-        * Create a texture resource on the default heap.
-        */
+         * Create a texture resource on the default heap.
+         */
         bool CreateTexture(Globals& d3d, const TextureDesc& info, ID3D12Resource** resource)
         {
             // Describe the texture resource
@@ -2232,8 +2147,8 @@ namespace Graphics
         }
 
         /*
-        * Initialize D3D12.
-        */
+         * Initialize D3D12.
+         */
         bool Initialize(const Configs::Config& config, Scenes::Scene& scene, Globals& d3d, Resources& resources, std::ofstream& log)
         {
             // Set config variables
@@ -2417,8 +2332,8 @@ namespace Graphics
         }
 
         /**
-        * Reset the command list.
-        */
+         * Reset the command list.
+         */
         bool ResetCmdList(Globals& d3d)
         {
             // Reset the command allocator for the current frame
@@ -2431,8 +2346,8 @@ namespace Graphics
         }
 
         /**
-        * Submit the command list.
-        */
+         * Submit the command list.
+         */
         bool SubmitCmdList(Globals& d3d)
         {
             // Close the command list
@@ -2446,8 +2361,8 @@ namespace Graphics
         }
 
         /**
-        * Swap the back buffers.
-        */
+         * Swap the back buffers.
+         */
         bool Present(Globals& d3d)
         {
             HRESULT hr;
@@ -2458,8 +2373,8 @@ namespace Graphics
         }
 
         /*
-        * Wait for pending GPU work to complete.
-        */
+         * Wait for pending GPU work to complete.
+         */
         bool WaitForGPU(Globals& d3d)
         {
             // Increment the fence value
@@ -2480,8 +2395,8 @@ namespace Graphics
         }
 
         /**
-        * Prepare to render the next frame.
-        */
+         * Prepare to render the next frame.
+         */
         bool MoveToNextFrame(Globals& d3d)
         {
             // Set the frame index for the next frame
@@ -2537,8 +2452,8 @@ namespace Graphics
     #endif
 
         /**
-        * Release D3D12 resources.
-        */
+         * Release D3D12 resources.
+         */
         void Cleanup(Globals& d3d, GlobalResources& resources)
         {
             Cleanup(resources);
@@ -2550,9 +2465,7 @@ namespace Graphics
          */
         bool WriteBackBufferToDisk(Globals& d3d, std::string directory)
         {
-            CoInitialize(NULL);
-            bool success = WriteResourceToDisk(d3d, directory + "/backbuffer.png", d3d.backBuffer[d3d.frameIndex], D3D12_RESOURCE_STATE_PRESENT);
-            return success;
+            return WriteResourceToDisk(d3d, directory + "/backbuffer.png", d3d.backBuffer[d3d.frameIndex], D3D12_RESOURCE_STATE_PRESENT);
         }
     }
 
