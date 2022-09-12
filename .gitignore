@@ -1,5 +1,6 @@
 .venv/*
 .vscode/settings.json
+.vscode/*.log
 log.txt
 build/*
 dxc

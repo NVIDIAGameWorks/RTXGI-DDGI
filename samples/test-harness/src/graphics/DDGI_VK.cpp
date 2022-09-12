@@ -1368,8 +1368,8 @@ namespace Graphics
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
                 assert(RTXGI_VERSION::minor == 2);
-                assert(RTXGI_VERSION::revision == 12);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.12") == 0);
+                assert(RTXGI_VERSION::revision == 13);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.13") == 0);
 
                 // Reset the command list before initialization
                 CHECK(ResetCmdList(vk), "reset command list!", log);

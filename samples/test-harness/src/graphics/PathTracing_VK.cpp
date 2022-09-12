@@ -90,8 +90,7 @@ namespace Graphics
                 group.chs.filepath = shaderPath.c_str();
                 group.chs.entryPoint = L"CHS_LOD0";
                 group.chs.exportName = L"PathTraceCHS";
-                group.chs.targetProfile = L"lib_6_4";
-                group.chs.arguments = { L"-spirv", L"-T lib_6_4", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                group.chs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
                 CHECK(Shaders::Compile(vk.shaderCompiler, group.chs, true), "compile path tracing closest hit shader!\n", log);
 
                 // Load and compile the AHS
@@ -99,8 +98,7 @@ namespace Graphics
                 group.ahs.filepath = shaderPath.c_str();
                 group.ahs.entryPoint = L"AHS_LOD0";
                 group.ahs.exportName = L"PathTraceAHS";
-                group.ahs.targetProfile = L"lib_6_4";
-                group.ahs.arguments = { L"-spirv", L"-T lib_6_4", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                group.ahs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
                 CHECK(Shaders::Compile(vk.shaderCompiler, group.ahs, true), "compile path tracing any hit shader!\n", log);
 
                 return true;

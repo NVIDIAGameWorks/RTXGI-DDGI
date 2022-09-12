@@ -32,14 +32,14 @@ namespace Graphics
                 // Load and compile the vertex shader
                 resources.shaders.vs.filepath = shaderPath.c_str();
                 resources.shaders.vs.entryPoint = L"VS";
-                resources.shaders.vs.targetProfile = L"vs_6_5";
+                resources.shaders.vs.targetProfile = L"vs_6_4";
                 resources.shaders.vs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
                 CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.vs, true), "compile composition vertex shader!\n", log);
 
                 // Load and compile the pixel shader
                 resources.shaders.ps.filepath = shaderPath.c_str();
                 resources.shaders.ps.entryPoint = L"PS";
-                resources.shaders.ps.targetProfile = L"ps_6_5";
+                resources.shaders.ps.targetProfile = L"ps_6_4";
                 resources.shaders.ps.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
                 CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.ps, true), "compile composition pixel shader!\n", log);
 

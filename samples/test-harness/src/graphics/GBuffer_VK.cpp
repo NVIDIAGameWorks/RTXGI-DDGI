@@ -55,8 +55,7 @@ namespace Graphics
                 group.chs.filepath = shaderPath.c_str();
                 group.chs.entryPoint = L"CHS_PRIMARY";
                 group.chs.exportName = L"GBufferCHS";
-                group.chs.targetProfile = L"lib_6_4";
-                group.chs.arguments = { L"-spirv", L"-T lib_6_4", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                group.chs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
                 CHECK(Shaders::Compile(vk.shaderCompiler, group.chs, true), "compile GBuffer closest hit shader!\n", log);
 
                 // Load and compile the AHS
@@ -64,8 +63,7 @@ namespace Graphics
                 group.ahs.filepath = shaderPath.c_str();
                 group.ahs.entryPoint = L"AHS_PRIMARY";
                 group.ahs.exportName = L"GBufferAHS";
-                group.ahs.targetProfile = L"lib_6_4";
-                group.ahs.arguments = { L"-spirv", L"-T lib_6_4", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                group.ahs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
                 CHECK(Shaders::Compile(vk.shaderCompiler, group.ahs, true), "compile GBuffer any hit shader!\n", log);
 
                 return true;

@@ -98,10 +98,10 @@ struct DDGIVolumeDescGPU
     bool     probeRelocationEnabled;             // whether probe relocation is enabled for this volume
     bool     probeClassificationEnabled;         // whether probe classification is enabled for this volume
 
-#ifndef HLSL
+#ifndef HLSL // CPU only
     rtxgi::DDGIVolumeDescGPUPacked GetPackedData()
     {
-        rtxgi::DDGIVolumeDescGPUPacked data;
+        rtxgi::DDGIVolumeDescGPUPacked data = {};
         data.origin = origin;
         data.probeHysteresis = probeHysteresis;
         data.rotation = rotation;
@@ -115,7 +115,7 @@ struct DDGIVolumeDescGPU
         data.packed0 = (uint32_t)probeCounts.x;
         data.packed0 |= (uint32_t)probeCounts.y << 8;
         data.packed0 |= (uint32_t)probeCounts.z << 16;
-      //data.packed0 |= 8 bits unused
+      //data.packed0, 8 bits unused
 
         data.probeIrradianceEncodingGamma = probeIrradianceEncodingGamma;
         data.probeIrradianceThreshold = probeIrradianceThreshold;
@@ -131,36 +131,36 @@ struct DDGIVolumeDescGPU
         data.packed2 |= (uint32_t)probeNumDistanceTexels << 24;
 
         // Probe Scroll Offsets
-        data.packed3  = (uint32_t)abs(probeScrollOffsets.x);
-        data.packed3 |= ((uint32_t)(probeScrollOffsets.x < 0) << 15);
-        data.packed3 |= (uint32_t)abs(probeScrollOffsets.y) << 16;
-        data.packed3 |= ((uint32_t)(probeScrollOffsets.y < 0) << 31);
-        data.packed4  = (uint32_t)abs(probeScrollOffsets.z);
-        data.packed4 |= ((uint32_t)(probeScrollOffsets.z < 0) << 15);
+        data.packed3 = (data.packed3 & ~0x7FFF)     | abs(probeScrollOffsets.x);
+        data.packed3 = (data.packed3 & ~0x8000)     | ((probeScrollOffsets.x < 0) << 15);
+        data.packed3 = (data.packed3 & ~0x10000)    | abs(probeScrollOffsets.y) << 16;
+        data.packed3 = (data.packed3 & ~0x80000000) | ((probeScrollOffsets.y < 0) << 31);
+        data.packed4 = (data.packed4 & ~0x7FFF)     | abs(probeScrollOffsets.z);
+        data.packed4 = (data.packed4 & ~0x8000)     | ((probeScrollOffsets.z < 0) << 15);
 
         // Feature Bits
-        data.packed4 |= movementType << 16;
-        data.packed4 |= probeRayDataFormat << 17;
-        data.packed4 |= probeIrradianceFormat << 18;
-        data.packed4 |= (uint32_t)probeRelocationEnabled << 19;
-        data.packed4 |= (uint32_t)probeClassificationEnabled << 20;
-        data.packed4 |= (uint32_t)probeScrollClear[0] << 21;
-        data.packed4 |= (uint32_t)probeScrollClear[1] << 22;
-        data.packed4 |= (uint32_t)probeScrollClear[2] << 23;
-        data.packed4 |= (uint32_t)(probeScrollDirections[0]) << 24;
-        data.packed4 |= (uint32_t)(probeScrollDirections[1]) << 25;
-        data.packed4 |= (uint32_t)(probeScrollDirections[2]) << 26;
-      //data.packed4 |= 5 bits unused
+        data.packed4 = (data.packed4 & ~0x10000)   | (movementType << 16);
+        data.packed4 = (data.packed4 & ~0x20000)   | (probeRayDataFormat << 17);
+        data.packed4 = (data.packed4 & ~0xC0000)   | (probeIrradianceFormat << 18);
+        data.packed4 = (data.packed4 & ~0x100000)  | (probeRelocationEnabled << 20);
+        data.packed4 = (data.packed4 & ~0x200000)  | (probeClassificationEnabled << 21);
+        data.packed4 = (data.packed4 & ~0x400000)  | (probeScrollClear[0] << 22);
+        data.packed4 = (data.packed4 & ~0x800000)  | (probeScrollClear[1] << 23);
+        data.packed4 = (data.packed4 & ~0x1000000) | (probeScrollClear[2] << 24);
+        data.packed4 = (data.packed4 & ~0x2000000) | (probeScrollDirections[0] << 25);
+        data.packed4 = (data.packed4 & ~0x4000000) | (probeScrollDirections[1] << 26);
+        data.packed4 = (data.packed4 & ~0x8000000) | (probeScrollDirections[2] << 27);
+      //data.packed4, 4 bits unused
 
         return data;
     }
-#endif
+#endif // ifndef HLSL
 };
 
-#ifdef HLSL
+#ifdef HLSL // GPU
 DDGIVolumeDescGPU UnpackDDGIVolumeDescGPU(DDGIVolumeDescGPUPacked input)
 {
-    DDGIVolumeDescGPU output;
+    DDGIVolumeDescGPU output = (DDGIVolumeDescGPU)0;
     output.origin = input.origin;
     output.probeHysteresis = input.probeHysteresis;
     output.rotation = input.rotation;
@@ -201,15 +201,15 @@ DDGIVolumeDescGPU UnpackDDGIVolumeDescGPU(DDGIVolumeDescGPUPacked input)
     // Feature Bits
     output.movementType = (input.packed4 >> 16) & 0x00000001;
     output.probeRayDataFormat = (uint)((input.packed4 >> 17) & 0x00000001);
-    output.probeIrradianceFormat = (uint)((input.packed4 >> 18) & 0x00000001);
-    output.probeRelocationEnabled = (bool)((input.packed4 >> 19) & 0x00000001);
-    output.probeClassificationEnabled = (bool)((input.packed4 >> 20) & 0x00000001);
-    output.probeScrollClear[0] = (bool)((input.packed4 >> 21) & 0x00000001);
-    output.probeScrollClear[1] = (bool)((input.packed4 >> 22) & 0x00000001);
-    output.probeScrollClear[2] = (bool)((input.packed4 >> 23) & 0x00000001);
-    output.probeScrollDirections[0] = (bool)((input.packed4 >> 24) & 0x00000001);
-    output.probeScrollDirections[1] = (bool)((input.packed4 >> 25) & 0x00000001);
-    output.probeScrollDirections[2] = (bool)((input.packed4 >> 26) & 0x00000001);
+    output.probeIrradianceFormat = (uint)((input.packed4 >> 18) & 0x00000003);
+    output.probeRelocationEnabled = (bool)((input.packed4 >> 20) & 0x00000001);
+    output.probeClassificationEnabled = (bool)((input.packed4 >> 21) & 0x00000001);
+    output.probeScrollClear[0] = (bool)((input.packed4 >> 22) & 0x00000001);
+    output.probeScrollClear[1] = (bool)((input.packed4 >> 23) & 0x00000001);
+    output.probeScrollClear[2] = (bool)((input.packed4 >> 24) & 0x00000001);
+    output.probeScrollDirections[0] = (bool)((input.packed4 >> 25) & 0x00000001);
+    output.probeScrollDirections[1] = (bool)((input.packed4 >> 26) & 0x00000001);
+    output.probeScrollDirections[2] = (bool)((input.packed4 >> 27) & 0x00000001);
 
     return output;
 }

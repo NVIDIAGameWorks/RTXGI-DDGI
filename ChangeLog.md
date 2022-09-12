@@ -1,5 +1,16 @@
 # RTXGI SDK Change Log
 
+## 1.2.13
+
+### SDK
+Bug Fixes:
+- Fixes a bit packing issue in `DDGIVolumeDescGPU.h` 
+  - This bug causes the irradiance texture format to be improperly packed and unpacked. This problem may also affect feature bits, depending on which ones are set.
+
+### Test Harness
+Bug Fixes:
+- Fixes Vulkan validation layer errors related to the ray query extension not being enabled
+
 ## 1.2.12a
 
 ### SDK

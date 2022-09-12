@@ -330,6 +330,7 @@ namespace Graphics
             {
                 VK_KHR_SWAPCHAIN_EXTENSION_NAME,
                 VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+                VK_KHR_RAY_QUERY_EXTENSION_NAME,
                 VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
                 VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
                 VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
@@ -353,9 +354,14 @@ namespace Graphics
             bufferDeviceAdressFeatures.pNext = &robusness2Features;
             bufferDeviceAdressFeatures.bufferDeviceAddress = VK_TRUE;
 
+            VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {};
+            rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+            rayQueryFeatures.pNext = &bufferDeviceAdressFeatures;
+            rayQueryFeatures.rayQuery = VK_TRUE;
+
             VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures = {};
             accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-            accelerationStructureFeatures.pNext = &bufferDeviceAdressFeatures;
+            accelerationStructureFeatures.pNext = &rayQueryFeatures;
             accelerationStructureFeatures.accelerationStructure = VK_TRUE;
             accelerationStructureFeatures.accelerationStructureCaptureReplay = VK_FALSE;
             accelerationStructureFeatures.accelerationStructureIndirectBuild = VK_FALSE;
