@@ -14,21 +14,23 @@
 #include "../../Common.hlsl"
 #include "../../Platform.hlsl"
 #include "../../../include/rtxgi/Defines.h"
-#include "../../../include/rtxgi/ddgi/DDGIConstants.h"
+#include "../../../include/rtxgi/ddgi/DDGIRootConstants.h"
 #include "../../../include/rtxgi/ddgi/DDGIVolumeDescGPU.h"
 
 //------------------------------------------------------------------------
 // Defines
 //------------------------------------------------------------------------
 
-// Probe ray data texture formats
-#define RTXGI_DDGI_FORMAT_PROBE_RAY_DATA_R32G32_FLOAT 0
-#define RTXGI_DDGI_FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT 1
+// Bindless resource implementation type
+#define RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS 0
+#define RTXGI_BINDLESS_TYPE_DESCRIPTOR_HEAP 1
 
-// Probe irradiance texture formats
-#define RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R10G10B10A2_FLOAT 0
-#define RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R16G16B16A16_FLOAT 1
-#define RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R32G32B32A32_FLOAT 2
+// Texture formats (matches EDDGIVolumeTextureFormat)
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_U32 0
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F16x2 1
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F16x4 2
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F32x2 3
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F32x4 4
 
 // The number of fixed rays that are used by probe relocation and classification.
 // These rays directions are always the same to produce temporally stable results.

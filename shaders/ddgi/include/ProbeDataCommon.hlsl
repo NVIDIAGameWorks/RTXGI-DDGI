@@ -17,11 +17,11 @@
 // Probe Data Texture Write Helpers
 //------------------------------------------------------------------------
 
-/*
-* Normalizes the world-space offset and writes it to the probe data texture.
-* Probe Relocation limits this range to [0.f, 0.45f).
-*/
-void DDGIStoreProbeDataOffset(RWTexture2D<float4> probeData, uint2 coords, float3 wsOffset, DDGIVolumeDescGPU volume)
+/**
+ * Normalizes the world-space offset and writes it to the probe data texture.
+ * Probe Relocation limits this range to [0.f, 0.45f).
+ */
+void DDGIStoreProbeDataOffset(RWTexture2DArray<float4> probeData, uint3 coords, float3 wsOffset, DDGIVolumeDescGPU volume)
 {
     probeData[coords].xyz = wsOffset / volume.probeSpacing;
 }
@@ -31,17 +31,17 @@ void DDGIStoreProbeDataOffset(RWTexture2D<float4> probeData, uint2 coords, float
 //------------------------------------------------------------------------
 
 /**
- * Reads the probe's position offset (from a Texture2D) and converts it to a world-space offset.
+ * Reads the probe's position offset (from a Texture2DArray) and converts it to a world-space offset.
  */
-float3 DDGILoadProbeDataOffset(Texture2D<float4> probeData, uint2 coords, DDGIVolumeDescGPU volume)
+float3 DDGILoadProbeDataOffset(Texture2DArray<float4> probeData, uint3 coords, DDGIVolumeDescGPU volume)
 {
-    return probeData.Load(int3(coords, 0)).xyz * volume.probeSpacing;
+    return probeData.Load(int4(coords, 0)).xyz * volume.probeSpacing;
 }
 
 /**
- * Reads the probe's position offset (from a RWTexture2D) and converts it to a world-space offset.
+ * Reads the probe's position offset (from a RWTexture2DArray) and converts it to a world-space offset.
  */
-float3 DDGILoadProbeDataOffset(RWTexture2D<float4> probeData, uint2 coords, DDGIVolumeDescGPU volume)
+float3 DDGILoadProbeDataOffset(RWTexture2DArray<float4> probeData, uint3 coords, DDGIVolumeDescGPU volume)
 {
     return probeData[coords].xyz * volume.probeSpacing;
 }

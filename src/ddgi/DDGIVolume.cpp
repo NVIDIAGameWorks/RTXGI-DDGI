@@ -11,6 +11,9 @@
 #include "rtxgi/ddgi/DDGIVolume.h"
 
 #include <algorithm>
+#include <assert.h>
+#include <cmath>
+#include <random>
 
 namespace rtxgi
 {
@@ -22,8 +25,8 @@ namespace rtxgi
     void SetInsertPerfMarkers(bool value) { bInsertPerfMarkers = value; }
 
     int GetDDGIVolumeNumRTVDescriptors() { return 2; }
-    int GetDDGIVolumeNumSRVDescriptors() { return 4; }
-    int GetDDGIVolumeNumUAVDescriptors() { return 4; }
+    int GetDDGIVolumeNumTex2DArrayDescriptors() { return 4; }
+    int GetDDGIVolumeNumResourceDescriptors() { return 2 * GetDDGIVolumeNumTex2DArrayDescriptors(); } // Multiplied by 2 to account for UAV *and* SRV descriptors
 
     bool ValidateShaderBytecode(const ShaderBytecode& bytecode)
     {
@@ -31,40 +34,45 @@ namespace rtxgi
         return true;
     }
 
-    void GetDDGIVolumeProbeCounts(const DDGIVolumeDesc& desc, uint32_t& probeCountX, uint32_t& probeCountY)
+    void GetDDGIVolumeProbeCounts(const DDGIVolumeDesc& desc, uint32_t& probeCountX, uint32_t& probeCountY, uint32_t& probeCountZ)
     {
     #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
-        probeCountX = (uint32_t)(desc.probeCounts.x * desc.probeCounts.y);
+        probeCountX = (uint32_t)desc.probeCounts.x;
         probeCountY = (uint32_t)desc.probeCounts.z;
+        probeCountZ = (uint32_t)desc.probeCounts.y;
     #elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
-        probeCountX = (uint32_t)(desc.probeCounts.y * desc.probeCounts.z);
+        probeCountX = (uint32_t)desc.probeCounts.y;
         probeCountY = (uint32_t)desc.probeCounts.x;
+        probeCountZ = (uint32_t)desc.probeCounts.z;
     #elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
-        probeCountX = (uint32_t)(desc.probeCounts.x * desc.probeCounts.z);
+        probeCountX = (uint32_t)desc.probeCounts.x;
         probeCountY = (uint32_t)desc.probeCounts.y;
+        probeCountZ = (uint32_t)desc.probeCounts.z;
     #endif
     }
 
-    void GetDDGIVolumeTextureDimensions(const DDGIVolumeDesc& desc, EDDGIVolumeTextureType type, uint32_t& width, uint32_t& height)
+    /**
+     * Get the number of texels in each dimension of the volume's texture resources.
+     */
+    void GetDDGIVolumeTextureDimensions(const DDGIVolumeDesc& desc, EDDGIVolumeTextureType type, uint32_t& width, uint32_t& height, uint32_t& arraySize)
     {
+        GetDDGIVolumeProbeCounts(desc, width, height, arraySize);
         if (type == EDDGIVolumeTextureType::RayData)
         {
+            height = (uint32_t)(width * height);
             width = (uint32_t)desc.probeNumRays;
-            height = (uint32_t)(desc.probeCounts.x * desc.probeCounts.y * desc.probeCounts.z);
         }
         else
         {
-            GetDDGIVolumeProbeCounts(desc, width, height);
-
             if (type == EDDGIVolumeTextureType::Irradiance)
             {
-                width *= (uint32_t)(desc.probeNumIrradianceTexels + 2);
-                height *= (uint32_t)(desc.probeNumIrradianceTexels + 2);
+                width *= (uint32_t)(desc.probeNumIrradianceTexels);
+                height *= (uint32_t)(desc.probeNumIrradianceTexels);
             }
             else if (type == EDDGIVolumeTextureType::Distance)
             {
-                width *= (uint32_t)(desc.probeNumDistanceTexels + 2);
-                height *= (uint32_t)(desc.probeNumDistanceTexels + 2);
+                width *= (uint32_t)(desc.probeNumDistanceTexels);
+                height *= (uint32_t)(desc.probeNumDistanceTexels);
             }
         }
     }
@@ -82,6 +90,44 @@ namespace rtxgi
         if(m_desc.movementType == EDDGIVolumeMovementType::Scrolling) ComputeScrolling();
     }
 
+    void DDGIVolumeBase::ValidatePackedData(const DDGIVolumeDescGPUPacked packed) const
+    {
+        DDGIVolumeDescGPU l = UnpackDDGIVolumeDescGPU(packed);
+        DDGIVolumeDescGPU r = GetDescGPU();
+
+        // Packed0
+        assert(l.probeCounts.x == r.probeCounts.x);
+        assert(l.probeCounts.y == r.probeCounts.y);
+        assert(l.probeCounts.z == r.probeCounts.z);
+
+        // Packed1, expect precision loss going from FP32->FP16->FP32
+        assert(abs(l.probeRandomRayBackfaceThreshold - r.probeRandomRayBackfaceThreshold) <= (1.f / 65536.f));
+        assert(abs(l.probeFixedRayBackfaceThreshold - r.probeFixedRayBackfaceThreshold) <= (1.f / 65536.f));
+
+        // Packed2
+        assert(l.probeNumRays == r.probeNumRays);
+        assert(l.probeNumIrradianceInteriorTexels == r.probeNumIrradianceInteriorTexels);
+        assert(l.probeNumDistanceInteriorTexels == r.probeNumDistanceInteriorTexels);
+
+        // Packed3
+        assert(l.probeScrollOffsets.x == r.probeScrollOffsets.x);
+        assert(l.probeScrollOffsets.y == r.probeScrollOffsets.y);
+
+        // Packed4
+        assert(l.probeScrollOffsets.z == r.probeScrollOffsets.z);
+        assert(l.movementType == r.movementType);
+        assert(l.probeRayDataFormat == r.probeRayDataFormat);
+        assert(l.probeIrradianceFormat == r.probeIrradianceFormat);
+        assert(l.probeRelocationEnabled == r.probeRelocationEnabled);
+        assert(l.probeClassificationEnabled == r.probeClassificationEnabled);
+        assert(l.probeScrollClear[0] == r.probeScrollClear[0]);
+        assert(l.probeScrollClear[1] == r.probeScrollClear[1]);
+        assert(l.probeScrollClear[2] == r.probeScrollClear[2]);
+        assert(l.probeScrollDirections[0] == r.probeScrollDirections[0]);
+        assert(l.probeScrollDirections[1] == r.probeScrollDirections[1]);
+        assert(l.probeScrollDirections[2] == r.probeScrollDirections[2]);
+    }
+
     //------------------------------------------------------------------------
     // Getters
     //------------------------------------------------------------------------
@@ -96,8 +142,8 @@ namespace rtxgi
         descGPU.probeSpacing = m_desc.probeSpacing;
         descGPU.probeCounts = m_desc.probeCounts;
         descGPU.probeNumRays = m_desc.probeNumRays;
-        descGPU.probeNumIrradianceTexels = m_desc.probeNumIrradianceTexels;
-        descGPU.probeNumDistanceTexels = m_desc.probeNumDistanceTexels;
+        descGPU.probeNumIrradianceInteriorTexels = m_desc.probeNumIrradianceInteriorTexels;
+        descGPU.probeNumDistanceInteriorTexels = m_desc.probeNumDistanceInteriorTexels;
         descGPU.probeHysteresis = m_desc.probeHysteresis;
         descGPU.probeMaxRayDistance = m_desc.probeMaxRayDistance;
         descGPU.probeNormalBias = m_desc.probeNormalBias;
@@ -118,8 +164,8 @@ namespace rtxgi
         descGPU.probeScrollOffsets.y = std::min(32767, abs(m_probeScrollOffsets.y)) * rtxgi::Sign(m_probeScrollOffsets.y);
         descGPU.probeScrollOffsets.z = std::min(32767, abs(m_probeScrollOffsets.z)) * rtxgi::Sign(m_probeScrollOffsets.z);
 
-        descGPU.probeRayDataFormat = m_desc.probeRayDataFormat;
-        descGPU.probeIrradianceFormat = m_desc.probeIrradianceFormat;
+        descGPU.probeRayDataFormat = static_cast<uint32_t>(m_desc.probeRayDataFormat);
+        descGPU.probeIrradianceFormat = static_cast<uint32_t>(m_desc.probeIrradianceFormat);
         descGPU.probeRelocationEnabled = m_desc.probeRelocationEnabled;
         descGPU.probeClassificationEnabled = m_desc.probeClassificationEnabled;
         descGPU.probeScrollClear[0] = m_probeScrollClear[0];
@@ -132,9 +178,11 @@ namespace rtxgi
         return descGPU;
     }
 
-    DDGIVolumeDescGPUPacked DDGIVolumeBase::GetDescGPUPacked() const
+    DDGIVolumeDescGPUPacked DDGIVolumeBase::GetDescGPUPacked() const { return PackDDGIVolumeDescGPU(GetDescGPU()); }
+
+    void DDGIVolumeBase::GetRayDispatchDimensions(uint32_t& width, uint32_t& height, uint32_t& depth) const
     {
-        return GetDescGPU().GetPackedData();
+        GetDDGIVolumeTextureDimensions(m_desc, EDDGIVolumeTextureType::RayData, width, height, depth);
     }
 
     float3 DDGIVolumeBase::GetOrigin() const
@@ -144,6 +192,15 @@ namespace rtxgi
         return { m_desc.origin.x + ((float)m_probeScrollOffsets.x * m_desc.probeSpacing.x),
                  m_desc.origin.y + ((float)m_probeScrollOffsets.y * m_desc.probeSpacing.y),
                  m_desc.origin.z + ((float)m_probeScrollOffsets.z * m_desc.probeSpacing.z) };
+    }
+
+    uint32_t DDGIVolumeBase::GetTexture2DArraySize() const
+    {
+    #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT
+        return (uint32_t)m_desc.probeCounts.y;
+    #elif RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
+        return (uint32_t)m_desc.probeCounts.z;
+    #endif
     }
 
     float3 DDGIVolumeBase::GetProbeWorldPosition(int probeIndex) const
@@ -162,32 +219,34 @@ namespace rtxgi
         float3 extent = float3(m_desc.probeSpacing * (m_desc.probeCounts - 1)) / 2.f;
         AABB a = { (origin - extent), (origin + extent) };
 
+        // Early out: no rotation
         if (m_desc.eulerAngles == float3{ 0.f, 0.f, 0.f })
         {
             return a;
         }
-        else
+
+        // Real-Time Collision Detection by Christer Ericson
+        // 4.2.6 AABB Recomputed from Rotated AABB
+        AABB b = {};
+        for (size_t i = 0; i < 3; ++i)
         {
-            // Real-Time Collision Detection by Christer Ericson
-            // 4.2.6 AABB Recomputed from Rotated AABB
-            AABB b = {};
-            for (size_t i = 0; i < 3; ++i)
+            for (size_t j = 0; j < 3; j++)
             {
-                for (size_t j = 0; j < 3; j++) {
-                    float e = m_rotationMatrix[i][j] * a.min[j];
-                    float f = m_rotationMatrix[i][j] * a.max[j];
-                    if (e < f) {
-                        b.min[i] += e;
-                        b.max[i] += f;
-                    }
-                    else {
-                        b.min[i] += f;
-                        b.max[i] += e;
-                    }
+                float e = m_rotationMatrix[i][j] * a.min[j];
+                float f = m_rotationMatrix[i][j] * a.max[j];
+                if (e < f)
+                {
+                    b.min[i] += e;
+                    b.max[i] += f;
+                }
+                else
+                {
+                    b.min[i] += f;
+                    b.max[i] += e;
                 }
             }
-            return b;
         }
+        return b;
     }
 
     OBB DDGIVolumeBase::GetOrientedBoundingBox() const
@@ -198,6 +257,52 @@ namespace rtxgi
         obb.e = float3(m_desc.probeSpacing * (m_desc.probeCounts - 1)) / 2.f;
 
         return obb;
+    }
+
+    uint32_t DDGIVolumeBase::GetGPUMemoryUsedInBytes() const
+    {
+        uint32_t bytesPerVolume = 0;
+
+        uint32_t numRayDataBytesPerTexel = 0;
+        uint32_t numIrradianceBytesPerTexel = 0;
+        uint32_t numDistanceBytesPerTexel = 0;
+        uint32_t numProbeDataBytesPerTexel = 0;
+
+        // Compute the number of irradiance and distance texels
+        uint32_t numIrradianceTexelsPerProbe = (m_desc.probeNumIrradianceTexels * m_desc.probeNumIrradianceTexels);
+        uint32_t numDistanceTexelsPerProbe = (m_desc.probeNumDistanceTexels * m_desc.probeNumDistanceTexels);
+
+        // Get the number of bytes per ray data texel
+        if (m_desc.probeRayDataFormat == EDDGIVolumeTextureFormat::F32x2) numRayDataBytesPerTexel = 8;
+        else if (m_desc.probeRayDataFormat == EDDGIVolumeTextureFormat::F32x4) numRayDataBytesPerTexel = 16;
+
+        // Get the number of bytes per irradiance texel
+        if (m_desc.probeIrradianceFormat == EDDGIVolumeTextureFormat::U32) numIrradianceBytesPerTexel = 4;
+        else if (m_desc.probeIrradianceFormat == EDDGIVolumeTextureFormat::F16x4) numIrradianceBytesPerTexel = 8;
+        else if (m_desc.probeIrradianceFormat == EDDGIVolumeTextureFormat::F32x4) numIrradianceBytesPerTexel = 16;
+
+        // Get the number of bytes per distance texel
+        if (m_desc.probeDistanceFormat == EDDGIVolumeTextureFormat::F16x2) numDistanceBytesPerTexel = 4;
+        else if (m_desc.probeIrradianceFormat == EDDGIVolumeTextureFormat::F32x2) numDistanceBytesPerTexel = 8;
+
+        // Get the number of bytes per probe data texel
+        if (m_desc.probeDataFormat == EDDGIVolumeTextureFormat::F16x4) numProbeDataBytesPerTexel = 8;
+        else if (m_desc.probeDataFormat == EDDGIVolumeTextureFormat::F32x4) numProbeDataBytesPerTexel = 16;
+
+        // Compute the number of bytes per probe
+        uint32_t bytesPerProbe = 0;
+        bytesPerProbe += GetNumRaysPerProbe() * numRayDataBytesPerTexel;
+        bytesPerProbe += (numIrradianceTexelsPerProbe * numIrradianceBytesPerTexel);
+        bytesPerProbe += (numDistanceTexelsPerProbe * numDistanceBytesPerTexel);
+        bytesPerProbe += numProbeDataBytesPerTexel;
+
+        // Add the per probe memory use
+        bytesPerVolume += GetNumProbes() * bytesPerProbe;
+
+        // Add the memory used for the GPU-side DDGIVolumeDescGPUPacked (128B)
+        bytesPerVolume += (uint32_t)sizeof(DDGIVolumeDescGPUPacked);
+
+        return bytesPerVolume;
     }
 
     //------------------------------------------------------------------------
@@ -227,7 +332,7 @@ namespace rtxgi
         if(m_desc.movementType == EDDGIVolumeMovementType::Default)
         {
             m_desc.eulerAngles = eulerAngles;
-            m_rotationMatrix = EulerAnglesToRotationMatrixYXZ(eulerAngles);
+            m_rotationMatrix = EulerAnglesToRotationMatrix(eulerAngles);
             m_rotationQuaternion = RotationMatrixToQuaternion(m_rotationMatrix);
         }
     }
@@ -237,6 +342,7 @@ namespace rtxgi
     //------------------------------------------------------------------------
 
     static std::uniform_real_distribution<float> s_distribution(0.f, 1.f);
+    static std::mt19937 m_rng;
 
     void DDGIVolumeBase::SeedRNG(const int seed)
     {

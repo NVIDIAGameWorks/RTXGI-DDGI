@@ -8,31 +8,31 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#ifndef RTXGI_DDGI_CONSTANTS_H
-#define RTXGI_DDGI_CONSTANTS_H
+#ifndef RTXGI_DDGI_ROOT_CONSTANTS_H
+#define RTXGI_DDGI_ROOT_CONSTANTS_H
 
 #ifndef HLSL
 #include "../Types.h"
 using namespace rtxgi;
 #endif
 
-struct DDGIConstants
+struct DDGIRootConstants
 {
-    uint  volumeIndex;
-    uint  uavOffset;
-    uint  srvOffset;
+    uint volumeIndex;
+    uint volumeConstantsIndex;
+    uint volumeResourceIndicesIndex;
 
 #ifndef HLSL
-    uint32_t data[3] = {0, 0, 0};
+    uint32_t data[4] = {};
     static uint32_t GetNum32BitValues() { return 3; }
-    static uint32_t GetSizeInBytes() { return 12; }
+    static uint32_t GetSizeInBytes() { return GetNum32BitValues() * 4; }
     static uint32_t GetAlignedNum32BitValues() { return 4; }
-    static uint32_t GetAlignedSizeInBytes() { return 16; }
+    static uint32_t GetAlignedSizeInBytes() { return GetAlignedNum32BitValues() * 4; }
     uint32_t* GetData()
     {
         data[0] = volumeIndex;
-        data[1] = uavOffset;
-        data[2] = srvOffset;
+        data[1] = volumeConstantsIndex;
+        data[2] = volumeResourceIndicesIndex;
       //data[3] = 0; // empty, alignment padding
 
         return data;
@@ -40,4 +40,4 @@ struct DDGIConstants
 #endif
 };
 
-#endif // RTXGI_DDGI_CONSTANTS_H
+#endif // RTXGI_DDGI_ROOT_CONSTANTS_H

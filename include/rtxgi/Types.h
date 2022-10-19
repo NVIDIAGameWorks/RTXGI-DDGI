@@ -186,6 +186,15 @@ namespace rtxgi
         {
             return *(reinterpret_cast<const float3*>(this) + idx);
         }
+
+        float3x3 operator*(const float3x3 in) const
+        {
+            return float3x3 {
+                float3{ (r0.x * in.r0.x) + (r0.y * in.r1.x) + (r0.z * in.r2.x), (r0.x * in.r0.y) + (r0.y * in.r1.y) + (r0.z * in.r2.y), (r0.x * in.r0.z) + (r0.y * in.r1.z) + (r0.z * in.r2.z) },
+                float3{ (r1.x * in.r0.x) + (r1.y * in.r1.x) + (r1.z * in.r2.x), (r1.x * in.r0.y) + (r1.y * in.r1.y) + (r1.z * in.r2.y), (r1.x * in.r0.z) + (r1.y * in.r1.z) + (r1.z * in.r2.z) },
+                float3{ (r2.x * in.r0.x) + (r2.y * in.r1.x) + (r2.z * in.r2.x), (r2.x * in.r0.y) + (r2.y * in.r1.y) + (r2.z * in.r2.y), (r2.x * in.r0.z) + (r2.y * in.r1.z) + (r2.z * in.r2.z) },
+            };
+        }
     };
 
     struct float4x4

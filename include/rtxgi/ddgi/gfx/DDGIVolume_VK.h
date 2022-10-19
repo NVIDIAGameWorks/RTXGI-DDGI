@@ -18,6 +18,23 @@ namespace rtxgi
 {
     namespace vulkan
     {
+
+        enum class EResourceViewType
+        {
+            UAV = 0,
+            SRV,
+            COUNT
+        };
+
+        enum class EDDGIVolumeBindings
+        {
+            Constants = 0,
+            RayData,
+            ProbeIrradiance,
+            ProbeDistance,
+            ProbeData,
+        };
+
         //------------------------------------------------------------------------
         // Managed Resource Mode (SDK manages volume resources)
         //------------------------------------------------------------------------
@@ -45,11 +62,6 @@ namespace rtxgi
             // Shader bytecode
             ShaderBytecode               probeBlendingIrradianceCS;                          // Probe blending (irradiance) compute shader bytecode
             ShaderBytecode               probeBlendingDistanceCS;                            // Probe blending (distance) compute shader bytecode
-            ShaderBytecode               probeBorderRowUpdateIrradianceCS;                   // Probe border row update (irradiance) compute shader bytecode
-            ShaderBytecode               probeBorderRowUpdateDistanceCS;                     // Probe border row update (distance) compute shader bytecode
-            ShaderBytecode               probeBorderColumnUpdateIrradianceCS;                // Probe border column update (irradiance) compute shader bytecode
-            ShaderBytecode               probeBorderColumnUpdateDistanceCS;                  // Probe border column update (distance) compute shader bytecode
-
             ProbeRelocationBytecode      probeRelocation;                                    // [Optional] Probe Relocation bytecode
             ProbeClassificationBytecode  probeClassification;                                // [Optional] Probe Classification bytecode
         };
@@ -80,55 +92,54 @@ namespace rtxgi
         {
             bool                        enabled = false;                                    // Enable or disable unmanaged resources mode
 
-            // Pipeline Layout and Descriptor Set
             VkPipelineLayout            pipelineLayout = nullptr;                           // Pipeline layout
             VkDescriptorSet             descriptorSet = nullptr;                            // Descriptor set
 
-            // Textures
-            VkImage                     probeRayData = nullptr;                             // Probe ray data, radiance (RGB) and hit distance (A) texture
-            VkImage                     probeIrradiance = nullptr;                          // Probe irradiance texture, encoded with a high gamma curve
-            VkImage                     probeDistance = nullptr;                            // Probe distance texture, R: mean distance, G: mean distance^2
-            VkImage                     probeData = nullptr;                                // Probe data, relocation world-space offsets (XYZ) and classification (W) states texture
+            // Texture Resources
+            VkImage                     probeRayData = nullptr;                             // Probe ray data texture array - RGB: radiance | A: hit distance
+            VkImage                     probeIrradiance = nullptr;                          // Probe irradiance texture array - RGB: irradiance, encoded with a high gamma curve
+            VkImage                     probeDistance = nullptr;                            // Probe distance texture array - R: mean distance | G: mean distance^2
+            VkImage                     probeData = nullptr;                                // Probe data texture array - XYZ: world-space relocation offsets | W: classification state
 
             // Texture Memory
-            VkDeviceMemory              probeRayDataMemory = nullptr;                       // Probe ray data device memory
-            VkDeviceMemory              probeIrradianceMemory = nullptr;                    // Probe irradiance texture device memory
-            VkDeviceMemory              probeDistanceMemory = nullptr;                      // Probe distance texture device memory
-            VkDeviceMemory              probeDataMemory = nullptr;                          // Probe data texture device memory
+            VkDeviceMemory              probeRayDataMemory = nullptr;                       // Probe ray data texture array device memory
+            VkDeviceMemory              probeIrradianceMemory = nullptr;                    // Probe irradiance texture array device memory
+            VkDeviceMemory              probeDistanceMemory = nullptr;                      // Probe distance texture array device memory
+            VkDeviceMemory              probeDataMemory = nullptr;                          // Probe data texture array device memory
 
             // Texture Views
-            VkImageView                 probeRayDataView = nullptr;                         // Probe ray data texture view
-            VkImageView                 probeIrradianceView = nullptr;                      // Probe irradiance texture view
-            VkImageView                 probeDistanceView = nullptr;                        // Probe distance texture view
-            VkImageView                 probeDataView = nullptr;                            // Probe data texture view
+            VkImageView                 probeRayDataView = nullptr;                         // Probe ray data texture array view
+            VkImageView                 probeIrradianceView = nullptr;                      // Probe irradiance texture array view
+            VkImageView                 probeDistanceView = nullptr;                        // Probe distance texture array view
+            VkImageView                 probeDataView = nullptr;                            // Probe data texture array view
 
             // Shader Modules
             VkShaderModule              probeBlendingIrradianceModule = nullptr;             // Probe blending (irradiance) shader module
             VkShaderModule              probeBlendingDistanceModule = nullptr;               // Probe blending (distance) shader module
-            VkShaderModule              probeBorderRowUpdateIrradianceModule = nullptr;      // Probe border row update (irradiance) shader module
-            VkShaderModule              probeBorderRowUpdateDistanceModule = nullptr;        // Probe border row update (distance) shader module
-            VkShaderModule              probeBorderColumnUpdateIrradianceModule = nullptr;   // Probe border column update (irradiance) shader module
-            VkShaderModule              probeBorderColumnUpdateDistanceModule = nullptr;     // Probe border column update (distance) shader module
 
             // Pipelines
             VkPipeline                  probeBlendingIrradiancePipeline = nullptr;           // Probe blending (irradiance) compute pipeline
             VkPipeline                  probeBlendingDistancePipeline = nullptr;             // Probe blending (distance) compute pipeline
-            VkPipeline                  probeBorderRowUpdateIrradiancePipeline = nullptr;    // Probe border row update (irradiance) compute pipeline
-            VkPipeline                  probeBorderRowUpdateDistancePipeline = nullptr;      // Probe border row update (distance) compute pipeline
-            VkPipeline                  probeBorderColumnUpdateIrradiancePipeline = nullptr; // Probe border column update (irradiance) compute pipeline
-            VkPipeline                  probeBorderColumnUpdateDistancePipeline = nullptr;   // Probe border column update (distance) compute pipeline
-
             ProbeRelocationPipeline     probeRelocation;                                    // [Optional] Probe Relocation pipelines
             ProbeClassificationPipeline probeClassification;                                // [Optional] Probe Classification pipelines
         };
 
         //------------------------------------------------------------------------
 
-        struct DDGIVolumeBindlessDescriptorDesc
+        struct DDGIVolumeBindlessResourcesDesc
         {
-            uint32_t                    pushConstantsOffset = 0;                            // Offset to the DDGIConsts data in the push constants block
-            uint32_t                    uavOffset = 0;                                      // Offset to the ray data UAV in a bindless RWTex2D descriptor range. Ignored when shaders are not in bindless mode.
-            uint32_t                    srvOffset = 0;                                      // Offset to the ray data SRV in a bindless Tex2D descriptor range. Ignored when shaders are not in bindless mode.
+            bool                        enabled;                                      // Specifies if bindless resources are used
+
+            uint32_t                    pushConstantsOffset = 0;                      // Offset to the DDGIConsts data in the push constants block
+
+            DDGIVolumeResourceIndices   resourceIndices;                              // Indices of volume resources in bindless resource arrays
+
+            VkBuffer                    resourceIndicesBuffer = nullptr;              // Resource indices structured buffer pointer (device)
+
+            // Provide these resources if you use UploadDDGIVolumeResourceIndices() to transfer volume resource indices to the GPU
+            VkBuffer                    resourceIndicesBufferUpload = nullptr;        // [Optional] Constants structured buffer (upload)
+            VkDeviceMemory              resourceIndicesBufferUploadMemory = nullptr;  // [Optional] Constants structured buffer memory (upload)
+            uint64_t                    resourceIndicesBufferSizeInBytes = 0;         // [Optional] Size (in bytes) of the constants structured buffer
         };
 
         /**
@@ -136,7 +147,7 @@ namespace rtxgi
          */
         struct DDGIVolumeResources
         {
-            DDGIVolumeBindlessDescriptorDesc  descriptorBindlessDesc;                       // Provides offsets to the volume's resources in bindless resource arrays.
+            DDGIVolumeBindlessResourcesDesc   bindless;                                     // [Optional] Specifies properties of bindless resources
             DDGIVolumeManagedResourcesDesc    managed;                                      // [Managed Resource Mode] Provides Vulkan device handles and compiled shader bytecode.
             DDGIVolumeUnmanagedResourcesDesc  unmanaged;                                    // [Unmanaged Resource Mode] Provides a pipeline layout, descriptor set, and pointers to texture resources and pipelines.
 
@@ -155,16 +166,21 @@ namespace rtxgi
         /**
          * Get the VkFormat type of the given texture resource.
          */
-        VkFormat GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType type, uint32_t format);
+        RTXGI_API VkFormat GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType type, EDDGIVolumeTextureFormat format);
+
+        /**
+         * Get the number of descriptor bindings used by the descriptor set.
+         */
+        RTXGI_API uint32_t GetDDGIVolumeLayoutBindingCount();
 
         /**
          * Get the DDGIVolume's descriptor set and pipeline layouts descriptors.
          */
-        void GetDDGIVolumeLayoutDescs(
-            std::vector<VkDescriptorSetLayoutBinding>& bindings,
+        RTXGI_API void GetDDGIVolumeLayoutDescs(
             VkDescriptorSetLayoutCreateInfo& descriptorSetLayoutCreateInfo,
             VkPushConstantRange& pushConstantRange,
-            VkPipelineLayoutCreateInfo& pipelineLayoutCreateInfo);
+            VkPipelineLayoutCreateInfo& pipelineLayoutCreateInfo,
+            VkDescriptorSetLayoutBinding* bindings);
 
         //------------------------------------------------------------------------
         // DDGIVolume
@@ -181,12 +197,12 @@ namespace rtxgi
          * If there are parts of a scene with very different geometric density or dimensions, use
          * multiple DDGIVolumes with varying probe densities.
          */
-        class DDGIVolume : public DDGIVolumeBase
+        class RTXGI_API DDGIVolume : public DDGIVolumeBase
         {
         public:
             /**
-             * Performs other initialization of the DDGIVolume.
-             * Validates resource pointers or allocates resources if resource management is enabled.
+             * Performs other initialization of the DDGIVolume
+             * Validates resource pointers or allocates resources if resource management is enabled
              */
         #if RTXGI_DDGI_RESOURCE_MANAGEMENT
             ERTXGIStatus Create(VkCommandBuffer cmdBuffer, const DDGIVolumeDesc& desc, const DDGIVolumeResources& resources);
@@ -195,12 +211,12 @@ namespace rtxgi
         #endif
 
             /**
-             * Clears the volume's probe texture atlases.
+             * Clears the volume's probe texture arrays
              */
             ERTXGIStatus ClearProbes(VkCommandBuffer cmdBuffer);
 
             /**
-             * Releases resources owned by the volume.
+             * Releases resources owned by the volume
              */
             void Destroy();
 
@@ -208,89 +224,100 @@ namespace rtxgi
             // Resource Getters
             //------------------------------------------------------------------------
 
+            // Stats
+            uint32_t GetGPUMemoryUsedInBytes() const;
+
+            // Pipeline Layout
             VkPipelineLayout GetPipelineLayout() const { return m_pipelineLayout; }
+            bool GetBindlessEnabled() const { return m_bindlessResources.enabled; }
 
             // Descriptors
             const VkDescriptorSet* GetDescriptorSetConstPtr() const { return &m_descriptorSet; }
             VkDescriptorSet* GetDescriptorSetPtr() { return &m_descriptorSet; }
             VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_descriptorSetLayout; }
-            uint32_t GetDescriptorBindlessUAVOffset() const { return m_descriptorBindlessUAVOffset; }
-            uint32_t GetDescriptorBindlessSRVOffset() const { return m_descriptorBindlessSRVOffset; }
+
+            // Push Constants
+            uint32_t GetPushConstantsOffset() const { return m_pushConstantsOffset; }
+            DDGIRootConstants GetPushConstants() const { return { m_desc.index, 0, 0 }; }
+
+            // Resource Indices (Bindless)
+            DDGIVolumeResourceIndices GetResourceIndices() const { return m_bindlessResources.resourceIndices; }
+            VkBuffer GetResourceIndicesBuffer() const { return m_bindlessResources.resourceIndicesBuffer; }
+            VkBuffer GetResourceIndicesBufferUpload() const { return m_bindlessResources.resourceIndicesBufferUpload; }
+            VkDeviceMemory GetResourceIndicesBufferUploadMemory() const { return m_bindlessResources.resourceIndicesBufferUploadMemory; }
+            uint64_t GetResourceIndicesBufferSizeInBytes() const { return m_bindlessResources.resourceIndicesBufferSizeInBytes; }
 
             // Constants
-            uint32_t GetPushConstantsOffset() const { return m_pushConstantsOffset; }
             VkBuffer GetConstantsBuffer() const { return m_constantsBuffer; }
             VkBuffer GetConstantsBufferUpload() const { return m_constantsBufferUpload; }
             VkDeviceMemory GetConstantsBufferUploadMemory() const { return m_constantsBufferUploadMemory; }
             uint64_t GetConstantsBufferSizeInBytes() const { return m_constantsBufferSizeInBytes; }
 
-            // Textures
-            uint32_t GetRayDataFormat() const { return m_desc.probeRayDataFormat; }
-            uint32_t GetIrradianceFormat() const { return m_desc.probeIrradianceFormat; }
-            uint32_t GetDistanceFormat() const { return m_desc.probeDistanceFormat; }
-            uint32_t GetProbeDataFormat() const { return m_desc.probeDataFormat; }
+            // Texture Arrays Format
+            EDDGIVolumeTextureFormat GetRayDataFormat() const { return m_desc.probeRayDataFormat; }
+            EDDGIVolumeTextureFormat GetIrradianceFormat() const { return m_desc.probeIrradianceFormat; }
+            EDDGIVolumeTextureFormat GetDistanceFormat() const { return m_desc.probeDistanceFormat; }
+            EDDGIVolumeTextureFormat GetProbeDataFormat() const { return m_desc.probeDataFormat; }
 
+            // Texture Arrays
             VkImage GetProbeRayData() const { return m_probeRayData; }
-            VkDeviceMemory GetProbeRayDataMemory() const { return m_probeRayDataMemory; }
-            VkImageView GetProbeRayDataView() const { return m_probeRayDataView; }
-
             VkImage GetProbeIrradiance() const { return m_probeIrradiance; }
-            VkDeviceMemory GetProbeIrradianceMemory() const { return m_probeIrradianceMemory; }
-            VkImageView GetProbeIrradianceView() const { return m_probeIrradianceView; }
-
             VkImage GetProbeDistance() const { return m_probeDistance; }
-            VkDeviceMemory GetProbeDistanceMemory() const { return m_probeDistanceMemory; }
-            VkImageView GetProbeDistanceView() const { return m_probeDistanceView; }
-
             VkImage GetProbeData() const { return m_probeData; }
+
+            // Texture Array Memory
+            VkDeviceMemory GetProbeRayDataMemory() const { return m_probeRayDataMemory; }
+            VkDeviceMemory GetProbeIrradianceMemory() const { return m_probeIrradianceMemory; }
+            VkDeviceMemory GetProbeDistanceMemory() const { return m_probeDistanceMemory; }
             VkDeviceMemory GetProbeDataMemory() const { return m_probeDataMemory; }
+
+            // Texture Array Views
+            VkImageView GetProbeRayDataView() const { return m_probeRayDataView; }
+            VkImageView GetProbeIrradianceView() const { return m_probeIrradianceView; }
+            VkImageView GetProbeDistanceView() const { return m_probeDistanceView; }
             VkImageView GetProbeDataView() const { return m_probeDataView; }
 
-            // Pipelines
+            // Shader Modules
             VkShaderModule GetProbeBlendingIrradianceModule() const { return m_probeBlendingIrradianceModule; }
-            VkPipeline GetProbeBlendingIrradiancePipeline() const { return m_probeBlendingIrradiancePipeline; }
-
             VkShaderModule GetProbeBlendingDistanceModule() const { return m_probeBlendingDistanceModule; }
-            VkPipeline GetProbeBlendingDistancePipeline() const { return m_probeBlendingDistancePipeline; }
-
-            VkShaderModule GetProbeBorderRowUpdateIrradianceModule() const { return m_probeBorderRowUpdateIrradianceModule; }
-            VkPipeline GetProbeBorderRowUpdateIrradiancePipeline() const { return m_probeBorderRowUpdateIrradiancePipeline; }
-
-            VkShaderModule GetProbeBorderColumnUpdateIrradianceModule() const { return m_probeBorderColumnUpdateIrradianceModule; }
-            VkPipeline GetProbeBorderColumnUpdateIrradiancePipeline() const { return m_probeBorderColumnUpdateIrradiancePipeline; }
-
-            VkShaderModule GetProbeBorderRowUpdateDistanceModule() const { return m_probeBorderRowUpdateDistanceModule; }
-            VkPipeline GetProbeBorderRowUpdateDistancePipeline() const { return m_probeBorderRowUpdateDistancePipeline; }
-
-            VkShaderModule GetProbeBorderColumnUpdateDistanceModule() const { return m_probeBorderColumnUpdateDistanceModule; }
-            VkPipeline GetProbeBorderColumnUpdateDistancePipeline() const { return m_probeBorderColumnUpdateDistancePipeline; }
-
             VkShaderModule GetProbeRelocationModule() const { return m_probeRelocationModule; }
-            VkPipeline GetProbeRelocationPipeline() const { return m_probeRelocationPipeline; }
-
             VkShaderModule GetProbeRelocationResetModule() const { return m_probeRelocationResetModule; }
-            VkPipeline GetProbeRelocationResetPipeline() const { return m_probeRelocationResetPipeline; }
-
             VkShaderModule GetProbeClassificationModule() const { return m_probeClassificationModule; }
-            VkPipeline GetProbeClassificationPipeline() const { return m_probeClassificationPipeline; }
-
             VkShaderModule GetProbeClassificationResetModule() const { return m_probeClassificationResetModule; }
+
+            // Pipelines
+            VkPipeline GetProbeBlendingIrradiancePipeline() const { return m_probeBlendingIrradiancePipeline; }
+            VkPipeline GetProbeBlendingDistancePipeline() const { return m_probeBlendingDistancePipeline; }
+            VkPipeline GetProbeRelocationPipeline() const { return m_probeRelocationPipeline; }
+            VkPipeline GetProbeRelocationResetPipeline() const { return m_probeRelocationResetPipeline; }
+            VkPipeline GetProbeClassificationPipeline() const { return m_probeClassificationPipeline; }
             VkPipeline GetProbeClassificationResetPipeline() const { return m_probeClassificationResetPipeline; }
 
             //------------------------------------------------------------------------
             // Resource Setters
             //------------------------------------------------------------------------
 
-            // Descriptors
+            // Push Constants
             void SetPushConstantsOffset(uint32_t offset) { m_pushConstantsOffset = offset; }
-            void SetDescriptorBindlessUAVOffset(uint32_t offset) { m_descriptorBindlessUAVOffset = offset; }
-            void SetDescriptorBindlessSRVOffset(uint32_t offset) { m_descriptorBindlessSRVOffset = offset; }
+
+            // Resource Indices (Bindless)
+            void SetResourceIndices(DDGIVolumeResourceIndices resourceIndices) { m_bindlessResources.resourceIndices = resourceIndices; }
+            void SetResourceIndicesBuffer(VkBuffer ptr) { m_bindlessResources.resourceIndicesBuffer = ptr; }
+            void SetResourceIndicesBufferUpload(VkBuffer ptr) { m_bindlessResources.resourceIndicesBufferUpload = ptr; }
+            void SetResourceIndicesBufferUploadMemory(VkDeviceMemory ptr) { m_bindlessResources.resourceIndicesBufferUploadMemory = ptr; }
+            void SetResourceIndicesBufferSizeInBytes(uint64_t size) { m_bindlessResources.resourceIndicesBufferSizeInBytes = size; }
 
             // Constants
             void SetConstantsBuffer(VkBuffer ptr) { m_constantsBuffer = ptr; }
             void SetConstantsBufferUpload(VkBuffer ptr) { m_constantsBufferUpload = ptr; }
             void SetConstantsBufferUploadMemory(VkDeviceMemory ptr) { m_constantsBufferUploadMemory = ptr; }
             void SetConstantsBufferSizeInBytes(uint64_t value) { m_constantsBufferSizeInBytes = value; }
+
+            // Texture Array Format
+            void SetRayDataFormat(EDDGIVolumeTextureFormat format) { m_desc.probeRayDataFormat = format; }
+            void SetIrradianceFormat(EDDGIVolumeTextureFormat format) { m_desc.probeIrradianceFormat = format; }
+            void SetDistanceFormat(EDDGIVolumeTextureFormat format) { m_desc.probeDistanceFormat = format; }
+            void SetProbeDataFormat(EDDGIVolumeTextureFormat format) { m_desc.probeDataFormat = format; }
 
         #if !RTXGI_DDGI_RESOURCE_MANAGEMENT
             void SetProbeRayData(VkImage ptr, VkDeviceMemory memoryPtr, VkImageView viewPtr) { m_probeRayData = ptr; m_probeRayDataMemory = memoryPtr; m_probeRayDataView = viewPtr; }
@@ -302,72 +329,63 @@ namespace rtxgi
         private:
 
         #if RTXGI_DDGI_RESOURCE_MANAGEMENT
-            VkDevice                    m_device = nullptr;                                    // Vulkan device handle
-            VkPhysicalDevice            m_physicalDevice = nullptr;                            // Vulkan physical device handle
-            VkDescriptorPool            m_descriptorPool = nullptr;                            // Vulkan descriptor pool handle
+            VkDevice                        m_device = nullptr;                                 // Vulkan device handle
+            VkPhysicalDevice                m_physicalDevice = nullptr;                         // Vulkan physical device handle
+            VkDescriptorPool                m_descriptorPool = nullptr;                         // Vulkan descriptor pool handle
         #endif
 
-            // Constants (if you use UploadDDGIVolumeConstants() to transfer constants to the GPU)
-            VkBuffer                    m_constantsBuffer = nullptr;                           // Structured buffer that stores the volume's constants (device)
-            VkBuffer                    m_constantsBufferUpload = nullptr;                     // Structured buffer that stores the volume's constants (upload)
-            VkDeviceMemory              m_constantsBufferUploadMemory = nullptr;               // Memory for the volume's constants upload structured buffer
-            uint64_t                    m_constantsBufferSizeInBytes = 0;                      // Size (in bytes) of the structured buffer that stores *all* volumes constants
+            // Volume Constants (if you use UploadDDGIVolumeConstants() to transfer constants to the GPU)
+            VkBuffer                        m_constantsBuffer = nullptr;                        // Structured buffer that stores the volume's constants (device)
+            VkBuffer                        m_constantsBufferUpload = nullptr;                  // Structured buffer that stores the volume's constants (upload)
+            VkDeviceMemory                  m_constantsBufferUploadMemory = nullptr;            // Memory for the volume's constants upload structured buffer
+            uint64_t                        m_constantsBufferSizeInBytes = 0;                   // Size (in bytes) of the structured buffer that stores constants for *all* volumes
 
-            // Textures
-            VkImage                     m_probeRayData = nullptr;                              // Probe ray data, radiance (RGB) and hit distance (A) texture
-            VkDeviceMemory              m_probeRayDataMemory = nullptr;                        // Probe ray data memory
-            VkImageView                 m_probeRayDataView = nullptr;                          // Probe ray data view
+            // Texture Arrays
+            VkImage                         m_probeRayData = nullptr;                           // Probe ray data texture array - RGB: radiance | A: hit distance
+            VkImage                         m_probeIrradiance = nullptr;                        // Probe irradiance texture array - RGB: irradiance, encoded with a high gamma curve
+            VkImage                         m_probeDistance = nullptr;                          // Probe distance texture array - R: mean distance | G: mean distance^2
+            VkImage                         m_probeData = nullptr;                              // Probe data texture array - XYZ: world-space relocation offsets | W: classification state
 
-            VkImage                     m_probeIrradiance = nullptr;                           // Probe irradiance texture, encoded with a high gamma curve
-            VkDeviceMemory              m_probeIrradianceMemory = nullptr;                     // Probe irradiance memory
-            VkImageView                 m_probeIrradianceView = nullptr;                       // Probe irradiance view
+            // Texture Array Memory
+            VkDeviceMemory                  m_probeRayDataMemory = nullptr;                     // Probe ray data memory
+            VkDeviceMemory                  m_probeIrradianceMemory = nullptr;                  // Probe irradiance memory
+            VkDeviceMemory                  m_probeDistanceMemory = nullptr;                    // Probe distance memory
+            VkDeviceMemory                  m_probeDataMemory = nullptr;                        // Probe data memory
 
-            VkImage                     m_probeDistance = nullptr;                             // Probe distance texture, R: mean distance, G: mean distance^2
-            VkDeviceMemory              m_probeDistanceMemory = nullptr;                       // Probe distance memory
-            VkImageView                 m_probeDistanceView = nullptr;                         // Probe distance view
-
-            VkImage                     m_probeData = nullptr;                                 // Probe relocation world-space offsets (XYZ) and classification (W) states texture
-            VkDeviceMemory              m_probeDataMemory = nullptr;                           // Probe data memory
-            VkImageView                 m_probeDataView = nullptr;                             // Probe data view
+            // Texture Array Views
+            VkImageView                     m_probeRayDataView = nullptr;                       // Probe ray data view
+            VkImageView                     m_probeIrradianceView = nullptr;                    // Probe irradiance view
+            VkImageView                     m_probeDistanceView = nullptr;                      // Probe distance view
+            VkImageView                     m_probeDataView = nullptr;                          // Probe data view
 
             // Pipeline Layout
-            VkPipelineLayout            m_pipelineLayout = nullptr;                            // Pipeline layout, used for all update compute shaders
+            VkPipelineLayout                m_pipelineLayout = nullptr;                         // Pipeline layout, used for all update compute shaders
 
             // Descriptors
-            VkDescriptorSet             m_descriptorSet = nullptr;                             // Descriptor set
-            VkDescriptorSetLayout       m_descriptorSetLayout = nullptr;                       // Descriptor set layout
+            VkDescriptorSet                 m_descriptorSet = nullptr;                          // Descriptor set
+            VkDescriptorSetLayout           m_descriptorSetLayout = nullptr;                    // Descriptor set layout
 
-            uint32_t                    m_pushConstantsOffset = 0;                             // Offset to the DDGIConsts data in the push constants block
-            uint32_t                    m_descriptorBindlessUAVOffset = 0;                     // Offset to the ray data UAV in the RWTex2D descriptor range
-            uint32_t                    m_descriptorBindlessSRVOffset = 0;                     // Offset to the ray data SRV in the Tex2D descriptor range
+            // Push Constants
+            uint32_t                        m_pushConstantsOffset = 0;                          // Offset in the push constants block to DDGIRootConstants
+
+            // Bindless
+            DDGIVolumeBindlessResourcesDesc m_bindlessResources = {};                           // Properties associated with bindless resources
 
             // Shader Modules
-            VkShaderModule              m_probeBlendingIrradianceModule = nullptr;             // Probe blending (irradiance) shader module
-            VkShaderModule              m_probeBlendingDistanceModule = nullptr;               // Probe blending (distance) shader module
-            VkShaderModule              m_probeBorderRowUpdateIrradianceModule = nullptr;      // Probe border row update (irradiance) shader module
-            VkShaderModule              m_probeBorderRowUpdateDistanceModule = nullptr;        // Probe border row update (distance) shader module
-            VkShaderModule              m_probeBorderColumnUpdateIrradianceModule = nullptr;   // Probe border column update (irradiance) shader module
-            VkShaderModule              m_probeBorderColumnUpdateDistanceModule = nullptr;     // Probe border column update (distance) shader module
-
-            VkShaderModule              m_probeRelocationModule = nullptr;                     // Probe relocation shader module
-            VkShaderModule              m_probeRelocationResetModule = nullptr;                // Probe relocation reset shader module
-
-            VkShaderModule              m_probeClassificationModule = nullptr;                 // Probe classification shader module
-            VkShaderModule              m_probeClassificationResetModule = nullptr;            // Probe classification reset shader module
+            VkShaderModule                  m_probeBlendingIrradianceModule = nullptr;          // Probe blending (irradiance) shader module
+            VkShaderModule                  m_probeBlendingDistanceModule = nullptr;            // Probe blending (distance) shader module
+            VkShaderModule                  m_probeRelocationModule = nullptr;                  // Probe relocation shader module
+            VkShaderModule                  m_probeRelocationResetModule = nullptr;             // Probe relocation reset shader module
+            VkShaderModule                  m_probeClassificationModule = nullptr;              // Probe classification shader module
+            VkShaderModule                  m_probeClassificationResetModule = nullptr;         // Probe classification reset shader module
 
             // Pipelines
-            VkPipeline                  m_probeBlendingIrradiancePipeline = nullptr;           // Probe blending (irradiance) compute shader pipeline
-            VkPipeline                  m_probeBlendingDistancePipeline = nullptr;             // Probe blending (distance) compute shader pipeline
-            VkPipeline                  m_probeBorderRowUpdateIrradiancePipeline = nullptr;    // Probe border row update (irradiance) compute shader pipeline
-            VkPipeline                  m_probeBorderRowUpdateDistancePipeline = nullptr;      // Probe border row update (distance= compute shader pipeline
-            VkPipeline                  m_probeBorderColumnUpdateIrradiancePipeline = nullptr; // Probe border column update (irradiance) compute shader pipeline
-            VkPipeline                  m_probeBorderColumnUpdateDistancePipeline = nullptr;   // Probe border column update (distance) compute shader pipeline
-
-            VkPipeline                  m_probeRelocationPipeline = nullptr;                   // Probe relocation compute shader pipeline
-            VkPipeline                  m_probeRelocationResetPipeline = nullptr;              // Probe relocation reset compute shader pipeline
-
-            VkPipeline                  m_probeClassificationPipeline = nullptr;               // Probe classification compute shader pipeline
-            VkPipeline                  m_probeClassificationResetPipeline = nullptr;          // Probe classification reset compute shader pipeline
+            VkPipeline                      m_probeBlendingIrradiancePipeline = nullptr;         // Probe blending (irradiance) compute shader pipeline
+            VkPipeline                      m_probeBlendingDistancePipeline = nullptr;           // Probe blending (distance) compute shader pipeline
+            VkPipeline                      m_probeRelocationPipeline = nullptr;                 // Probe relocation compute shader pipeline
+            VkPipeline                      m_probeRelocationResetPipeline = nullptr;            // Probe relocation reset compute shader pipeline
+            VkPipeline                      m_probeClassificationPipeline = nullptr;             // Probe classification compute shader pipeline
+            VkPipeline                      m_probeClassificationResetPipeline = nullptr;        // Probe classification reset compute shader pipeline
 
         #if RTXGI_DDGI_RESOURCE_MANAGEMENT
             ERTXGIStatus CreateManagedResources(const DDGIVolumeDesc& desc, const DDGIVolumeManagedResourcesDesc& managed);
@@ -378,8 +396,8 @@ namespace rtxgi
 
             bool CreateDescriptorSet();
             bool CreateLayouts();
-            bool CreateComputePipeline(ShaderBytecode shader, std::string entryPoint, VkShaderModule* module, VkPipeline* pipeline, std::string debugName);
-            bool CreateTexture(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkImage* image, VkDeviceMemory* imageMemory, VkImageView* imageView);
+            bool CreateComputePipeline(ShaderBytecode shader, const char* entryPoint, VkShaderModule* module, VkPipeline* pipeline, const char* debugName);
+            bool CreateTexture(uint32_t width, uint32_t height, uint32_t arraySize, VkFormat format, VkImageUsageFlags usage, VkImage* image, VkDeviceMemory* imageMemory, VkImageView* imageView);
             bool CreateProbeRayData(const DDGIVolumeDesc& desc);
             bool CreateProbeIrradiance(const DDGIVolumeDesc& desc);
             bool CreateProbeDistance(const DDGIVolumeDesc& desc);
@@ -401,28 +419,34 @@ namespace rtxgi
         //------------------------------------------------------------------------
 
         /**
+         * Uploads resource indices for one or more volumes to the GPU.
+         * This function is for convenience and isn't necessary if you upload volume resource indices yourself.
+         */
+        RTXGI_API ERTXGIStatus UploadDDGIVolumeResourceIndices(VkDevice device, VkCommandBuffer cmdBuffer, uint32_t bufferingIndex, uint32_t numVolumes, DDGIVolume** volumes);
+
+        /**
          * Uploads constants for one or more volumes to the GPU.
          * This function is for convenience and isn't necessary if you upload volume constants yourself.
          */
-        ERTXGIStatus UploadDDGIVolumeConstants(VkDevice device, VkCommandBuffer cmdBuffer, uint32_t bufferingIndex, uint32_t numVolumes, DDGIVolume** volumes);
+        RTXGI_API ERTXGIStatus UploadDDGIVolumeConstants(VkDevice device, VkCommandBuffer cmdBuffer, uint32_t bufferingIndex, uint32_t numVolumes, DDGIVolume** volumes);
 
         /**
          * Updates one or more volume's probes using data in the volume's radiance texture.
          * Probe blending and border update workloads are batched together for better performance.
          */
-        ERTXGIStatus UpdateDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes);
+        RTXGI_API ERTXGIStatus UpdateDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes);
 
         /**
          * Adjusts one or more volume's world-space probe positions to avoid them being too close to or inside of geometry.
          * If a volume has the reset flag set, all probe relocation offsets are set to zero before relocation occurs.
          */
-        ERTXGIStatus RelocateDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes);
+        RTXGI_API ERTXGIStatus RelocateDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes);
 
         /**
          * Classifies one or more volume's probes as active or inactive based on the hit distance data in the ray data texture.
          * If a volume has the reset flag set, all probes are set to active before classification occurs.
          */
-        ERTXGIStatus ClassifyDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes);
+        RTXGI_API ERTXGIStatus ClassifyDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes);
 
     } // namespace vulkan
 } // namespace rtxgi

@@ -10,9 +10,16 @@
 
 #include "rtxgi/ddgi/gfx/DDGIVolume_VK.h"
 
+#include "rtxgi/VulkanExtensions.h"
+
 #include <cstring>
+#include <random>
+#include <string>
+#include <vector>
 
 #define VKFAILED(x) (x != VK_SUCCESS)
+
+// TODO-ACM: need to dynamically load debug_ext functions that aren't part of Vulkan core for the dynamic library to link / function properly
 
 #ifdef RTXGI_GFX_NAME_OBJECTS
 /**
@@ -50,14 +57,6 @@ namespace rtxgi
 {
     namespace vulkan
     {
-        enum EDDGIVolumeLayoutBindings
-        {
-            Constants = 0,
-            ProbeRayData,
-            ProbeIrradiance,
-            ProbeDistance,
-            ProbeData,
-        };
 
         //------------------------------------------------------------------------
         // Private RTXGI Namespace Helper Functions
@@ -73,14 +72,8 @@ namespace rtxgi
             // Shader bytecode
             if (!ValidateShaderBytecode(desc.probeBlendingIrradianceCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_BLENDING_IRRADIANCE;
             if (!ValidateShaderBytecode(desc.probeBlendingDistanceCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_BLENDING_DISTANCE;
-            if (!ValidateShaderBytecode(desc.probeBorderRowUpdateIrradianceCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_BORDER_ROW_UPDATE_IRRADIANCE;
-            if (!ValidateShaderBytecode(desc.probeBorderRowUpdateDistanceCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_BORDER_ROW_UPDATE_DISTANCE;
-            if (!ValidateShaderBytecode(desc.probeBorderColumnUpdateIrradianceCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_BORDER_COLUMN_UPDATE_IRRADIANCE;
-            if (!ValidateShaderBytecode(desc.probeBorderColumnUpdateDistanceCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_BORDER_COLUMN_UPDATE_DISTANCE;
-
             if (!ValidateShaderBytecode(desc.probeRelocation.updateCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_RELOCATION;
             if (!ValidateShaderBytecode(desc.probeRelocation.resetCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_RELOCATION_RESET;
-
             if (!ValidateShaderBytecode(desc.probeClassification.updateCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_CLASSIFICATION;
             if (!ValidateShaderBytecode(desc.probeClassification.resetCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_CLASSIFICATION_RESET;
 
@@ -93,19 +86,19 @@ namespace rtxgi
             if (desc.pipelineLayout == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_LAYOUT;
             if (desc.descriptorSet == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_DESCRIPTOR_SET;
 
-            // Textures
+            // Texture Arrays
             if (desc.probeRayData == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_RAY_DATA;
             if (desc.probeIrradiance == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_IRRADIANCE;
             if (desc.probeDistance == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_DISTANCE;
             if (desc.probeData == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_DATA;
 
-            // Texture Memory
+            // Texture Array Memory
             if (desc.probeRayDataMemory == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_IMAGE_MEMORY_PROBE_RAY_DATA;
             if (desc.probeIrradianceMemory == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_IMAGE_MEMORY_PROBE_IRRADIANCE;
             if (desc.probeDistanceMemory == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_IMAGE_MEMORY_PROBE_DISTANCE;
             if (desc.probeDataMemory == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_IMAGE_MEMORY_PROBE_DATA;
 
-            // Texture Views
+            // Texture Array Views
             if (desc.probeRayDataView == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_IMAGE_VIEW_PROBE_RAY_DATA;
             if (desc.probeIrradianceView == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_IMAGE_VIEW_PROBE_IRRADIANCE;
             if (desc.probeDistanceView == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_IMAGE_VIEW_PROBE_DISTANCE;
@@ -114,28 +107,16 @@ namespace rtxgi
             // Shader Modules
             if (desc.probeBlendingIrradianceModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_PROBE_BLENDING_IRRADIANCE;
             if (desc.probeBlendingDistanceModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_PROBE_BLENDING_DISTANCE;
-            if (desc.probeBorderRowUpdateIrradianceModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_BORDER_ROW_UPDATE_IRRADIANCE;
-            if (desc.probeBorderRowUpdateDistanceModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_BORDER_ROW_UPDATE_DISTANCE;
-            if (desc.probeBorderColumnUpdateIrradianceModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_BORDER_COLUMN_UPDATE_IRRADIANCE;
-            if (desc.probeBorderColumnUpdateDistanceModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_BORDER_COLUMN_UPDATE_DISTANCE;
-
             if (desc.probeRelocation.updateModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_PROBE_RELOCATION;
             if (desc.probeRelocation.resetModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_PROBE_RELOCATION_RESET;
-
             if (desc.probeClassification.updateModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_PROBE_CLASSIFICATION;
             if (desc.probeClassification.resetModule == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_SHADER_MODULE_PROBE_CLASSIFICATION_RESET;
 
             // Pipelines
             if (desc.probeBlendingIrradiancePipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_PROBE_BLENDING_IRRADIANCE;
             if (desc.probeBlendingDistancePipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_PROBE_BLENDING_DISTANCE;
-            if (desc.probeBorderRowUpdateIrradiancePipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_BORDER_ROW_UPDATE_IRRADIANCE;
-            if (desc.probeBorderRowUpdateDistancePipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_BORDER_ROW_UPDATE_DISTANCE;
-            if (desc.probeBorderColumnUpdateIrradiancePipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_BORDER_COLUMN_UPDATE_IRRADIANCE;
-            if (desc.probeBorderColumnUpdateDistancePipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_BORDER_COLUMN_UPDATE_DISTANCE;
-
             if (desc.probeRelocation.updatePipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_PROBE_RELOCATION;
             if (desc.probeRelocation.resetPipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_PROBE_RELOCATION_RESET;
-
             if (desc.probeClassification.updatePipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_PROBE_CLASSIFICATION;
             if (desc.probeClassification.resetPipeline == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_PIPELINE_PROBE_CLASSIFICATION_RESET;
 
@@ -146,105 +127,142 @@ namespace rtxgi
         // Public RTXGI Namespace DDGI Functions
         //------------------------------------------------------------------------
 
-        VkFormat GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType type, uint32_t format)
+        VkFormat GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType type, EDDGIVolumeTextureFormat format)
         {
             if (type == EDDGIVolumeTextureType::RayData)
             {
-                if (format == 0) return VK_FORMAT_R32G32_SFLOAT;
-                else if (format == 1) return VK_FORMAT_R32G32B32A32_SFLOAT;
+                if (format == EDDGIVolumeTextureFormat::F32x2) return VK_FORMAT_R32G32_SFLOAT;
+                else if (format == EDDGIVolumeTextureFormat::F32x4) return VK_FORMAT_R32G32B32A32_SFLOAT;
             }
             else if (type == EDDGIVolumeTextureType::Irradiance)
             {
-                if (format == 0) return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
-                else if (format == 1) return VK_FORMAT_R16G16B16A16_SFLOAT;
-                else if (format == 2) return VK_FORMAT_R32G32B32A32_SFLOAT;
+                if (format == EDDGIVolumeTextureFormat::U32) return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+                else if (format == EDDGIVolumeTextureFormat::F16x4) return VK_FORMAT_R16G16B16A16_SFLOAT;
+                else if (format == EDDGIVolumeTextureFormat::F32x4) return VK_FORMAT_R32G32B32A32_SFLOAT;
             }
             else if (type == EDDGIVolumeTextureType::Distance)
             {
-                if (format == 0) return VK_FORMAT_R16G16_SFLOAT;  // Note: in large environments FP16 may not be sufficient
-                else if (format == 1) return VK_FORMAT_R32G32_SFLOAT;
+                if (format == EDDGIVolumeTextureFormat::F16x2) return VK_FORMAT_R16G16_SFLOAT;  // Note: in large environments FP16 may not be sufficient
+                else if (format == EDDGIVolumeTextureFormat::F32x2) return VK_FORMAT_R32G32_SFLOAT;
             }
             else if (type == EDDGIVolumeTextureType::Data)
             {
-                if (format == 0) return VK_FORMAT_R16G16B16A16_SFLOAT;
-                else if (format == 1) return VK_FORMAT_R32G32B32A32_SFLOAT;
+                if (format == EDDGIVolumeTextureFormat::F16x4) return VK_FORMAT_R16G16B16A16_SFLOAT;
+                else if (format == EDDGIVolumeTextureFormat::F32x4) return VK_FORMAT_R32G32B32A32_SFLOAT;
             }
             return VK_FORMAT_UNDEFINED;
         }
 
+        uint32_t GetDDGIVolumeLayoutBindingCount() { return 5; }
+
         void GetDDGIVolumeLayoutDescs(
-            std::vector<VkDescriptorSetLayoutBinding>& bindings,
             VkDescriptorSetLayoutCreateInfo& descriptorSetLayoutCreateInfo,
             VkPushConstantRange& pushConstantRange,
-            VkPipelineLayoutCreateInfo& pipelineLayoutCreateInfo)
+            VkPipelineLayoutCreateInfo& pipelineLayoutCreateInfo,
+            VkDescriptorSetLayoutBinding* bindings)
         {
-            // Describe the descriptor set layout bindings
-            // 1 DDGIVolume constants structured buffer     (0)
-            // 1 Storage Image for ray data                 (1)
-            // 1 Storage Image for probe irradiance         (2)
-            // 1 Storage Image for probe distance           (3)
-            // 1 Storage Image for probe data               (4)
+            // Descriptor set layout bindings
+            // 1 SRV constants structured buffer       (0)
+            // 1 UAV for ray data texture array        (1)
+            // 1 UAV probe irradiance texture array    (2)
+            // 1 UAV probe distance texture array      (3)
+            // 1 UAV probe data texture array          (4)
 
-            // 0: DDGIVolume constants structured buffer
-            VkDescriptorSetLayoutBinding constantsBinding = {};
-            constantsBinding.binding = EDDGIVolumeLayoutBindings::Constants;
-            constantsBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            constantsBinding.descriptorCount = 1;
-            constantsBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            // 0: Volume Constants Structured Buffer
+            VkDescriptorSetLayoutBinding& bind0 = bindings[0];
+            bind0.binding = static_cast<uint32_t>(EDDGIVolumeBindings::Constants);
+            bind0.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            bind0.descriptorCount = 1;
+            bind0.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-            bindings.push_back(constantsBinding);
+            // 1: Ray Data Texture Array UAV
+            VkDescriptorSetLayoutBinding& bind1 = bindings[1];
+            bind1.binding = static_cast<uint32_t>(EDDGIVolumeBindings::RayData);
+            bind1.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            bind1.descriptorCount = 1;
+            bind1.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-            // 1: Probe ray data
-            VkDescriptorSetLayoutBinding rayDataBinding = {};
-            rayDataBinding.binding = EDDGIVolumeLayoutBindings::ProbeRayData;
-            rayDataBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            rayDataBinding.descriptorCount = 1;
-            rayDataBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            // 2: Probe Irradiance Texture Array UAV
+            VkDescriptorSetLayoutBinding& bind2 = bindings[2];
+            bind2.binding = static_cast<uint32_t>(EDDGIVolumeBindings::ProbeIrradiance);
+            bind2.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            bind2.descriptorCount = 1;
+            bind2.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-            bindings.push_back(rayDataBinding);
+            // 3: Probe Distance Texture Array UAV
+            VkDescriptorSetLayoutBinding& bind3 = bindings[3];
+            bind3.binding = static_cast<uint32_t>(EDDGIVolumeBindings::ProbeDistance);
+            bind3.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            bind3.descriptorCount = 1;
+            bind3.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-            // 2: Irradiance
-            VkDescriptorSetLayoutBinding irradianceBinding = {};
-            irradianceBinding.binding = EDDGIVolumeLayoutBindings::ProbeIrradiance;
-            irradianceBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            irradianceBinding.descriptorCount = 1;
-            irradianceBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-            bindings.push_back(irradianceBinding);
-
-            // 3: Distance
-            VkDescriptorSetLayoutBinding distanceBinding = {};
-            distanceBinding.binding = EDDGIVolumeLayoutBindings::ProbeDistance;
-            distanceBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            distanceBinding.descriptorCount = 1;
-            distanceBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-            bindings.push_back(distanceBinding);
-
-            // 4: Probe Data
-            VkDescriptorSetLayoutBinding dataBinding = {};
-            dataBinding.binding = EDDGIVolumeLayoutBindings::ProbeData;
-            dataBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            dataBinding.descriptorCount = 1;
-            dataBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-            bindings.push_back(dataBinding);
+            // 4: Probe Data Texture Array UAV
+            VkDescriptorSetLayoutBinding& bind4 = bindings[4];
+            bind4.binding = static_cast<uint32_t>(EDDGIVolumeBindings::ProbeData);
+            bind4.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            bind4.descriptorCount = 1;
+            bind4.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
             // Describe the descriptor set layout
             descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-            descriptorSetLayoutCreateInfo.pBindings = bindings.data();
+            descriptorSetLayoutCreateInfo.bindingCount = GetDDGIVolumeLayoutBindingCount();
+            descriptorSetLayoutCreateInfo.pBindings = bindings;
 
             // Describe the push constants
             pushConstantRange.stageFlags = VK_SHADER_STAGE_ALL;
             pushConstantRange.offset = 0;
-            pushConstantRange.size = DDGIConstants::GetAlignedSizeInBytes();
+            pushConstantRange.size = DDGIRootConstants::GetAlignedSizeInBytes();
 
             // Describe the pipeline layout
             pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             pipelineLayoutCreateInfo.setLayoutCount = 1;
             pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
             pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+        }
+
+        ERTXGIStatus UploadDDGIVolumeResourceIndices(VkDevice device, VkCommandBuffer cmdBuffer, uint32_t bufferingIndex, uint32_t numVolumes, DDGIVolume** volumes)
+        {
+            // Copy the resource indices for each volume
+            for (uint32_t volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
+            {
+                // Get the volume
+                const DDGIVolume* volume = volumes[volumeIndex];
+
+                // Validate the upload and device buffers
+                if (volume->GetResourceIndicesBuffer() == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_RESOURCE_INDICES_BUFFER;
+                if (volume->GetResourceIndicesBufferUpload() == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_RESOURCE_INDICES_UPLOAD_BUFFER;
+                if (volume->GetResourceIndicesBufferUploadMemory() == nullptr) return ERTXGIStatus::ERROR_DDGI_VK_INVALID_RESOURCE_INDICES_UPLOAD_MEMORY;
+
+                // Offset to the resource indices data to write to (e.g. double buffering)
+                uint64_t bufferOffset = volume->GetResourceIndicesBufferSizeInBytes() * bufferingIndex;
+
+                // Offset to the volume in current resource indices buffer
+                uint32_t volumeOffset = (volume->GetIndex() * (uint32_t)sizeof(DDGIVolumeResourceIndices));
+
+                // Offset to the volume resource indices in the upload buffer
+                uint64_t srcOffset = (bufferOffset + volumeOffset);
+
+                // Map the resource indices buffer and update it
+                void* pData = nullptr;
+                VkResult result = vkMapMemory(device, volume->GetResourceIndicesBufferUploadMemory(), srcOffset, sizeof(DDGIVolumeResourceIndices), 0, &pData);
+                if (VKFAILED(result)) return ERTXGIStatus::ERROR_DDGI_MAP_FAILURE_RESOURCE_INDICES_UPLOAD_BUFFER;
+
+                // Get the DDGIVolume's bindless resource indices
+                const DDGIVolumeResourceIndices gpuDesc = volume->GetResourceIndices();
+
+                memcpy(pData, &gpuDesc, sizeof(DDGIVolumeResourceIndices));
+
+                vkUnmapMemory(device, volume->GetResourceIndicesBufferUploadMemory());
+
+                // Schedule a copy of the upload buffer to the device buffer
+                VkBufferCopy bufferCopy = {};
+                bufferCopy.size = sizeof(DDGIVolumeResourceIndices);
+                bufferCopy.srcOffset = srcOffset;
+                bufferCopy.dstOffset = volumeOffset;
+                vkCmdCopyBuffer(cmdBuffer, volume->GetResourceIndicesBufferUpload(), volume->GetResourceIndicesBuffer(), 1, &bufferCopy);
+            }
+
+            return ERTXGIStatus::OK;
         }
 
         ERTXGIStatus UploadDDGIVolumeConstants(VkDevice device, VkCommandBuffer cmdBuffer, uint32_t bufferingIndex, uint32_t numVolumes, DDGIVolume** volumes)
@@ -269,13 +287,17 @@ namespace rtxgi
                 // Offset to the volume constants in the upload buffer
                 uint64_t srcOffset = (bufferOffset + volumeOffset);
 
-                // Get the packed DDGIVolume GPU descriptor
-                DDGIVolumeDescGPUPacked gpuDesc = volume->GetDescGPUPacked();
-
-                // Map the constant buffer and update it
+                // Map the constants buffer and update it
                 void* pData = nullptr;
                 VkResult result = vkMapMemory(device, volume->GetConstantsBufferUploadMemory(), srcOffset, sizeof(DDGIVolumeDescGPUPacked), 0, &pData);
                 if (VKFAILED(result)) return ERTXGIStatus::ERROR_DDGI_MAP_FAILURE_CONSTANTS_UPLOAD_BUFFER;
+
+                // Get the packed DDGIVolume GPU descriptor
+                const DDGIVolumeDescGPUPacked gpuDesc = volume->GetDescGPUPacked();
+
+            #if _DEBUG
+                volume->ValidatePackedData(gpuDesc);
+            #endif
 
                 memcpy(pData, &gpuDesc, sizeof(DDGIVolumeDescGPUPacked));
 
@@ -294,7 +316,7 @@ namespace rtxgi
 
         ERTXGIStatus UpdateDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes)
         {
-            if (bInsertPerfMarkers)AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "Update Probes");
+            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "RTXGI DDGI Update Probes");
 
             uint32_t volumeIndex;
             std::vector<VkImageMemoryBarrier> barriers;
@@ -306,29 +328,22 @@ namespace rtxgi
             barrier.oldLayout = barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
             barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
-            // Probe Blending
-            if (bInsertPerfMarkers)AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "Probe Blending");
-
-            // Irradiance
+            // Irradiance Blending
+            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "Probe Irradiance");
             for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
             {
+                // Get the volume
                 const DDGIVolume* volume = volumes[volumeIndex];
-
-                // Set push constants
-                DDGIConstants consts =
-                {
-                    volume->GetIndex(),
-                    volume->GetDescriptorBindlessUAVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                    volume->GetDescriptorBindlessSRVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                };
 
                 // Bind the descriptor set and push constants
                 vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetPipelineLayout(), 0, 1, volume->GetDescriptorSetConstPtr(), 0, nullptr);
-                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIConstants::GetSizeInBytes(), consts.GetData());
 
-                // Get the number of probes on the X and Y dimensions of the texture
-                uint32_t probeCountX, probeCountY;
-                GetDDGIVolumeProbeCounts(volume->GetDesc(), probeCountX, probeCountY);
+                // Update the push constants
+                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIRootConstants::GetSizeInBytes(), volume->GetPushConstants().GetData());
+
+                // Get the number of probes on each axis
+                uint32_t probeCountX, probeCountY, probeCountZ;
+                GetDDGIVolumeProbeCounts(volume->GetDesc(), probeCountX, probeCountY, probeCountZ);
 
                 // Probe irradiance blending
                 {
@@ -340,7 +355,7 @@ namespace rtxgi
 
                     // Bind the pipeline and dispatch threads
                     vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeBlendingIrradiancePipeline());
-                    vkCmdDispatch(cmdBuffer, probeCountX, probeCountY, 1);
+                    vkCmdDispatch(cmdBuffer, probeCountX, probeCountY, probeCountZ);
 
                     if (bInsertPerfMarkers && volume->GetInsertPerfMarkers()) vkCmdEndDebugUtilsLabelEXT(cmdBuffer);
                 }
@@ -349,27 +364,24 @@ namespace rtxgi
                 barrier.image = volume->GetProbeIrradiance();
                 barriers.push_back(barrier);
             }
+            if (bInsertPerfMarkers) vkCmdEndDebugUtilsLabelEXT(cmdBuffer);
 
-            // Distance
+            // Distance Blending
+            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "Probe Distance");
             for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
             {
+                // Get the volume
                 const DDGIVolume* volume = volumes[volumeIndex];
-
-                // Set push constants
-                DDGIConstants consts =
-                {
-                    volume->GetIndex(),
-                    volume->GetDescriptorBindlessUAVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                    volume->GetDescriptorBindlessSRVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                };
 
                 // Bind the descriptor set and push constants
                 vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetPipelineLayout(), 0, 1, volume->GetDescriptorSetConstPtr(), 0, nullptr);
-                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIConstants::GetSizeInBytes(), consts.GetData());
+
+                // Update the push constants
+                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIRootConstants::GetSizeInBytes(), volume->GetPushConstants().GetData());
 
                 // Get the number of probes on the X and Y dimensions of the texture
-                uint32_t probeCountX, probeCountY;
-                GetDDGIVolumeProbeCounts(volume->GetDesc(), probeCountX, probeCountY);
+                uint32_t probeCountX, probeCountY, probeCountZ;
+                GetDDGIVolumeProbeCounts(volume->GetDesc(), probeCountX, probeCountY, probeCountZ);
 
                 // Probe distance blending
                 {
@@ -381,7 +393,7 @@ namespace rtxgi
 
                     // Bind the pipeline and dispatch threads
                     vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeBlendingDistancePipeline());
-                    vkCmdDispatch(cmdBuffer, probeCountX, probeCountY, 1);
+                    vkCmdDispatch(cmdBuffer, probeCountX, probeCountY, probeCountZ);
 
                     if (bInsertPerfMarkers && volume->GetInsertPerfMarkers()) vkCmdEndDebugUtilsLabelEXT(cmdBuffer);
                 }
@@ -390,7 +402,6 @@ namespace rtxgi
                 barrier.image = volume->GetProbeDistance();
                 barriers.push_back(barrier);
             }
-
             if (bInsertPerfMarkers) vkCmdEndDebugUtilsLabelEXT(cmdBuffer);
 
             // Wait for the irradiance and distance blending passes
@@ -407,116 +418,17 @@ namespace rtxgi
                     static_cast<uint32_t>(barriers.size()), barriers.data());
             }
 
-            // Probe Border Update
-            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "Probe Border Update");
-
-            float groupSize = 8.f;
-            uint32_t numThreadsX, numThreadsY;
-            uint32_t numGroupsX, numGroupsY;
-            for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
-            {
-                const DDGIVolume* volume = volumes[volumeIndex];
-
-                DDGIConstants consts =
-                {
-                    volume->GetIndex(),
-                    volume->GetDescriptorBindlessUAVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                    volume->GetDescriptorBindlessSRVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                };
-
-                // Bind the descriptor set and push constants
-                vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetPipelineLayout(), 0, 1, volume->GetDescriptorSetConstPtr(), 0, nullptr);
-                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIConstants::GetSizeInBytes(), consts.GetData());
-
-                // Get the number of probes on the X and Y dimensions of the texture
-                uint32_t probeCountX, probeCountY;
-                GetDDGIVolumeProbeCounts(volume->GetDesc(), probeCountX, probeCountY);
-
-                // Probe irradiance border update
-                {
-                    if (bInsertPerfMarkers && volume->GetInsertPerfMarkers())
-                    {
-                        std::string msg = "Irradiance, DDGIVolume[" + std::to_string(volume->GetIndex()) + "] - \"" + volume->GetName() + "\"";
-                        AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, msg.c_str());
-                    }
-
-                    // Rows
-                    numThreadsX = (probeCountX * ((uint32_t)volume->GetDesc().probeNumIrradianceTexels + 2));
-                    numThreadsY = probeCountY;
-                    numGroupsX = (uint32_t)ceil((float)numThreadsX / groupSize);
-                    numGroupsY = (uint32_t)ceil((float)numThreadsY / groupSize);
-
-                    // Bind the pipeline and dispatch threads
-                    vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeBorderRowUpdateIrradiancePipeline());
-                    vkCmdDispatch(cmdBuffer, numGroupsX, numGroupsY, 1);
-
-                    // Columns
-                    numThreadsX = probeCountX;
-                    numThreadsY = (probeCountY * ((uint32_t)volume->GetDesc().probeNumIrradianceTexels + 2));
-                    numGroupsX = (uint32_t)ceil((float)numThreadsX / groupSize);
-                    numGroupsY = (uint32_t)ceil((float)numThreadsY / groupSize);
-
-                    // Bind the pipeline and dispatch threads
-                    vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeBorderColumnUpdateIrradiancePipeline());
-                    vkCmdDispatch(cmdBuffer, numGroupsX, numGroupsY, 1);
-
-                    if (bInsertPerfMarkers && volume->GetInsertPerfMarkers()) vkCmdEndDebugUtilsLabelEXT(cmdBuffer);
-                }
-
-                // Probe distance border update
-                {
-                    if (bInsertPerfMarkers && volume->GetInsertPerfMarkers())
-                    {
-                        std::string msg = "Distance, DDGIVolume[" + std::to_string(volume->GetIndex()) + "] - \"" + volume->GetName() + "\"";
-                        AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, msg.c_str());
-                    }
-
-                    // Rows
-                    numThreadsX = (probeCountX * ((uint32_t)volume->GetDesc().probeNumDistanceTexels + 2));
-                    numThreadsY = probeCountY;
-                    numGroupsX = (uint32_t)ceil((float)numThreadsX / groupSize);
-                    numGroupsY = (uint32_t)ceil((float)numThreadsY / groupSize);
-
-                    // Bind the pipeline and dispatch threads
-                    vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeBorderRowUpdateDistancePipeline());
-                    vkCmdDispatch(cmdBuffer, numGroupsX, numGroupsY, 1);
-
-                    // Columns
-                    numThreadsX = probeCountX;
-                    numThreadsY = (probeCountY * ((uint32_t)volume->GetDesc().probeNumDistanceTexels + 2));
-                    numGroupsX = (uint32_t)ceil((float)numThreadsX / groupSize);
-                    numGroupsY = (uint32_t)ceil((float)numThreadsY / groupSize);
-
-                    // Bind the pipeline and dispatch threads
-                    vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeBorderColumnUpdateDistancePipeline());
-                    vkCmdDispatch(cmdBuffer, numGroupsX, numGroupsY, 1);
-
-                    if (bInsertPerfMarkers && volume->GetInsertPerfMarkers()) vkCmdEndDebugUtilsLabelEXT(cmdBuffer);
-                }
-            }
+            // Remove previous barriers
+            barriers.clear();
 
             if (bInsertPerfMarkers) vkCmdEndDebugUtilsLabelEXT(cmdBuffer);
-
-            // Wait for the irradiance and distance blending passes
-            // to complete before updating the borders
-            if(!barriers.empty())
-            {
-                vkCmdPipelineBarrier(
-                    cmdBuffer,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    0,
-                    0, nullptr,
-                    0, nullptr,
-                    static_cast<uint32_t>(barriers.size()), barriers.data());
-            }
 
             return ERTXGIStatus::OK;
         }
 
         ERTXGIStatus RelocateDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes)
         {
-            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "Relocate Probes");
+            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "RTXGI DDGI Relocate Probes");
 
             uint32_t volumeIndex;
             std::vector<VkImageMemoryBarrier> barriers;
@@ -531,25 +443,18 @@ namespace rtxgi
             // Probe Relocation Reset
             for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
             {
+                // Get the volume
                 const DDGIVolume* volume = volumes[volumeIndex];
-                if (!volume->GetProbeRelocationEnabled()) continue;     // Skip if relocation is not enabled for this volume
                 if (!volume->GetProbeRelocationNeedsReset()) continue;  // Skip if the volume doesn't need to be reset
-
-                // Set push constants
-                DDGIConstants consts =
-                {
-                    volume->GetIndex(),
-                    volume->GetDescriptorBindlessUAVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                    volume->GetDescriptorBindlessSRVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                };
 
                 // Bind descriptor set and push constants
                 vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetPipelineLayout(), 0, 1, volume->GetDescriptorSetConstPtr(), 0, nullptr);
-                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIConstants::GetSizeInBytes(), consts.GetData());
 
-                const float groupSizeX = 32.f;
+                // Update the push constants
+                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIRootConstants::GetSizeInBytes(), volume->GetPushConstants().GetData());
 
                 // Reset all probe offsets to zero
+                const float groupSizeX = 32.f;
                 uint32_t numGroupsX = (uint32_t)ceil((float)volume->GetNumProbes() / groupSizeX);
                 vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeRelocationResetPipeline());
                 vkCmdDispatch(cmdBuffer, numGroupsX, 1, 1);
@@ -581,24 +486,18 @@ namespace rtxgi
             // Probe Relocation
             for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
             {
+                // Get the volume
                 const DDGIVolume* volume = volumes[volumeIndex];
                 if (!volume->GetProbeRelocationEnabled()) continue;  // Skip if relocation is not enabled for this volume
 
-                // Set push constants
-                DDGIConstants consts =
-                {
-                    volume->GetIndex(),
-                    volume->GetDescriptorBindlessUAVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                    volume->GetDescriptorBindlessSRVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                };
-
                 // Bind descriptor set and push constants
                 vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetPipelineLayout(), 0, 1, volume->GetDescriptorSetConstPtr(), 0, nullptr);
-                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIConstants::GetSizeInBytes(), consts.GetData());
 
-                float groupSizeX = 32.f;
+                // Update the push constants
+                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIRootConstants::GetSizeInBytes(), volume->GetPushConstants().GetData());
 
                 // Probe relocation
+                float groupSizeX = 32.f;
                 uint32_t numGroupsX = (uint32_t)ceil((float)volume->GetNumProbes() / groupSizeX);
                 vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeRelocationPipeline());
                 vkCmdDispatch(cmdBuffer, numGroupsX, 1, 1);
@@ -629,7 +528,7 @@ namespace rtxgi
 
         ERTXGIStatus ClassifyDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes)
         {
-            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "Classify Probes");
+            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "RTXGI DDGI Classify Probes");
 
             uint32_t volumeIndex;
             std::vector<VkImageMemoryBarrier> barriers;
@@ -644,25 +543,18 @@ namespace rtxgi
             // Probe Classification Reset
             for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
             {
+                // Get the volume
                 const DDGIVolume* volume = volumes[volumeIndex];
-                if (!volume->GetProbeClassificationEnabled()) continue;     // Skip if classification is not enabled for this volume
                 if (!volume->GetProbeClassificationNeedsReset()) continue;  // Skip if the volume doesn't need to be reset
-
-                // Set push constants
-                DDGIConstants consts =
-                {
-                    volume->GetIndex(),
-                    volume->GetDescriptorBindlessUAVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                    volume->GetDescriptorBindlessSRVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                };
 
                 // Bind descriptor set and push constants
                 vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetPipelineLayout(), 0, 1, volume->GetDescriptorSetConstPtr(), 0, nullptr);
-                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIConstants::GetSizeInBytes(), consts.GetData());
 
-                const float groupSizeX = 32.f;
+                // Update the push constants
+                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIRootConstants::GetSizeInBytes(), volume->GetPushConstants().GetData());
 
                 // Reset all probe states to the ACTIVE state
+                const float groupSizeX = 32.f;
                 uint32_t numGroupsX = (uint32_t)ceil((float)volume->GetNumProbes() / groupSizeX);
                 vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeClassificationResetPipeline());
                 vkCmdDispatch(cmdBuffer, numGroupsX, 1, 1);
@@ -694,24 +586,18 @@ namespace rtxgi
             // Probe Classification
             for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
             {
+                // Get the volume
                 const DDGIVolume* volume = volumes[volumeIndex];
                 if (!volume->GetProbeClassificationEnabled()) continue;  // Skip if classification is not enabled for this volume
 
-                // Set push constants
-                DDGIConstants consts =
-                {
-                    volume->GetIndex(),
-                    volume->GetDescriptorBindlessUAVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                    volume->GetDescriptorBindlessSRVOffset(), // ignored when shaders do not define RTXGI_DDGI_BINDLESS_RESOURCES
-                };
-
                 // Bind descriptor set and push constants
                 vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetPipelineLayout(), 0, 1, volume->GetDescriptorSetConstPtr(), 0, nullptr);
-                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIConstants::GetSizeInBytes(), consts.GetData());
 
-                const float groupSizeX = 32.f;
+                // Update the push constants
+                vkCmdPushConstants(cmdBuffer, volume->GetPipelineLayout(), VK_SHADER_STAGE_ALL, volume->GetPushConstantsOffset(), DDGIRootConstants::GetSizeInBytes(), volume->GetPushConstants().GetData());
 
                 // Probe classification
+                const float groupSizeX = 32.f;
                 uint32_t numGroupsX = (uint32_t)ceil((float)volume->GetNumProbes() / groupSizeX);
                 vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, volume->GetProbeClassificationPipeline());
                 vkCmdDispatch(cmdBuffer, numGroupsX, 1, 1);
@@ -754,28 +640,16 @@ namespace rtxgi
             // Release the existing shader modules
             vkDestroyShaderModule(m_device, m_probeBlendingIrradianceModule, nullptr);
             vkDestroyShaderModule(m_device, m_probeBlendingDistanceModule, nullptr);
-            vkDestroyShaderModule(m_device, m_probeBorderRowUpdateIrradianceModule, nullptr);
-            vkDestroyShaderModule(m_device, m_probeBorderRowUpdateDistanceModule, nullptr);
-            vkDestroyShaderModule(m_device, m_probeBorderColumnUpdateIrradianceModule, nullptr);
-            vkDestroyShaderModule(m_device, m_probeBorderColumnUpdateDistanceModule, nullptr);
-
             vkDestroyShaderModule(m_device, m_probeRelocationModule, nullptr);
             vkDestroyShaderModule(m_device, m_probeRelocationResetModule, nullptr);
-
             vkDestroyShaderModule(m_device, m_probeClassificationModule, nullptr);
             vkDestroyShaderModule(m_device, m_probeClassificationResetModule, nullptr);
 
             // Release the existing compute pipelines
             vkDestroyPipeline(m_device, m_probeBlendingIrradiancePipeline, nullptr);
             vkDestroyPipeline(m_device, m_probeBlendingDistancePipeline, nullptr);
-            vkDestroyPipeline(m_device, m_probeBorderRowUpdateIrradiancePipeline, nullptr);
-            vkDestroyPipeline(m_device, m_probeBorderRowUpdateDistancePipeline, nullptr);
-            vkDestroyPipeline(m_device, m_probeBorderColumnUpdateIrradiancePipeline, nullptr);
-            vkDestroyPipeline(m_device, m_probeBorderColumnUpdateDistancePipeline, nullptr);
-
             vkDestroyPipeline(m_device, m_probeRelocationPipeline, nullptr);
             vkDestroyPipeline(m_device, m_probeRelocationResetPipeline, nullptr);
-
             vkDestroyPipeline(m_device, m_probeClassificationPipeline, nullptr);
             vkDestroyPipeline(m_device, m_probeClassificationResetPipeline, nullptr);
         }
@@ -814,34 +688,6 @@ namespace rtxgi
                     "Probe Distance Blending")) return ERTXGIStatus::ERROR_DDGI_VK_CREATE_FAILURE_PIPELINE;
 
                 if (!CreateComputePipeline(
-                    managed.probeBorderRowUpdateIrradianceCS,
-                    "DDGIProbeBorderRowUpdateCS",
-                    &m_probeBorderRowUpdateIrradianceModule,
-                    &m_probeBorderRowUpdateIrradiancePipeline,
-                    "Probe Border Row Update (Irradiance)")) return ERTXGIStatus::ERROR_DDGI_VK_CREATE_FAILURE_PIPELINE;
-
-                if (!CreateComputePipeline(
-                    managed.probeBorderRowUpdateDistanceCS,
-                    "DDGIProbeBorderRowUpdateCS",
-                    &m_probeBorderRowUpdateDistanceModule,
-                    &m_probeBorderRowUpdateDistancePipeline,
-                    "Probe Border Row Update (Distance)")) return ERTXGIStatus::ERROR_DDGI_VK_CREATE_FAILURE_PIPELINE;
-
-                if (!CreateComputePipeline(
-                    managed.probeBorderColumnUpdateIrradianceCS,
-                    "DDGIProbeBorderColumnUpdateCS",
-                    &m_probeBorderColumnUpdateIrradianceModule,
-                    &m_probeBorderColumnUpdateIrradiancePipeline,
-                    "Probe Border Column Update (Irradiance)")) return ERTXGIStatus::ERROR_DDGI_VK_CREATE_FAILURE_PIPELINE;
-
-                if (!CreateComputePipeline(
-                    managed.probeBorderColumnUpdateDistanceCS,
-                    "DDGIProbeBorderColumnUpdateCS",
-                    &m_probeBorderColumnUpdateDistanceModule,
-                    &m_probeBorderColumnUpdateDistancePipeline,
-                    "Probe Border Column Update (Distance)")) return ERTXGIStatus::ERROR_DDGI_VK_CREATE_FAILURE_PIPELINE;
-
-                if (!CreateComputePipeline(
                     managed.probeRelocation.updateCS,
                     "DDGIProbeRelocationCS",
                     &m_probeRelocationModule,
@@ -874,7 +720,7 @@ namespace rtxgi
             if (deviceChanged || m_desc.ShouldAllocateProbes(desc))
             {
                 // Probe counts have changed. The textures are the wrong size or aren't allocated yet.
-                // (Re)allocate the probe ray data, irradiance, distance, and data textures.
+                // (Re)allocate the probe ray data, irradiance, distance, and data texture arrays.
                 if (!CreateProbeRayData(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_RAY_DATA;
                 if (!CreateProbeIrradiance(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_IRRADIANCE;
                 if (!CreateProbeDistance(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_DISTANCE;
@@ -884,19 +730,19 @@ namespace rtxgi
             {
                 if (m_desc.ShouldAllocateRayData(desc))
                 {
-                    // The number of probe rays to trace per frame has changed. Reallocate the radiance texture.
+                    // The number of probe rays to trace per frame has changed. Reallocate the ray data texture array.
                     if (!CreateProbeRayData(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_RAY_DATA;
                 }
 
                 if (m_desc.ShouldAllocateIrradiance(desc))
                 {
-                    // The number of irradiance texels per probe has changed. Reallocate the irradiance texture.
+                    // The number of irradiance texels per probe has changed. Reallocate the irradiance texture array.
                     if (!CreateProbeIrradiance(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_IRRADIANCE;
                 }
 
                 if (m_desc.ShouldAllocateDistance(desc))
                 {
-                    // The number of distance texels per probe has changed. Reallocate the distance texture.
+                    // The number of distance texels per probe has changed. Reallocate the distance texture array.
                     if (!CreateProbeDistance(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_DISTANCE;
                 }
             }
@@ -906,53 +752,41 @@ namespace rtxgi
     #else
         void DDGIVolume::StoreUnmanagedResourcesDesc(const DDGIVolumeUnmanagedResourcesDesc& unmanaged)
         {
-            // Pipeline layout and descriptor set
+            // Pipeline Layout and Descriptor Set
             m_pipelineLayout = unmanaged.pipelineLayout;
             m_descriptorSet = unmanaged.descriptorSet;
 
-            // Textures
+            // Texture Arrays
             m_probeRayData = unmanaged.probeRayData;
             m_probeIrradiance = unmanaged.probeIrradiance;
             m_probeDistance = unmanaged.probeDistance;
             m_probeData = unmanaged.probeData;
 
-            // Texture Memory
+            // Texture Array Memory
             m_probeRayDataMemory = unmanaged.probeRayDataMemory;
             m_probeIrradianceMemory = unmanaged.probeIrradianceMemory;
             m_probeDistanceMemory = unmanaged.probeDistanceMemory;
             m_probeDataMemory = unmanaged.probeDataMemory;
 
-            // Texture Views
+            // Texture Array Views
             m_probeRayDataView = unmanaged.probeRayDataView;
             m_probeIrradianceView = unmanaged.probeIrradianceView;
             m_probeDistanceView = unmanaged.probeDistanceView;
             m_probeDataView = unmanaged.probeDataView;
 
-            // Shader modules
+            // Shader Modules
             m_probeBlendingIrradianceModule = unmanaged.probeBlendingIrradianceModule;
             m_probeBlendingDistanceModule = unmanaged.probeBlendingDistanceModule;
-            m_probeBorderRowUpdateIrradianceModule = unmanaged.probeBorderRowUpdateIrradianceModule;
-            m_probeBorderRowUpdateDistanceModule = unmanaged.probeBorderRowUpdateDistanceModule;
-            m_probeBorderColumnUpdateIrradianceModule = unmanaged.probeBorderColumnUpdateIrradianceModule;
-            m_probeBorderColumnUpdateDistanceModule = unmanaged.probeBorderColumnUpdateDistanceModule;
-
             m_probeRelocationModule = unmanaged.probeRelocation.updateModule;
             m_probeRelocationResetModule = unmanaged.probeRelocation.resetModule;
-
             m_probeClassificationModule = unmanaged.probeClassification.updateModule;
             m_probeClassificationResetModule = unmanaged.probeClassification.resetModule;
 
             // Pipelines
             m_probeBlendingIrradiancePipeline = unmanaged.probeBlendingIrradiancePipeline;
             m_probeBlendingDistancePipeline = unmanaged.probeBlendingDistancePipeline;
-            m_probeBorderRowUpdateIrradiancePipeline = unmanaged.probeBorderRowUpdateIrradiancePipeline;
-            m_probeBorderRowUpdateDistancePipeline = unmanaged.probeBorderRowUpdateDistancePipeline;
-            m_probeBorderColumnUpdateIrradiancePipeline = unmanaged.probeBorderColumnUpdateIrradiancePipeline;
-            m_probeBorderColumnUpdateDistancePipeline = unmanaged.probeBorderColumnUpdateDistancePipeline;
-
             m_probeRelocationPipeline = unmanaged.probeRelocation.updatePipeline;
             m_probeRelocationResetPipeline = unmanaged.probeRelocation.resetPipeline;
-
             m_probeClassificationPipeline = unmanaged.probeClassification.updatePipeline;
             m_probeClassificationResetPipeline = unmanaged.probeClassification.resetPipeline;
         }
@@ -969,15 +803,16 @@ namespace rtxgi
     #endif
         {
             // Validate the probe counts
-            if (desc.probeCounts.x <= 0 || desc.probeCounts.y <= 0 || desc.probeCounts.z <= 0)
+            if (desc.probeCounts.x <= 0 || desc.probeCounts.y <= 0 || desc.probeCounts.z <= 0) return ERTXGIStatus::ERROR_DDGI_INVALID_PROBE_COUNTS;
+
+            // Validate the resource indices buffer (when necessary)
+            if(resources.bindless.enabled)
             {
-                return ERTXGIStatus::ERROR_DDGI_INVALID_PROBE_COUNTS;
+                if(resources.bindless.resourceIndicesBuffer == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_RESOURCE_INDICES_BUFFER;
             }
 
             // Validate the constants buffer
-        #if RTXGI_DDGI_RESOURCE_MANAGEMENT
             if (resources.constantsBuffer == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_CONSTANTS_BUFFER;
-        #endif
 
             // Validate the resource structures
             if (resources.managed.enabled && resources.unmanaged.enabled) return ERTXGIStatus::ERROR_DDGI_INVALID_RESOURCES_DESC;
@@ -992,22 +827,22 @@ namespace rtxgi
         #endif
             if (result != ERTXGIStatus::OK) return result;
 
-            // Set the push constants offset (useful in bindless mode)
-            m_pushConstantsOffset = resources.descriptorBindlessDesc.pushConstantsOffset;
+            // Store the bindless resources descriptor
+            m_bindlessResources = resources.bindless;
 
-            // Always stored (even in managed mode) for convenience. This is helpful when other parts of an application
-            // (e.g. ray tracing passes) access resources bindlessly and use the volume to look up resource offsets.
-            // See DDGI_D3D12.cpp::RayTraceVolume() for an example.
-            m_descriptorBindlessUAVOffset = resources.descriptorBindlessDesc.uavOffset;
-            m_descriptorBindlessSRVOffset = resources.descriptorBindlessDesc.srvOffset;
+            // Store the push constants offset
+            m_pushConstantsOffset = resources.bindless.pushConstantsOffset;
 
-            // Store the constants structured buffer pointers
+            // Store the bindless resources descriptor
+            m_bindlessResources = resources.bindless;
+
+            // Store the constants structured buffer pointers and size
             if (resources.constantsBuffer) m_constantsBuffer = resources.constantsBuffer;
             if (resources.constantsBufferUpload) m_constantsBufferUpload = resources.constantsBufferUpload;
             if (resources.constantsBufferUploadMemory) m_constantsBufferUploadMemory = resources.constantsBufferUploadMemory;
             m_constantsBufferSizeInBytes = resources.constantsBufferSizeInBytes;
 
-            // Allocate or store pointers to the texture and PSO resources
+            // Allocate or store pointers to the pipeline layout, descriptor set, textures, and pipelines
         #if RTXGI_DDGI_RESOURCE_MANAGEMENT
             result = CreateManagedResources(desc, resources.managed);
             if (result != ERTXGIStatus::OK) return result;
@@ -1018,16 +853,18 @@ namespace rtxgi
             // Store the new volume descriptor
             m_desc = desc;
 
+            // Vulkan only: Force relocation reset in case the allocated memory isn't zeroed
+            if(m_desc.probeRelocationEnabled) m_desc.probeRelocationNeedsReset = true;
+
         #if RTXGI_DDGI_RESOURCE_MANAGEMENT
-            // Transition textures for general use
-            Transition(cmdBuffer);
+            Transition(cmdBuffer); // Transition texture arrays for general use
 
             // Create the descriptor set
             if (!CreateDescriptorSet()) return ERTXGIStatus::ERROR_DDGI_VK_CREATE_FAILURE_DESCRIPTOR_SET;
         #endif
 
             // Store the volume rotation
-            m_rotationMatrix = EulerAnglesToRotationMatrixYXZ(desc.eulerAngles);
+            m_rotationMatrix = EulerAnglesToRotationMatrix(desc.eulerAngles);
             m_rotationQuaternion = RotationMatrixToQuaternion(m_rotationMatrix);
 
             // Set the default scroll anchor to the origin
@@ -1050,15 +887,18 @@ namespace rtxgi
 
         ERTXGIStatus DDGIVolume::ClearProbes(VkCommandBuffer cmdBuffer)
         {
-            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "Clear Probes");
+            if (bInsertPerfMarkers) AddPerfMarker(cmdBuffer, RTXGI_PERF_MARKER_GREEN, "RTXGI DDGI Clear Probes");
 
-            VkClearColorValue color = { { 0.f, 0.f, 0.f, 0.f } };
+            uint32_t width, height, arraySize;
+            GetDDGIVolumeProbeCounts(m_desc, width, height, arraySize);
+
+            VkClearColorValue color = { { 0.f, 0.f, 0.f, 1.f } };
             VkImageSubresourceRange range;
             range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             range.baseMipLevel = 0;
             range.levelCount = 1;
             range.baseArrayLayer = 0;
-            range.layerCount = 1;
+            range.layerCount = arraySize;
 
             vkCmdClearColorImage(cmdBuffer, m_probeIrradiance, VK_IMAGE_LAYOUT_GENERAL, &color, 1, &range);
             vkCmdClearColorImage(cmdBuffer, m_probeDistance, VK_IMAGE_LAYOUT_GENERAL, &color, 1, &range);
@@ -1070,9 +910,7 @@ namespace rtxgi
 
         void DDGIVolume::Destroy()
         {
-            m_pushConstantsOffset = 0;
-            m_descriptorBindlessUAVOffset = 0;
-            m_descriptorBindlessSRVOffset = 0;
+            m_bindlessResources = {};
 
             m_constantsBuffer = nullptr;
             m_constantsBufferUpload = nullptr;
@@ -1104,32 +942,20 @@ namespace rtxgi
             // Shader Modules
             vkDestroyShaderModule(m_device, m_probeBlendingIrradianceModule, nullptr);
             vkDestroyShaderModule(m_device, m_probeBlendingDistanceModule, nullptr);
-            vkDestroyShaderModule(m_device, m_probeBorderRowUpdateIrradianceModule, nullptr);
-            vkDestroyShaderModule(m_device, m_probeBorderRowUpdateDistanceModule, nullptr);
-            vkDestroyShaderModule(m_device, m_probeBorderColumnUpdateIrradianceModule, nullptr);
-            vkDestroyShaderModule(m_device, m_probeBorderColumnUpdateDistanceModule, nullptr);
-
             vkDestroyShaderModule(m_device, m_probeRelocationModule, nullptr);
             vkDestroyShaderModule(m_device, m_probeRelocationResetModule, nullptr);
-
             vkDestroyShaderModule(m_device, m_probeClassificationModule, nullptr);
             vkDestroyShaderModule(m_device, m_probeClassificationResetModule, nullptr);
 
             // Pipelines
             vkDestroyPipeline(m_device, m_probeBlendingIrradiancePipeline, nullptr);
             vkDestroyPipeline(m_device, m_probeBlendingDistancePipeline, nullptr);
-            vkDestroyPipeline(m_device, m_probeBorderRowUpdateIrradiancePipeline, nullptr);
-            vkDestroyPipeline(m_device, m_probeBorderRowUpdateDistancePipeline, nullptr);
-            vkDestroyPipeline(m_device, m_probeBorderColumnUpdateIrradiancePipeline, nullptr);
-            vkDestroyPipeline(m_device, m_probeBorderColumnUpdateDistancePipeline, nullptr);
-
             vkDestroyPipeline(m_device, m_probeRelocationPipeline, nullptr);
             vkDestroyPipeline(m_device, m_probeRelocationResetPipeline, nullptr);
-
             vkDestroyPipeline(m_device, m_probeClassificationPipeline, nullptr);
             vkDestroyPipeline(m_device, m_probeClassificationResetPipeline, nullptr);
 
-            // Textures
+            // Texture Arrays
             vkDestroyImage(m_device, m_probeRayData, nullptr);
             vkDestroyImageView(m_device, m_probeRayDataView, nullptr);
             vkFreeMemory(m_device, m_probeRayDataMemory, nullptr);
@@ -1155,7 +981,7 @@ namespace rtxgi
             m_descriptorSet = nullptr;
             m_pipelineLayout = nullptr;
 
-            // Textures
+            // Texture Arrays
             m_probeRayData = nullptr;
             m_probeRayDataMemory = nullptr;
             m_probeRayDataView = nullptr;
@@ -1172,30 +998,31 @@ namespace rtxgi
             // Shader Modules
             m_probeBlendingIrradianceModule = nullptr;
             m_probeBlendingDistanceModule = nullptr;
-            m_probeBorderRowUpdateIrradianceModule = nullptr;
-            m_probeBorderRowUpdateDistanceModule = nullptr;
-            m_probeBorderColumnUpdateIrradianceModule = nullptr;
-            m_probeBorderColumnUpdateDistanceModule = nullptr;
-
             m_probeRelocationModule = nullptr;
             m_probeRelocationResetModule = nullptr;
-
             m_probeClassificationModule = nullptr;
             m_probeClassificationResetModule = nullptr;
 
             // Pipelines
             m_probeBlendingIrradiancePipeline = nullptr;
             m_probeBlendingDistancePipeline = nullptr;
-            m_probeBorderRowUpdateIrradiancePipeline = nullptr;
-            m_probeBorderRowUpdateDistancePipeline = nullptr;
-            m_probeBorderColumnUpdateIrradiancePipeline = nullptr;
-            m_probeBorderColumnUpdateDistancePipeline = nullptr;
-
             m_probeRelocationPipeline = nullptr;
             m_probeRelocationResetPipeline = nullptr;
-
             m_probeClassificationPipeline = nullptr;
             m_probeClassificationResetPipeline = nullptr;
+        }
+
+        uint32_t DDGIVolume::GetGPUMemoryUsedInBytes() const
+        {
+            uint32_t bytesPerVolume = DDGIVolumeBase::GetGPUMemoryUsedInBytes();
+
+            if (m_bindlessResources.enabled)
+            {
+                // Add the memory used for the GPU-side DDGIVolumeResourceIndices (32B)
+                bytesPerVolume += (uint32_t)sizeof(DDGIVolumeResourceIndices);
+            }
+
+            return bytesPerVolume;
         }
 
         //------------------------------------------------------------------------
@@ -1205,7 +1032,10 @@ namespace rtxgi
     #if RTXGI_DDGI_RESOURCE_MANAGEMENT
         void DDGIVolume::Transition(VkCommandBuffer cmdBuffer)
         {
-            // Transition the textures for general use
+            uint32_t width, height, arraySize;
+            GetDDGIVolumeProbeCounts(m_desc, width, height, arraySize);
+
+            // Transition the texture arrays for general use
             std::vector<VkImageMemoryBarrier> barriers;
 
             VkImageMemoryBarrier barrier = {};
@@ -1214,7 +1044,7 @@ namespace rtxgi
             barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+            barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, arraySize };
 
             barrier.image = m_probeRayData;
             barriers.push_back(barrier);
@@ -1283,80 +1113,41 @@ namespace rtxgi
         #endif
 
             // Store the data to be written to the descriptor set
-            std::vector<VkWriteDescriptorSet> writeDescriptorSets;
+            VkWriteDescriptorSet* descriptor = nullptr;
+            std::vector<VkWriteDescriptorSet> descriptors;
 
-            VkDescriptorBufferInfo constantsSTBInfo = { m_constantsBuffer, 0, VK_WHOLE_SIZE };
+            // 0: Volume Constants StructuredBuffer
+            VkDescriptorBufferInfo volumeConstants = { m_constantsBuffer, 0, VK_WHOLE_SIZE };
 
-            // DDGIVolume constants structured buffer
-            VkWriteDescriptorSet constantsSTBSet = {};
-            constantsSTBSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            constantsSTBSet.dstSet = m_descriptorSet;
-            constantsSTBSet.dstBinding = EDDGIVolumeLayoutBindings::Constants;
-            constantsSTBSet.dstArrayElement = 0;
-            constantsSTBSet.descriptorCount = 1;
-            constantsSTBSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            constantsSTBSet.pBufferInfo = &constantsSTBInfo;
+            descriptor = &descriptors.emplace_back();
+            descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptor->dstSet = m_descriptorSet;
+            descriptor->dstBinding = static_cast<uint32_t>(rtxgi::vulkan::EDDGIVolumeBindings::Constants);
+            descriptor->dstArrayElement = 0;
+            descriptor->descriptorCount = 1;
+            descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptor->pBufferInfo = &volumeConstants;
 
-            writeDescriptorSets.push_back(constantsSTBSet);
+            // 1-4: Volume Texture Array UAVs
+            VkDescriptorImageInfo rwTex2D[] =
+            {
+                { VK_NULL_HANDLE, m_probeRayDataView, VK_IMAGE_LAYOUT_GENERAL },
+                { VK_NULL_HANDLE, m_probeIrradianceView, VK_IMAGE_LAYOUT_GENERAL },
+                { VK_NULL_HANDLE, m_probeDistanceView, VK_IMAGE_LAYOUT_GENERAL },
+                { VK_NULL_HANDLE, m_probeDataView, VK_IMAGE_LAYOUT_GENERAL }
+            };
 
-            VkDescriptorImageInfo rayDataInfo = { VK_NULL_HANDLE, m_probeRayDataView, VK_IMAGE_LAYOUT_GENERAL };
-
-            // Probe Ray Data
-            VkWriteDescriptorSet rayDataSet = {};
-            rayDataSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            rayDataSet.dstSet = m_descriptorSet;
-            rayDataSet.dstBinding = EDDGIVolumeLayoutBindings::ProbeRayData;
-            rayDataSet.dstArrayElement = 0;
-            rayDataSet.descriptorCount = 1;
-            rayDataSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            rayDataSet.pImageInfo = &rayDataInfo;
-
-            writeDescriptorSets.push_back(rayDataSet);
-
-            VkDescriptorImageInfo irradianceInfo = { VK_NULL_HANDLE, m_probeIrradianceView, VK_IMAGE_LAYOUT_GENERAL };
-
-            // Probe Irradiance
-            VkWriteDescriptorSet irradianceSet = {};
-            irradianceSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            irradianceSet.dstSet = m_descriptorSet;
-            irradianceSet.dstBinding = EDDGIVolumeLayoutBindings::ProbeIrradiance;
-            irradianceSet.dstArrayElement = 0;
-            irradianceSet.descriptorCount = 1;
-            irradianceSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            irradianceSet.pImageInfo = &irradianceInfo;
-
-            writeDescriptorSets.push_back(irradianceSet);
-
-            VkDescriptorImageInfo distanceInfo = { VK_NULL_HANDLE, m_probeDistanceView, VK_IMAGE_LAYOUT_GENERAL };
-
-            // Probe Distance
-            VkWriteDescriptorSet distanceSet = {};
-            distanceSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            distanceSet.dstSet = m_descriptorSet;
-            distanceSet.dstBinding = EDDGIVolumeLayoutBindings::ProbeDistance;
-            distanceSet.dstArrayElement = 0;
-            distanceSet.descriptorCount = 1;
-            distanceSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            distanceSet.pImageInfo = &distanceInfo;
-
-            writeDescriptorSets.push_back(distanceSet);
-
-            VkDescriptorImageInfo dataInfo = { VK_NULL_HANDLE, m_probeDataView, VK_IMAGE_LAYOUT_GENERAL };
-
-            // Probe Data
-            VkWriteDescriptorSet dataSet = {};
-            dataSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            dataSet.dstSet = m_descriptorSet;
-            dataSet.dstBinding = EDDGIVolumeLayoutBindings::ProbeData;
-            dataSet.dstArrayElement = 0;
-            dataSet.descriptorCount = 1;
-            dataSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            dataSet.pImageInfo = &dataInfo;
-
-            writeDescriptorSets.push_back(dataSet);
+            descriptor = &descriptors.emplace_back();
+            descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptor->dstSet = m_descriptorSet;
+            descriptor->dstBinding = static_cast<uint32_t>(EDDGIVolumeBindings::RayData);
+            descriptor->dstArrayElement = 0;
+            descriptor->descriptorCount = _countof(rwTex2D);
+            descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            descriptor->pImageInfo = rwTex2D;
 
             // Update the descriptor set
-            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(descriptors.size()), descriptors.data(), 0, nullptr);
 
             return true;
         }
@@ -1364,12 +1155,13 @@ namespace rtxgi
         bool DDGIVolume::CreateLayouts()
         {
             // Get the layout descriptors
-            std::vector<VkDescriptorSetLayoutBinding> bindings;
             VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
             VkPushConstantRange pushConstantRange = {};
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+            std::vector<VkDescriptorSetLayoutBinding> bindings;
+            bindings.resize(GetDDGIVolumeLayoutBindingCount());
 
-            GetDDGIVolumeLayoutDescs(bindings, descriptorSetLayoutCreateInfo, pushConstantRange, pipelineLayoutCreateInfo);
+            GetDDGIVolumeLayoutDescs(descriptorSetLayoutCreateInfo, pushConstantRange, pipelineLayoutCreateInfo, bindings.data());
 
             // Create the descriptor set layout
             VkResult result = vkCreateDescriptorSetLayout(m_device, &descriptorSetLayoutCreateInfo, nullptr, &m_descriptorSetLayout);
@@ -1393,9 +1185,9 @@ namespace rtxgi
             return true;
         }
 
-        bool DDGIVolume::CreateComputePipeline(ShaderBytecode shader, std::string entryPoint, VkShaderModule* module, VkPipeline* pipeline, std::string debugName = "")
+        bool DDGIVolume::CreateComputePipeline(ShaderBytecode shader, const char* entryPoint, VkShaderModule* module, VkPipeline* pipeline, const char* debugName = "")
         {
-            if (entryPoint.compare("") == 0) return false;
+            if (std::string(entryPoint).compare("") == 0) return false;
 
             // Create the shader module
             VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
@@ -1417,7 +1209,7 @@ namespace rtxgi
             computePipelineCreateInfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             computePipelineCreateInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
             computePipelineCreateInfo.stage.module = *module;
-            computePipelineCreateInfo.stage.pName = entryPoint.c_str();
+            computePipelineCreateInfo.stage.pName = entryPoint;
             computePipelineCreateInfo.layout = m_pipelineLayout;
 
             // Create the pipeline
@@ -1431,7 +1223,7 @@ namespace rtxgi
             return true;
         }
 
-        bool DDGIVolume::CreateTexture(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkImage* image, VkDeviceMemory* imageMemory, VkImageView* imageView)
+        bool DDGIVolume::CreateTexture(uint32_t width, uint32_t height, uint32_t arraySize, VkFormat format, VkImageUsageFlags usage, VkImage* image, VkDeviceMemory* imageMemory, VkImageView* imageView)
         {
             // Describe the texture
             VkImageCreateInfo imageCreateInfo = {};
@@ -1442,7 +1234,7 @@ namespace rtxgi
             imageCreateInfo.extent.height = height;
             imageCreateInfo.extent.depth = 1;
             imageCreateInfo.mipLevels = 1;
-            imageCreateInfo.arrayLayers = 1;
+            imageCreateInfo.arrayLayers = arraySize;
             imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
             imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
             imageCreateInfo.usage = usage;
@@ -1473,8 +1265,9 @@ namespace rtxgi
             imageViewCreateInfo.image = *image;
             imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             imageViewCreateInfo.subresourceRange.levelCount = 1;
-            imageViewCreateInfo.subresourceRange.layerCount = 1;
-            imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            imageViewCreateInfo.subresourceRange.layerCount = arraySize;
+            if(arraySize > 1) imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+            else imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 
             // Create the texture's image view
             result = vkCreateImageView(m_device, &imageViewCreateInfo, nullptr, imageView);
@@ -1491,16 +1284,17 @@ namespace rtxgi
 
             uint32_t width = 0;
             uint32_t height = 0;
-            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::RayData, width, height);
+            uint32_t arraySize = 0;
+            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::RayData, width, height, arraySize);
 
             // Check for problems
-            if (width <= 0 || height <= 0) return false;
+            if (width <= 0 || height <= 0 || arraySize <= 0) return false;
 
             VkFormat format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::RayData, desc.probeRayDataFormat);
-            VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+            VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
             // Create the texture, allocate memory, and bind the memory
-            bool result = CreateTexture(width, height, format, usage, &m_probeRayData, &m_probeRayDataMemory, &m_probeRayDataView);
+            bool result = CreateTexture(width, height, arraySize, format, usage, &m_probeRayData, &m_probeRayDataMemory, &m_probeRayDataView);
             if (!result) return false;
         #ifdef RTXGI_GFX_NAME_OBJECTS
             std::string name = "DDGIVolume[" + std::to_string(desc.index) + "], Probe Ray Data";
@@ -1522,16 +1316,17 @@ namespace rtxgi
 
             uint32_t width = 0;
             uint32_t height = 0;
-            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Irradiance, width, height);
+            uint32_t arraySize = 0;
+            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Irradiance, width, height, arraySize);
 
             // Check for problems
-            if (width <= 0 || height <= 0) return false;
+            if (width <= 0 || height <= 0 || arraySize <= 0) return false;
 
             VkFormat format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Irradiance, desc.probeIrradianceFormat);
-            VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
             // Create the texture, allocate memory, and bind the memory
-            bool result = CreateTexture(width, height, format, usage, &m_probeIrradiance, &m_probeIrradianceMemory, &m_probeIrradianceView);
+            bool result = CreateTexture(width, height, arraySize, format, usage, &m_probeIrradiance, &m_probeIrradianceMemory, &m_probeIrradianceView);
             if (!result) return false;
         #ifdef RTXGI_GFX_NAME_OBJECTS
             std::string name = "DDGIVolume[" + std::to_string(desc.index) + "], Probe Irradiance";
@@ -1552,16 +1347,17 @@ namespace rtxgi
 
             uint32_t width = 0;
             uint32_t height = 0;
-            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Distance, width, height);
+            uint32_t arraySize = 0;
+            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Distance, width, height, arraySize);
 
             // Check for problems
-            if (width <= 0 || height <= 0) return false;
+            if (width <= 0 || height <= 0 || arraySize <= 0) return false;
 
             VkFormat format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Distance, desc.probeDistanceFormat);
-            VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
             // Create the texture, allocate memory, and bind the memory
-            bool result = CreateTexture(width, height, format, usage, &m_probeDistance, &m_probeDistanceMemory, &m_probeDistanceView);
+            bool result = CreateTexture(width, height, arraySize, format, usage, &m_probeDistance, &m_probeDistanceMemory, &m_probeDistanceView);
             if (!result) return false;
         #ifdef RTXGI_GFX_NAME_OBJECTS
             std::string name = "DDGIVolume[" + std::to_string(desc.index) + "], Probe Distance";
@@ -1582,16 +1378,17 @@ namespace rtxgi
 
             uint32_t width = 0;
             uint32_t height = 0;
-            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Data, width, height);
+            uint32_t arraySize = 0;
+            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Data, width, height, arraySize);
 
             // Check for problems
-            if (width <= 0) return false;
+            if (width <= 0 || height <= 0 || arraySize <= 0) return false;
 
             VkFormat format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, desc.probeDataFormat);
-            VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+            VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
             // Create the texture, allocate memory, and bind the memory
-            bool result = CreateTexture(width, height, format, usage, &m_probeData, &m_probeDataMemory, &m_probeDataView);
+            bool result = CreateTexture(width, height, arraySize, format, usage, &m_probeData, &m_probeDataMemory, &m_probeDataView);
             if (!result) return false;
         #ifdef RTXGI_GFX_NAME_OBJECTS
             std::string name = "DDGIVolume[" + std::to_string(desc.index) + "], Probe Data";

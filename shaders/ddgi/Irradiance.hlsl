@@ -15,9 +15,9 @@
 
 struct DDGIVolumeResources
 {
-    Texture2D<float4> probeIrradiance;
-    Texture2D<float4> probeDistance;
-    Texture2D<float4> probeData;
+    Texture2DArray<float4> probeIrradiance;
+    Texture2DArray<float4> probeDistance;
+    Texture2DArray<float4> probeData;
     SamplerState bilinearSampler;
 };
 
@@ -131,8 +131,8 @@ float3 DDGIGetVolumeIrradiance(
         // Compute the octahedral coordinates of the adjacent probe
         float2 octantCoords = DDGIGetOctahedralCoordinates(-biasedPosToAdjProbe);
 
-        // Get the texture atlas coordinates for the octant of the probe
-        float2 probeTextureUV = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeNumDistanceTexels, volume);
+        // Get the texture array coordinates for the octant of the probe
+        float3 probeTextureUV = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeNumDistanceInteriorTexels, volume);
 
         // Sample the probe's distance texture to get the mean distance to nearby surfaces
         float2 filteredDistance = 2.f * resources.probeDistance.SampleLevel(resources.bilinearSampler, probeTextureUV, 0).rg;
@@ -174,7 +174,7 @@ float3 DDGIGetVolumeIrradiance(
         octantCoords = DDGIGetOctahedralCoordinates(direction);
 
         // Get the probe's texture coordinates
-        probeTextureUV = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeNumIrradianceTexels, volume);
+        probeTextureUV = DDGIGetProbeUV(adjacentProbeIndex, octantCoords, volume.probeNumIrradianceInteriorTexels, volume);
 
         // Sample the probe's irradiance
         float3 probeIrradiance = resources.probeIrradiance.SampleLevel(resources.bilinearSampler, probeTextureUV, 0).rgb;
@@ -195,7 +195,7 @@ float3 DDGIGetVolumeIrradiance(
     irradiance *= RTXGI_2PI;                    // Multiply by the area of the integration domain (hemisphere) to complete the Monte Carlo Estimator equation
 
     // Adjust for energy loss due to reduced precision in the R10G10B10A2 irradiance texture format
-    if (volume.probeIrradianceFormat == RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R10G10B10A2_FLOAT)
+    if (volume.probeIrradianceFormat == RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_U32)
     {
         irradiance *= 1.0989f;
     }
