@@ -27,18 +27,14 @@ namespace Instrumentation
 
     struct Stat
     {
+        static uint32_t frameGPUQueryCount;
+        static void ResetGPUQueryCount() { frameGPUQueryCount = 0; }
+
         Stat() {}
         Stat(EStatType type) { this->type = type; }
         Stat(EStatType type, std::string name, uint32_t sampleSize)
         {
             this->type = type;
-            this->name = name;
-            this->sampleSize = sampleSize;
-        }
-        Stat(EStatType type, uint32_t index, std::string name, uint32_t sampleSize)
-        {
-            this->type = type;
-            this->index = index;
             this->name = name;
             this->sampleSize = sampleSize;
         }
@@ -48,16 +44,19 @@ namespace Instrumentation
         std::string name = "";
         EStatType type;
 
-        uint32_t index = 0;
+        int32_t gpuQueryStartIndex = -1;
+        int32_t gpuQueryEndIndex = -1;
+
+        int32_t GetGPUQueryBeginIndex();
+        int32_t GetGPUQueryEndIndex();
+        void ResetGPUQueryIndices();
+
         uint64_t timestamp = 0;
         uint32_t sampleSize = FallbackSampleSize;
         double elapsed = 0; // milliseconds
         double average = 0;
         double total = 0;
         std::queue<double> samples;
-
-        uint32_t GetQueryBeginIndex() { return (index * 2); }
-        uint32_t GetQueryEndIndex() { return (index * 2) + 1; }
 
         void Reset(uint32_t sampleSize = FallbackSampleSize)
         {
@@ -77,7 +76,9 @@ namespace Instrumentation
 
         const static uint32_t DefaultSampleSize = 50;
 
-        uint32_t GetNumGPUQueries() { return static_cast<uint32_t>(gpuTimes.size() * 2); };
+        uint32_t GetNumActiveGPUQueries() const { return (Stat::frameGPUQueryCount * 2); }
+
+        uint32_t GetNumTotalGPUQueries() const { return static_cast<uint32_t>(gpuTimes.size()) * 2; }
 
         Stat*& AddCPUStat(std::string name, uint32_t sampleSize = DefaultSampleSize)
         {
@@ -87,8 +88,7 @@ namespace Instrumentation
 
         Stat*& AddGPUStat(std::string name, uint32_t sampleSize = DefaultSampleSize)
         {
-            uint32_t index = static_cast<uint32_t>(gpuTimes.size());
-            gpuTimes.emplace_back(new Stat(EStatType::GPU, index, name, sampleSize));
+            gpuTimes.emplace_back(new Stat(EStatType::GPU, name, sampleSize));
             return gpuTimes.back();
         }
 

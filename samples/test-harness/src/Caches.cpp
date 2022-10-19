@@ -12,7 +12,7 @@
 
 using namespace DirectX;
 
-#define SCENE_CACHE_VERSION 2
+#define SCENE_CACHE_VERSION 3
 
 namespace Caches
 {
@@ -142,6 +142,7 @@ namespace Caches
         delete[] buffer;
 
         Read(in, &instance.meshIndex, sizeof(int));
+        Read(in, &instance.boundingBox, sizeof(rtxgi::AABB));
         Read(in, &instance.transform, sizeof(float) * 12);
     }
 
@@ -276,6 +277,7 @@ namespace Caches
         out.seekp(out.tellp());
 
         Write(out, &instance.meshIndex, sizeof(int));
+        Write(out, &instance.boundingBox, sizeof(rtxgi::AABB));
         Write(out, &instance.transform, sizeof(float) * 12);
     }
 
@@ -326,11 +328,16 @@ namespace Caches
         out.open(filepath, std::ios::out | std::ios::binary);
         if (out.is_open())
         {
+            log << "\n\tWriting scene cache file \'" + filepath + "\'...";
+
             out.seekp(0, std::ios::beg);
 
             // Header
             uint32_t cacheVersion = SCENE_CACHE_VERSION;
             Write(out, &cacheVersion);
+
+            uint32_t coordinateSystem = COORDINATE_SYSTEM;
+            Write(out, &coordinateSystem);
 
             Write(out, &scene.activeCamera);
             Write(out, &scene.numMeshPrimitives);
@@ -426,11 +433,21 @@ namespace Caches
 
             // Header
             uint32_t cacheVersion;
-            Read(in, &cacheVersion, sizeof(float));
+            Read(in, &cacheVersion, sizeof(uint32_t));
             if(cacheVersion != SCENE_CACHE_VERSION)
             {
-                log << "Error: scene cache version " << cacheVersion << " does not match expected version " << SCENE_CACHE_VERSION << "\n";
-                log << "Rebuilding cache.";
+                log << "\n\tWarning: scene cache version '" << cacheVersion << "' does not match expected version '" << SCENE_CACHE_VERSION << "'\n";
+                log << "\n\tRebuilding scene cache...";
+                return false;
+            }
+
+            uint32_t coordinateSystem;
+            Read(in, &coordinateSystem, sizeof(uint32_t));
+            if(coordinateSystem != COORDINATE_SYSTEM)
+            {
+                log << "\n\tWarning: scene cache coordinate system '" << GetCoordinateSystemName(coordinateSystem);
+                log << "' does not match current coordinate system '" << GetCoordinateSystemName(COORDINATE_SYSTEM) << "'";
+                log << "\n\tRebuilding scene cache...";
                 return false;
             }
 
@@ -532,6 +549,10 @@ namespace Caches
 
             in.close();
             return true;
+        }
+        else
+        {
+            log << "\n\tWarning: no scene cache file exists!";
         }
         return false;
     }

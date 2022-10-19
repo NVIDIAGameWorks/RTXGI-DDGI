@@ -8,13 +8,12 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#include "Descriptors.hlsl"
-#include "../../include/RayTracing.hlsl"
+#include "../../../include/graphics/Types.h"
 
 // ---[ Miss Shader ]---
 
 [shader("miss")]
-void Miss(inout ProbesPayload payload)
+void Miss(inout ProbeVisualizationPayload payload)
 {
     payload.hitT = -1.f;
 }

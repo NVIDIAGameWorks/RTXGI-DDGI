@@ -16,14 +16,14 @@
 namespace rtxgi
 {
 
-    int Sign(const int value)
+    int abs(const int value)
     {
-        return value >= 0 ? 1 : -1;
+        return value < 0 ? -value : value;
     }
 
-    int Sign(const float value)
+    float abs(const float value)
     {
-        return value >= 0.f ? 1 : -1;
+        return value < 0.f ? -value : value;
     }
 
     int AbsFloor(const float value)
@@ -60,6 +60,35 @@ namespace rtxgi
     float3 Max(const float3& a, const float3& b)
     {
         return { fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z) };
+    }
+
+    int Sign(const int value)
+    {
+        return value >= 0 ? 1 : -1;
+    }
+
+    int Sign(const float value)
+    {
+        return value >= 0.f ? 1 : -1;
+    }
+
+    // Convert right handed, y-up Euler angles to the specified coordinate system
+    float3 ConvertEulerAngles(const float3& input, ECoordinateSystem target)
+    {
+        float3 result = input;
+        if (target == ECoordinateSystem::RH_ZUP)
+        {
+            result = { input.x + 90.f, input.y, input.z };
+        }
+        else if (target == ECoordinateSystem::LH_YUP)
+        {
+            result = { -input.x, -input.y, input.z };
+        }
+        else if (target == ECoordinateSystem::LH_ZUP)
+        {
+            result = { input.z, -input.x, -input.y };
+        }
+        return DegreesToRadians(result);
     }
 
     float4 QuaternionConjugate(const float4& q)
@@ -109,16 +138,10 @@ namespace rtxgi
             q.w = (m10 - m01) * f;
         }
 
-    #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
-        // By default, a quaternion rotation through a positive angle is counterclockwise when the axis points toward the viewer.
-        // It needs to be reversed (by conjugate), in case of left-hand coordinate system.
-        q = QuaternionConjugate(q);
-    #endif
-
         return q;
     }
 
-    float3x3 EulerAnglesToRotationMatrixYXZ(const float3& eulerAngles)
+    float3x3 EulerAnglesToRotationMatrix(const float3& eulerAngles)
     {
         float sx = sinf(eulerAngles.x);
         float cx = cosf(eulerAngles.x);
@@ -127,21 +150,41 @@ namespace rtxgi
         float sz = sinf(eulerAngles.z);
         float cz = cosf(eulerAngles.z);
 
-    #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT || RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP
-        float3x3 rotationYXZ = {
-            { cy * cz + sx * sy * sz, cz * sx * sy - cy * sz, cx * sy },
-            { cx * sz,                cx * cz,               -sx      },
-            {-cz * sy + cy * sx * sz, cy * cz * sx + sy * sz, cx * cy }
+      //float3x3 Rx = {
+      //    { 1.f, 0.f, 0.f },
+      //    { 0.f,  cx, -sx },
+      //    { 0.f,  sx,  cx }
+      //};
+
+      //float3x3 Ry = {
+      //    {  cy,  0.f,  sy },
+      //    { 0.f,  1.f, 0.f },
+      //    { -sy,  0.f,  cy }
+      //};
+
+      //float3x3 Rz = {
+      //    {  cz, -sz, 0.f },
+      //    {  sz,  cz, 0.f },
+      //    { 0.f, 0.f, 1.f }
+      //};
+
+    #if RTXGI_COORDINATE_SYSTEM == RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP
+        // Ryzx = Ry (pitch) * Rz (yaw) * Rx (roll)
+        float3x3 rotation = {
+            {  cy * cz, sx * sy - cx * cy * sz, cx * sy + cy * sx * sz },
+            {       sz,                cx * cz,               -cz * sx },
+            { -cz * sy, cy * sx + cx * sy * sz,  cx * cy - sx * sy * sz },
         };
-    #else // Swap signs of all sin()
-        float3x3 rotationYXZ = {
-            { cy * cz - sx * sy * sz, cz * sx * sy + cy * sz,-cx * sy },
-            {-cx * sz,                cx * cz,                sx      },
-            { cz * sy + cy * sx * sz,-cy * cz * sx + sy * sz, cx * cy }
+    #else
+        // Rxyz = Rx (pitch) * Ry (yaw) * Rz (roll)
+        float3x3 rotation = {
+            {                cy * cz,               -cy * sz,       sy },
+            { cx * sz + cz * sx * sy, cx * cz - sx * sy * sz, -cy * sx },
+            { sx * sz - cx * cz * sy, cz * sx + cx * sy * sz,  cx * cy },
         };
     #endif
 
-        return rotationYXZ;
+        return rotation;
     }
 
     //------------------------------------------------------------------------

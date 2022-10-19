@@ -11,20 +11,84 @@
 #include "Shaders.h"
 #include "graphics/UI.h"
 
+#if __linux__
+#include <filesystem>
+#endif
+
 namespace Shaders
 {
+    //----------------------------------------------------------------------------------------------------------
+    // Private Functions
+    //----------------------------------------------------------------------------------------------------------
+
+    void UnloadDirectXCompiler(ShaderCompiler& dxc)
+    {
+    #if _WIN32
+        FreeLibrary(dxc.dll);
+    #elif __linux__
+        ::dlclose(dxc.dll);
+    #endif
+        dxc.DxcCreateInstance = nullptr;
+        dxc.dll = nullptr;
+    }
+
+    HRESULT LoadDirectXCompiler(ShaderCompiler& dxc)
+    {
+        if(dxc.dll != nullptr) return S_OK;
+
+    #if _WIN32
+        dxc.dll = LoadLibrary("dxcompiler.dll");
+    #elif __linux__
+        const std::filesystem::path subdir("bin/vulkan/libdxcompiler.so");
+        std::filesystem::path path = std::filesystem::current_path();
+        path = path.parent_path();
+        path /= subdir;
+        dxc.dll = dlopen(path.c_str(), RTLD_LAZY);
+    #endif
+
+        // DLL was not loaded, error out
+        if (dxc.dll == nullptr) return HRESULT_FROM_WIN32(GetLastError());
+
+        // Load the function
+    #if _WIN32
+        dxc.DxcCreateInstance = (DxcCreateInstanceProc)GetProcAddress(dxc.dll, "DxcCreateInstance");
+    #elif __linux__
+        dxc.DxcCreateInstance = (DxcCreateInstanceProc)::dlsym(dxc.dll, "DxcCreateInstance");
+    #endif
+
+        // DLL function not loaded
+        if(dxc.DxcCreateInstance == nullptr)
+        {
+            UnloadDirectXCompiler(dxc);
+            return HRESULT_FROM_WIN32(GetLastError());
+        }
+
+        return S_OK;
+    }
+
+    //----------------------------------------------------------------------------------------------------------
+    // Public Functions
+    //----------------------------------------------------------------------------------------------------------
 
     /**
      * Initialize the the DirectX Shader Compiler (DXC).
      */
-    bool Initialize(const Configs::Config& config, ShaderCompiler& compiler)
+    bool Initialize(const Configs::Config& config, ShaderCompiler& dxc)
     {
-        if (FAILED(compiler.dxcDllHelper.Initialize())) return false;
-        if (FAILED(compiler.dxcDllHelper.CreateInstance(CLSID_DxcCompiler, &compiler.compiler))) return false;
-        if (FAILED(compiler.dxcDllHelper.CreateInstance(CLSID_DxcLibrary, &compiler.library))) return false;
+        // Load the DXC DLL
+        if(FAILED(LoadDirectXCompiler(dxc))) return false;
 
-        compiler.root = config.app.root;
-        compiler.rtxgi = config.app.rtxgi;
+        // Create the utils instance
+        if(FAILED(dxc.DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxc.utils)))) return false;
+
+        // Create the compiler instance
+        if(FAILED(dxc.DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxc.compiler)))) return false;
+
+        // Create the default include handler
+        if(FAILED(dxc.utils->CreateDefaultIncludeHandler(&dxc.includes))) return false;
+
+        dxc.root = config.app.root;
+        dxc.rtxgi = config.app.rtxgi;
 
         return true;
     }
@@ -48,30 +112,28 @@ namespace Shaders
     /**
      * Compile a shader with the DirectX Shader Compiler (DXC).
      */
-    bool Compile(ShaderCompiler& compiler, ShaderProgram& shader, bool warningsAsErrors, bool debugInfo)
+    bool Compile(ShaderCompiler& dxc, ShaderProgram& shader, bool warningsAsErrors, bool debugInfo)
     {
         uint32_t codePage = 0;
-        IDxcBlobEncoding* pShaderText = nullptr;
-        IDxcOperationResult* result = nullptr;
+        IDxcBlobEncoding* pShaderSource = nullptr;
+        IDxcResult* result = nullptr;
 
-        bool retryCompile = true;
-        while(retryCompile)
+        bool retry = true;
+        while(retry)
         {
             // Load and encode the shader file
-            if (FAILED(compiler.library->CreateBlobFromFile(shader.filepath.c_str(), &codePage, &pShaderText))) return false;
+            if (FAILED(dxc.utils->LoadFile(shader.filepath.c_str(), nullptr, &pShaderSource))) return false;
 
-            // Create the compiler include handler
-            IDxcIncludeHandler* dxcIncludeHandler = nullptr;
-            if (FAILED(compiler.library->CreateIncludeHandler(&dxcIncludeHandler))) return false;
+            DxcBuffer source;
+            source.Ptr = pShaderSource->GetBufferPointer();
+            source.Size = pShaderSource->GetBufferSize();
+            source.Encoding = DXC_CP_ACP;
 
             // Add default shader defines
             AddDefine(shader, L"HLSL", L"1");
 
             // Treat warnings as errors
-            if(warningsAsErrors)
-            {
-                shader.arguments.push_back(L"-WX");
-            }
+            if(warningsAsErrors) shader.arguments.push_back(L"-WX");
 
             // Add with debug information to compiled shaders
             if(debugInfo)
@@ -89,63 +151,64 @@ namespace Shaders
                 shader.arguments.push_back(arg.c_str());
             }
 
-            // Compile the shader
-            if (FAILED(compiler.compiler->Compile(
-                pShaderText,
+            // Build the arguments array
+            IDxcCompilerArgs* args = nullptr;
+            dxc.utils->BuildArguments(
                 shader.filepath.c_str(),
                 shader.entryPoint.c_str(),
                 shader.targetProfile.c_str(),
                 shader.arguments.data(),
-                static_cast<uint32_t>(shader.arguments.size()),
+                static_cast<UINT>(shader.arguments.size()),
                 shader.defines.data(),
-                static_cast<uint32_t>(shader.defines.size()),
-                dxcIncludeHandler, &result))) return false;
+                static_cast<UINT>(shader.defines.size()),
+                &args);
 
-            // Verify the result
-            HRESULT hr = S_OK;
-            result->GetStatus(&hr);
-            if (FAILED(hr))
+            // Compile the shader
+            if (FAILED(dxc.compiler->Compile(&source, args->GetArguments(), args->GetCount(), dxc.includes, IID_PPV_ARGS(&result)))) return false;
+
+            // Get the errors (if there are any)
+            IDxcBlobUtf8* errors = nullptr;
+            if(FAILED(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr))) return false;
+
+            // Display errors and allow recompilation
+            if(errors != nullptr && errors->GetStringLength() != 0)
             {
-                IDxcBlobEncoding* error = nullptr;
-                if (FAILED(result->GetErrorBuffer(&error))) return false;
+                // Convert error blob to a std::string
+                std::vector<char> log(errors->GetStringLength() + 1);
+                memcpy(log.data(), errors->GetStringPointer(), errors->GetStringLength());
 
-                if (error->GetBufferSize() > 0)
+                std::string errorMsg = "Shader Compiler Error:\n";
+                errorMsg.append(log.data());
+
+                // Spawn a pop-up that displays the compilation errors and retry dialog
+                if (Graphics::UI::MessageRetryBox(errorMsg.c_str()))
                 {
-                    // Convert error blob to a std::string
-                    std::vector<char> infoLog(error->GetBufferSize() + 1);
-                    memcpy(infoLog.data(), error->GetBufferPointer(), error->GetBufferSize());
-                    infoLog[error->GetBufferSize()] = 0;
-
-                    std::string errorMsg = "Shader Compiler Error:\n";
-                    errorMsg.append(infoLog.data());
-
-                    // Spawn a pop-up that displays the compilation errors and retry dialog
-                    if(Graphics::UI::MessageRetryBox(errorMsg.c_str()))
-                    {
-                        continue; // Try to compile again
-                    }
-                    return false;
+                    continue; // Try to compile again
                 }
+
+                return false;
             }
 
             // Shader compiled successfully
-            retryCompile = false;
-        }
+            retry = false;
 
-        // Get the shader bytecode
-        if (FAILED(result->GetResult((IDxcBlob**)&shader.bytecode))) return false;
+            // Get the shader bytecode
+            if(FAILED(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shader.bytecode), &shader.shaderName))) return false;
+        }
         return true;
     }
 
     /**
      * Release memory used by the shader compiler.
      */
-    void Cleanup(ShaderCompiler& compiler)
+    void Cleanup(ShaderCompiler& dxc)
     {
-        SAFE_RELEASE(compiler.library);
-        SAFE_RELEASE(compiler.compiler);
-        compiler.root = "";
-        compiler.rtxgi = "";
+        SAFE_RELEASE(dxc.utils);
+        SAFE_RELEASE(dxc.compiler);
+        SAFE_RELEASE(dxc.includes);
+        UnloadDirectXCompiler(dxc);
+        dxc.root = "";
+        dxc.rtxgi = "";
     }
 
 }

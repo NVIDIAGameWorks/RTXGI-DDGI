@@ -63,11 +63,17 @@ namespace Graphics
                 std::vector<VkDescriptorSet>    volumeDescriptorSets;
             #endif
 
-                VkBuffer                        constantsSTB = nullptr;
-                VkBuffer                        constantsSTBUpload = nullptr;
-                VkDeviceMemory                  constantsSTBMemory = nullptr;
-                VkDeviceMemory                  constantsSTBUploadMemory = nullptr;
-                uint64_t                        constantsSTBSizeInBytes = 0;
+                VkBuffer                        volumeResourceIndicesSTB = nullptr;
+                VkBuffer                        volumeResourceIndicesSTBUpload = nullptr;
+                VkDeviceMemory                  volumeResourceIndicesSTBMemory = nullptr;
+                VkDeviceMemory                  volumeResourceIndicesSTBUploadMemory = nullptr;
+                uint64_t                        volumeResourceIndicesSTBSizeInBytes = 0;
+
+                VkBuffer                        volumeConstantsSTB = nullptr;
+                VkBuffer                        volumeConstantsSTBUpload = nullptr;
+                VkDeviceMemory                  volumeConstantsSTBMemory = nullptr;
+                VkDeviceMemory                  volumeConstantsSTBUploadMemory = nullptr;
+                uint64_t                        volumeConstantsSTBSizeInBytes = 0;
 
                 Instrumentation::Stat*          cpuStat = nullptr;
                 Instrumentation::Stat*          gpuStat = nullptr;

@@ -23,7 +23,7 @@ namespace Graphics
             bool CreateTextures(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::ofstream& log)
             {
                 // Create the output (R8G8B8A8_UNORM) texture resource
-                TextureDesc desc = { static_cast<UINT>(d3d.width), static_cast<UINT>(d3d.height), 1, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+                TextureDesc desc = { static_cast<UINT>(d3d.width), static_cast<UINT>(d3d.height), 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
                 CHECK(CreateTexture(d3d, desc, &resources.PTOutput), "create path tracing output texture resource!\n", log);
             #ifdef GFX_NAME_OBJECTS
                 resources.PTOutput->SetName(L"PT Output");
@@ -65,12 +65,14 @@ namespace Graphics
                 resources.shaders.rgs.filepath = root + L"shaders/PathTraceRGS.hlsl";
                 resources.shaders.rgs.entryPoint = L"RayGen";
                 resources.shaders.rgs.exportName = L"PathTraceRGS";
+                Shaders::AddDefine(resources.shaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.rgs, true), "compile path tracing ray generation shader!\n", log);
 
                 // Load and compile the miss shader
                 resources.shaders.miss.filepath = root + L"shaders/Miss.hlsl";
                 resources.shaders.miss.entryPoint = L"Miss";
                 resources.shaders.miss.exportName = L"PathTraceMiss";
+                Shaders::AddDefine(resources.shaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.miss, true), "compile path tracing miss shader!\n", log);
 
                 // Add the hit group
@@ -83,12 +85,14 @@ namespace Graphics
                 group.chs.filepath = root + L"shaders/CHS.hlsl";
                 group.chs.entryPoint = L"CHS_LOD0";
                 group.chs.exportName = L"PathTraceCHS";
+                Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs, true), "compile path tracing closest hit shader!\n", log);
 
                 // Load and compile the AHS
                 group.ahs.filepath = root + L"shaders/AHS.hlsl";
                 group.ahs.entryPoint = L"AHS_LOD0";
                 group.ahs.exportName = L"PathTraceAHS";
+                Shaders::AddDefine(group.ahs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, group.ahs, true), "compile path tracing any hit shader!\n", log);
 
                 // Set the payload size
@@ -157,7 +161,7 @@ namespace Graphics
             #endif
 
                 // Create the shader table device buffer resource
-                desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+                desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
                 CHECK(CreateBuffer(d3d, desc, &resources.shaderTable), "create path tracing shader table!", log);
             #ifdef GFX_NAME_OBJECTS
                 resources.shaderTable->SetName(L"Path Tracing Shader Table");
@@ -319,25 +323,27 @@ namespace Graphics
                 ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
                 d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-                // Set the global root signature
+                // Set the root signature
                 d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
-
-                // Set the root parameters
-                d3d.cmdList->SetComputeRootDescriptorTable(0, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                d3d.cmdList->SetComputeRootDescriptorTable(1, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
 
                 // Update the root constants
                 UINT offset = 0;
                 GlobalConstants consts = d3dResources.constants;
-                d3d.cmdList->SetComputeRoot32BitConstants(2, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
                 offset += AppConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetComputeRoot32BitConstants(2, PathTraceConsts::GetNum32BitValues(), consts.pt.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, PathTraceConsts::GetNum32BitValues(), consts.pt.GetData(), offset);
                 offset += PathTraceConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetComputeRoot32BitConstants(2, LightingConsts::GetNum32BitValues(), consts.lights.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, LightingConsts::GetNum32BitValues(), consts.lights.GetData(), offset);
                 offset += LightingConsts::GetAlignedNum32BitValues();
                 offset += RTAOConsts::GetAlignedNum32BitValues();
                 offset += CompositeConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetComputeRoot32BitConstants(2, PostProcessConsts::GetNum32BitValues(), consts.post.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, PostProcessConsts::GetNum32BitValues(), consts.post.GetData(), offset);
+
+                // Set the root parameter descriptor tables
+            #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+            #endif
 
                 // Dispatch rays
                 D3D12_DISPATCH_RAYS_DESC desc = {};
@@ -360,9 +366,9 @@ namespace Graphics
                 d3d.cmdList->SetPipelineState1(resources.rtpso);
 
                 // Dispatch rays
-                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetQueryBeginIndex());
+                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
                 d3d.cmdList->DispatchRays(&desc);
-                GPU_TIMESTAMP_END(resources.gpuStat->GetQueryEndIndex());
+                GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
                 // Transition the output buffer to a copy source (from UAV)
                 barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;

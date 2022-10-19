@@ -14,29 +14,30 @@
 // This define specifies the number of DDGIVolumes in the scene.
 // Ex: RTXGI_DDGI_NUM_VOLUMES 6
 #ifndef RTXGI_DDGI_NUM_VOLUMES
-#error Required define RTXGI_DDGI_NUM_VOLUMES is not defined for IndirectCS.hlsl!
+    #error Required define RTXGI_DDGI_NUM_VOLUMES is not defined for IndirectCS.hlsl!
 #endif
 
 // THGP_DIM_X must be passed in as a define at shader compilation time.
 // This define specifies the number of threads in the thread group in the X dimension.
 // Ex: THGP_DIM_X 8
 #ifndef THGP_DIM_X
-#error Required define THGP_DIM_X is not defined for IndirectCS.hlsl!
+    #error Required define THGP_DIM_X is not defined for IndirectCS.hlsl!
 #endif
 
 // THGP_DIM_Y must be passed in as a define at shader compilation time.
 // This define specifies the number of threads in the thread group in the X dimension.
 // Ex: THGP_DIM_Y 4
 #ifndef THGP_DIM_Y
-#error Required define THGP_DIM_Y is not defined for IndirectCS.hlsl!
+    #error Required define THGP_DIM_Y is not defined for IndirectCS.hlsl!
 #endif
 
 // -------------------------------------------------------------------------------------------
 
-#include "../../../rtxgi-sdk/shaders/ddgi/Irradiance.hlsl"
-
 #include "include/Common.hlsl"
 #include "include/Descriptors.hlsl"
+
+#include "../../../rtxgi-sdk/shaders/ddgi/include/DDGIRootConstants.hlsl"
+#include "../../../rtxgi-sdk/shaders/ddgi/Irradiance.hlsl"
 
 // ---[ Compute Shader ]---
 
@@ -44,6 +45,12 @@
 void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
 {
     float3 color = float3(0.f, 0.f, 0.f);
+
+    // Get the (bindless) resources
+    RWTexture2D<float4> GBufferA = GetRWTex2D(GBUFFERA_INDEX);
+    RWTexture2D<float4> GBufferB = GetRWTex2D(GBUFFERB_INDEX);
+    RWTexture2D<float4> GBufferC = GetRWTex2D(GBUFFERC_INDEX);
+    RWTexture2D<float4> DDGIOutput = GetRWTex2D(DDGI_OUTPUT_INDEX);
 
     // Load the albedo and primary ray hit distance
     float4 albedo = GBufferA.Load(DispatchThreadID.xy);
@@ -61,23 +68,31 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
         // Compute indirect lighting
         float3 irradiance = 0.f;
 
+        // Get the structured buffers
+        StructuredBuffer<DDGIVolumeDescGPUPacked> DDGIVolumes = GetDDGIVolumeConstants(GetDDGIVolumeConstantsIndex());
+        StructuredBuffer<DDGIVolumeResourceIndices> DDGIVolumeBindless = GetDDGIVolumeResourceIndices(GetDDGIVolumeResourceIndicesIndex());
+
         // TODO: sort volumes by density, screen-space area, and/or other prioritization heuristics
         for(int volumeIndex = 0; volumeIndex < RTXGI_DDGI_NUM_VOLUMES; volumeIndex++)
         {
+            // Get the DDGIVolume's resource indices
+            DDGIVolumeResourceIndices resourceIndices = DDGIVolumeBindless[volumeIndex];
+
             // Get the volume's constants
-            DDGIVolumeDescGPU DDGIVolume = UnpackDDGIVolumeDescGPU(DDGIVolumes[volumeIndex]);
+            DDGIVolumeDescGPU volume = UnpackDDGIVolumeDescGPU(DDGIVolumes[volumeIndex]);
 
-            float3 cameraDirection = normalize(worldPosHitT.xyz - Camera.position);
-            float3 surfaceBias = DDGIGetSurfaceBias(normal, cameraDirection, DDGIVolume);
+            float3 cameraDirection = normalize(worldPosHitT.xyz - GetCamera().position);
+            float3 surfaceBias = DDGIGetSurfaceBias(normal, cameraDirection, volume);
 
+            // Get the volume's resources
             DDGIVolumeResources resources;
-            resources.probeIrradiance = GetDDGIVolumeIrradianceSRV(volumeIndex);
-            resources.probeDistance = GetDDGIVolumeDistanceSRV(volumeIndex);
-            resources.probeData = GetDDGIVolumeProbeDataSRV(volumeIndex);
+            resources.probeIrradiance = GetTex2DArray(resourceIndices.probeIrradianceSRVIndex);
+            resources.probeDistance = GetTex2DArray(resourceIndices.probeDistanceSRVIndex);
+            resources.probeData = GetTex2DArray(resourceIndices.probeDataSRVIndex);
             resources.bilinearSampler = GetBilinearWrapSampler();
 
             // Get the blend weight for this volume's contribution to the surface
-            float blendWeight = DDGIGetVolumeBlendWeight(worldPosHitT.xyz, DDGIVolume);
+            float blendWeight = DDGIGetVolumeBlendWeight(worldPosHitT.xyz, volume);
             if(blendWeight > 0)
             {
                 // Get irradiance for the world-space position in the volume
@@ -85,7 +100,7 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
                     worldPosHitT.xyz,
                     surfaceBias,
                     normal,
-                    DDGIVolume,
+                    volume,
                     resources);
 
                 irradiance *= blendWeight;

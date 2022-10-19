@@ -14,6 +14,13 @@
 static const float PI = 3.1415926535897932f;
 static const float TWO_PI = 6.2831853071795864f;
 
+static const float COMPOSITE_FLAG_IGNORE_PIXEL = 0.2f;
+static const float COMPOSITE_FLAG_POSTPROCESS_PIXEL = 0.5f;
+static const float COMPOSITE_FLAG_LIGHT_PIXEL = 0.8f;
+
+#define RTXGI_DDGI_VISUALIZE_PROBE_IRRADIANCE 0
+#define RTXGI_DDGI_VISUALIZE_PROBE_DISTANCE 1
+
 float3 LessThan(float3 f, float value)
 {
     return float3(

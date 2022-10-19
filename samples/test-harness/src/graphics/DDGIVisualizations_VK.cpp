@@ -25,18 +25,6 @@ namespace Graphics
         {
             namespace Visualizations
             {
-                namespace DescriptorLayoutBindings
-                {
-                    const int SAMPLERS = 0;                                 //   0: Samplers
-                    const int CBV_CAMERA = SAMPLERS + 1;                    //   1: Camera constant buffer
-                    const int SRV_BVH = CBV_CAMERA + 1;                     //   2: RT acceleration structure
-                    const int STB_DDGI_VOLUMES = SRV_BVH + 1;               //   3: DDGIVolume constants structured buffer
-                    const int STB_INSTANCES = STB_DDGI_VOLUMES + 1;         //   4: TLAS instance descriptors structured buffer
-                    const int UAV_GBUFFERA = STB_INSTANCES + 1;             //   5: GBufferA RWTexture
-                    const int UAV_GBUFFERB = UAV_GBUFFERA + 1;              //   6: GBufferB RWTexture
-                    const int SRV_RAW = UAV_GBUFFERB + 1;                   //   7: Raw Buffers (Probe Sphere Mesh Index/Vertex Buffers)
-                    const int SRV_TEX2D = SRV_RAW + 1;                      //   8: DDGIVolume Textures, 4 SRV per DDGIVolume (Ray Data, Irradiance, Distance, Probe Data)
-                };
 
                 //----------------------------------------------------------------------------------------------------------
                 // Private Functions
@@ -45,154 +33,148 @@ namespace Graphics
                 bool UpdateDescriptorSets(Globals& vk, GlobalResources& vkResources, Resources& resources)
                 {
                     // Store the data to be written to the descriptor set
-                    std::vector<VkWriteDescriptorSet> writeDescriptorSets;
+                    VkWriteDescriptorSet* descriptor = nullptr;
+                    std::vector<VkWriteDescriptorSet> descriptors;
 
-                    // Samplers
-                    VkDescriptorImageInfo samplersInfo[] =
+                    // 0: Samplers
+                    VkDescriptorImageInfo samplers[] =
                     {
-                        { vkResources.samplers[0], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED }, // bilinear wrap sampler
-                        { vkResources.samplers[1], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED }  // point clamp sampler
+                        { vkResources.samplers[SamplerIndices::BILINEAR_WRAP], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED },
+                        { vkResources.samplers[SamplerIndices::POINT_CLAMP], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED }
                     };
 
-                    VkWriteDescriptorSet samplerSet = {};
-                    samplerSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    samplerSet.dstSet = resources.descriptorSet;
-                    samplerSet.dstBinding = DescriptorLayoutBindings::SAMPLERS;
-                    samplerSet.dstArrayElement = SamplerIndices::BILINEAR_WRAP;
-                    samplerSet.descriptorCount = _countof(samplersInfo);
-                    samplerSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-                    samplerSet.pImageInfo = samplersInfo;
+                    descriptor = &descriptors.emplace_back();
+                    descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    descriptor->dstSet = resources.descriptorSet;
+                    descriptor->dstBinding = DescriptorLayoutBindings::SAMPLERS;
+                    descriptor->dstArrayElement = SamplerIndices::BILINEAR_WRAP;
+                    descriptor->descriptorCount = _countof(samplers);
+                    descriptor->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+                    descriptor->pImageInfo = samplers;
 
-                    writeDescriptorSets.push_back(samplerSet);
+                    // 1: Camera Constant Buffer
+                    VkDescriptorBufferInfo camera = { vkResources.cameraCB, 0, VK_WHOLE_SIZE };
 
-                    // Camera constant buffer
-                    VkDescriptorBufferInfo cameraCBInfo = { vkResources.cameraCB, 0, VK_WHOLE_SIZE };
-                    VkWriteDescriptorSet cameraCBSet = {};
-                    cameraCBSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    cameraCBSet.dstSet = resources.descriptorSet;
-                    cameraCBSet.dstBinding = DescriptorLayoutBindings::CBV_CAMERA;
-                    cameraCBSet.dstArrayElement = 0;
-                    cameraCBSet.descriptorCount = 1;
-                    cameraCBSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                    cameraCBSet.pBufferInfo = &cameraCBInfo;
+                    descriptor = &descriptors.emplace_back();
+                    descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    descriptor->dstSet = resources.descriptorSet;
+                    descriptor->dstBinding = DescriptorLayoutBindings::CB_CAMERA;
+                    descriptor->dstArrayElement = 0;
+                    descriptor->descriptorCount = 1;
+                    descriptor->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                    descriptor->pBufferInfo = &camera;
 
-                    writeDescriptorSets.push_back(cameraCBSet);
+                    // 5: DDGIVolume Constants StructuredBuffer
+                    VkDescriptorBufferInfo volumeConstants = { resources.volumeConstantsSTB, 0, VK_WHOLE_SIZE };
 
-                    // Ray Tracing TLAS
-                    VkWriteDescriptorSetAccelerationStructureKHR tlasInfo = {};
-                    tlasInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-                    tlasInfo.accelerationStructureCount = 1;
-                    tlasInfo.pAccelerationStructures = &resources.tlas.asKHR;
+                    descriptor = &descriptors.emplace_back();
+                    descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    descriptor->dstSet = resources.descriptorSet;
+                    descriptor->dstBinding = DescriptorLayoutBindings::STB_DDGI_VOLUME_CONSTS;
+                    descriptor->dstArrayElement = 0;
+                    descriptor->descriptorCount = 1;
+                    descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    descriptor->pBufferInfo = &volumeConstants;
 
-                    VkWriteDescriptorSet tlasSet = {};
-                    tlasSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    tlasSet.pNext = &tlasInfo;
-                    tlasSet.dstSet = resources.descriptorSet;
-                    tlasSet.dstBinding = DescriptorLayoutBindings::SRV_BVH;
-                    tlasSet.dstArrayElement = 0;
-                    tlasSet.descriptorCount = 1;
-                    tlasSet.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                    // 6: DDGIVolume Resource Indices StructuredBuffer
+                    VkDescriptorBufferInfo volumeResourceIndices = { resources.volumeResourceIndicesSTB, 0, VK_WHOLE_SIZE };
 
-                    writeDescriptorSets.push_back(tlasSet);
+                    descriptor = &descriptors.emplace_back();
+                    descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    descriptor->dstSet = resources.descriptorSet;
+                    descriptor->dstBinding = DescriptorLayoutBindings::STB_DDGI_VOLUME_RESOURCE_INDICES;
+                    descriptor->dstArrayElement = 0;
+                    descriptor->descriptorCount = 1;
+                    descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    descriptor->pBufferInfo = &volumeResourceIndices;
 
-                    // DDGIVolume constants structured buffer
-                    VkDescriptorBufferInfo constantsSTBInfo = { resources.constantsSTB, 0, VK_WHOLE_SIZE };
+                    // 7: Probe Vis TLAS Instances RWStructuredBuffer
+                    VkDescriptorBufferInfo instances = { resources.tlas.instances, 0, VK_WHOLE_SIZE };
 
-                    VkWriteDescriptorSet constantsSTBSet = {};
-                    constantsSTBSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    constantsSTBSet.dstSet = resources.descriptorSet;
-                    constantsSTBSet.dstBinding = DescriptorLayoutBindings::STB_DDGI_VOLUMES;
-                    constantsSTBSet.dstArrayElement = 0;
-                    constantsSTBSet.descriptorCount = 1;
-                    constantsSTBSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                    constantsSTBSet.pBufferInfo = &constantsSTBInfo;
+                    descriptor = &descriptors.emplace_back();
+                    descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    descriptor->dstSet = resources.descriptorSet;
+                    descriptor->dstBinding = DescriptorLayoutBindings::UAV_STB_TLAS_INSTANCES;
+                    descriptor->dstArrayElement = 0;
+                    descriptor->descriptorCount = 1;
+                    descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    descriptor->pBufferInfo = &instances;
 
-                    writeDescriptorSets.push_back(constantsSTBSet);
+                    // 8: Texture2D UAVs
+                    VkDescriptorImageInfo rwTex2D[] =
+                    {
+                        { VK_NULL_HANDLE, vkResources.rt.GBufferAView, VK_IMAGE_LAYOUT_GENERAL },
+                        { VK_NULL_HANDLE, vkResources.rt.GBufferBView, VK_IMAGE_LAYOUT_GENERAL },
+                    };
 
-                    // Instances structured buffer
-                    VkDescriptorBufferInfo instancesSTBInfo = { resources.tlas.instances, 0, VK_WHOLE_SIZE };
+                    descriptor = &descriptors.emplace_back();
+                    descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    descriptor->dstSet = resources.descriptorSet;
+                    descriptor->dstBinding = DescriptorLayoutBindings::UAV_TEX2D;
+                    descriptor->dstArrayElement = RWTex2DIndices::GBUFFERA;
+                    descriptor->descriptorCount = _countof(rwTex2D);
+                    descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                    descriptor->pImageInfo = rwTex2D;
 
-                    VkWriteDescriptorSet instancesSTBSet = {};
-                    instancesSTBSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    instancesSTBSet.dstSet = resources.descriptorSet;
-                    instancesSTBSet.dstBinding = DescriptorLayoutBindings::STB_INSTANCES;
-                    instancesSTBSet.dstArrayElement = 0;
-                    instancesSTBSet.descriptorCount = 1;
-                    instancesSTBSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                    instancesSTBSet.pBufferInfo = &instancesSTBInfo;
+                    // 10: Probe Vis TLAS
+                    VkWriteDescriptorSetAccelerationStructureKHR probeTLAS = {};
+                    probeTLAS.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+                    probeTLAS.accelerationStructureCount = 1;
+                    probeTLAS.pAccelerationStructures = &resources.tlas.asKHR;
 
-                    writeDescriptorSets.push_back(instancesSTBSet);
+                    descriptor = &descriptors.emplace_back();
+                    descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    descriptor->dstSet = resources.descriptorSet;
+                    descriptor->dstBinding = DescriptorLayoutBindings::SRV_TLAS;
+                    descriptor->dstArrayElement = TLASIndices::DDGI_PROBE_VIS;
+                    descriptor->descriptorCount = 1;
+                    descriptor->descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                    descriptor->pNext = &probeTLAS;
 
-                    VkDescriptorImageInfo gBufferAInfo = { VK_NULL_HANDLE, vkResources.rt.GBufferAView, VK_IMAGE_LAYOUT_GENERAL };
-                    VkDescriptorImageInfo gBufferBInfo = { VK_NULL_HANDLE, vkResources.rt.GBufferBView, VK_IMAGE_LAYOUT_GENERAL };
+                    // 12: Texture2DArray SRVs
+                    std::vector<VkDescriptorImageInfo> tex2DArray;
+                    uint32_t numVolumes = static_cast<uint32_t>(resources.volumes->size());
+                    if(numVolumes > 0)
+                    {
+                        for (uint32_t volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
+                        {
+                            // Add the DDGIVolume texture arrays
+                            DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
+                            tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeRayDataView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+                            tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeIrradianceView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+                            tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeDistanceView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+                            tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeDataView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+                        }
 
-                    // GBufferA UAV
-                    VkWriteDescriptorSet gBufferASet = {};
-                    gBufferASet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    gBufferASet.dstSet = resources.descriptorSet;
-                    gBufferASet.dstBinding = DescriptorLayoutBindings::UAV_GBUFFERA;
-                    gBufferASet.dstArrayElement = 0;
-                    gBufferASet.descriptorCount = 1;
-                    gBufferASet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                    gBufferASet.pImageInfo = &gBufferAInfo;
+                        descriptor = &descriptors.emplace_back();
+                        descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                        descriptor->dstSet = resources.descriptorSet;
+                        descriptor->dstBinding = DescriptorLayoutBindings::SRV_TEX2DARRAY;
+                        descriptor->dstArrayElement = 0;
+                        descriptor->descriptorCount = static_cast<uint32_t>(tex2DArray.size());
+                        descriptor->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                        descriptor->pImageInfo = tex2DArray.data();
+                    }
 
-                    writeDescriptorSets.push_back(gBufferASet);
-
-                    // GBufferB UAV
-                    VkWriteDescriptorSet gBufferBSet = {};
-                    gBufferBSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    gBufferBSet.dstSet = resources.descriptorSet;
-                    gBufferBSet.dstBinding = DescriptorLayoutBindings::UAV_GBUFFERB;
-                    gBufferBSet.dstArrayElement = 0;
-                    gBufferBSet.descriptorCount = 1;
-                    gBufferBSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                    gBufferBSet.pImageInfo = &gBufferBInfo;
-
-                    writeDescriptorSets.push_back(gBufferBSet);
-
-                    VkDescriptorBufferInfo rawBuffersInfo[] =
+                    // 13: ByteAddressBuffer SRVs (sphere index & vertex buffer)
+                    VkDescriptorBufferInfo byteAddressBuffers[] =
                     {
                         { resources.probeIB, 0, VK_WHOLE_SIZE },
                         { resources.probeVB, 0, VK_WHOLE_SIZE }
                     };
 
                     // ByteAddress Buffer SRVs (index / vertex buffers)
-                    VkWriteDescriptorSet rawBuffersSet = {};
-                    rawBuffersSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    rawBuffersSet.dstSet = resources.descriptorSet;
-                    rawBuffersSet.dstBinding = DescriptorLayoutBindings::SRV_RAW;
-                    rawBuffersSet.dstArrayElement = 0;
-                    rawBuffersSet.descriptorCount = _countof(rawBuffersInfo);
-                    rawBuffersSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                    rawBuffersSet.pBufferInfo = rawBuffersInfo;
-
-                    writeDescriptorSets.push_back(rawBuffersSet);
-
-                    std::vector<VkDescriptorImageInfo> tex2DInfo;
-                    for (uint32_t volumeIndex = 0; volumeIndex < static_cast<uint32_t>(resources.volumes->size()); volumeIndex++)
-                    {
-                        DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
-
-                        tex2DInfo.push_back({ VK_NULL_HANDLE, volume->GetProbeRayDataView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
-                        tex2DInfo.push_back({ VK_NULL_HANDLE, volume->GetProbeIrradianceView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
-                        tex2DInfo.push_back({ VK_NULL_HANDLE, volume->GetProbeDistanceView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
-                        tex2DInfo.push_back({ VK_NULL_HANDLE, volume->GetProbeDataView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
-                    }
-
-                    // Tex2D DDGIVolume storage images
-                    VkWriteDescriptorSet tex2DSet = {};
-                    tex2DSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    tex2DSet.dstSet = resources.descriptorSet;
-                    tex2DSet.dstBinding = DescriptorLayoutBindings::SRV_TEX2D;
-                    tex2DSet.dstArrayElement = 0;
-                    tex2DSet.descriptorCount = static_cast<uint32_t>(tex2DInfo.size());
-                    tex2DSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-                    tex2DSet.pImageInfo = tex2DInfo.data();
-
-                    writeDescriptorSets.push_back(tex2DSet);
+                    descriptor = &descriptors.emplace_back();
+                    descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    descriptor->dstSet = resources.descriptorSet;
+                    descriptor->dstBinding = DescriptorLayoutBindings::SRV_BYTEADDRESS;
+                    descriptor->dstArrayElement = ByteAddressIndices::SPHERE_INDICES;
+                    descriptor->descriptorCount = _countof(byteAddressBuffers);
+                    descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    descriptor->pBufferInfo = byteAddressBuffers;
 
                     // Update the descriptor set
-                    vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+                    vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(descriptors.size()), descriptors.data(), 0, nullptr);
 
                     return true;
                 }
@@ -208,26 +190,32 @@ namespace Graphics
                     // Write shader table records for each shader
                     VkDeviceAddress address = GetBufferDeviceAddress(vk.device, resources.shaderTable);
 
-                    // Get the shader group IDs from the pipeline
+                    // Get the shader group IDs from the default pipeline
                     std::vector<uint8_t> shaderGroupIdBuffer(shaderGroupIdSize * resources.rtShadersModule.numGroups);
                     VKCHECK(vkGetRayTracingShaderGroupHandlesKHR(vk.device, resources.rtPipeline, 0, resources.rtShadersModule.numGroups, (shaderGroupIdSize * resources.rtShadersModule.numGroups), shaderGroupIdBuffer.data()));
 
-                    // Separate the shader group IDs into an array
+                    // Get the shader group ID for the alternate RGS from the alternate pipeline
+                    std::vector<uint8_t> shaderGroupIdBuffer2(shaderGroupIdSize * resources.rtShadersModule2.numGroups);
+                    VKCHECK(vkGetRayTracingShaderGroupHandlesKHR(vk.device, resources.rtPipeline2, 0, resources.rtShadersModule2.numGroups, (shaderGroupIdSize * resources.rtShadersModule2.numGroups), shaderGroupIdBuffer2.data()));
+
+                    // Separate the shader group IDs into arrays
                     std::vector<uint8_t*> shaderGroupIds(resources.rtShadersModule.numGroups);
+                    std::vector<uint8_t*> shaderGroup2Ids(resources.rtShadersModule2.numGroups);
                     for (uint32_t i = 0; i < resources.rtShadersModule.numGroups; ++i)
                     {
                         shaderGroupIds[i] = shaderGroupIdBuffer.data() + i * shaderGroupIdSize;
+                        shaderGroup2Ids[i] = shaderGroupIdBuffer2.data() + i * shaderGroupIdSize;
                     }
 
                     uint32_t groupIndex = 0;
 
-                    // Entry 0: Ray Generation Shader
+                    // Entry 0: Ray Generation Shader (Default)
                     memcpy(pData, shaderGroupIds[groupIndex++], shaderGroupIdSize);
                     resources.shaderTableRGSStartAddress = address;
 
                     address += resources.shaderTableRecordSize;
 
-                    // Entry 1: Miss Shader
+                    // Entry 2: Miss Shader
                     pData += resources.shaderTableRecordSize;
                     memcpy(pData, shaderGroupIds[groupIndex++], shaderGroupIdSize);
                     resources.shaderTableMissTableStartAddress = address;
@@ -235,7 +223,7 @@ namespace Graphics
 
                     address += resources.shaderTableMissTableSize;
 
-                    // Entries 2+: Hit Groups
+                    // Entry 3: Hit Group (CHS only)
                     for (uint32_t hitGroupIndex = 0; hitGroupIndex < static_cast<uint32_t>(resources.rtShaders.hitGroups.size()); hitGroupIndex++)
                     {
                         pData += resources.shaderTableRecordSize;
@@ -243,6 +231,32 @@ namespace Graphics
                     }
                     resources.shaderTableHitGroupTableStartAddress = address;
                     resources.shaderTableHitGroupTableSize = static_cast<uint32_t>(resources.rtShaders.hitGroups.size()) * resources.shaderTableRecordSize;
+
+                    // Reset group index for alternate pipeline
+                    groupIndex = 0;
+                    address += resources.shaderTableRecordSize;
+
+                    // Entry 4: Ray Generation Shader (Alternate)
+                    pData += resources.shaderTableRecordSize;
+                    memcpy(pData, shaderGroup2Ids[groupIndex++], shaderGroupIdSize);
+                    resources.shaderTableRGS2StartAddress = address;
+
+                    address += resources.shaderTableRecordSize;
+
+                    // Entry 5: Miss Shader (Alternate)
+                    pData += resources.shaderTableRecordSize;
+                    memcpy(pData, shaderGroup2Ids[groupIndex++], shaderGroupIdSize);
+                    resources.shaderTableMissTable2StartAddress = address;
+
+                    address += resources.shaderTableMissTableSize;
+
+                    // Entry 6: Hit Group (CHS only)
+                    for (uint32_t hitGroupIndex = 0; hitGroupIndex < static_cast<uint32_t>(resources.rtShaders2.hitGroups.size()); hitGroupIndex++)
+                    {
+                        pData += resources.shaderTableRecordSize;
+                        memcpy(pData, shaderGroup2Ids[groupIndex++], shaderGroupIdSize);
+                    }
+                    resources.shaderTableHitGroupTable2StartAddress = address;
 
                     // Unmap
                     vkUnmapMemory(vk.device, resources.shaderTableUploadMemory);
@@ -270,21 +284,26 @@ namespace Graphics
                         // Skip this volume if its "Show Probes" flag is disabled
                         if (!volume->GetShowProbes()) continue;
 
+                        // Get the address of the probe blas
+                        VkAccelerationStructureDeviceAddressInfoKHR asDeviceAddressInfo = {};
+                        asDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+                        asDeviceAddressInfo.accelerationStructure = resources.blas.asKHR;
+                        VkDeviceAddress blasAddress = vkGetAccelerationStructureDeviceAddressKHR(vk.device, &asDeviceAddressInfo);
+
                         // Add an instance for each probe
                         for (uint32_t probeIndex = 0; probeIndex < static_cast<uint32_t>(volume->GetNumProbes()); probeIndex++)
                         {
-                            VkAccelerationStructureDeviceAddressInfoKHR asDeviceAddressInfo = {};
-                            asDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-                            asDeviceAddressInfo.accelerationStructure = resources.blas.asKHR;
-                            VkDeviceAddress blasAddress = vkGetAccelerationStructureDeviceAddressKHR(vk.device, &asDeviceAddressInfo);
-
                             // Describe the probe instance
                             VkAccelerationStructureInstanceKHR desc = {};
                             desc.instanceCustomIndex  = instanceOffset;                     // instance offset in first 16 bits
                             desc.instanceCustomIndex |= (uint8_t)volume->GetIndex() << 16;  // volume index in last 8 bits
-                            desc.mask = 0xFF;
-                            desc.instanceShaderBindingTableRecordOffset = 0;     // A single hit group for all geometry
+
+                            // Set the instance mask based on the visualization type
+                            if(volume->GetProbeVisType() == EDDGIVolumeProbeVisType::Default) desc.mask = 0x01;
+                            else if(volume->GetProbeVisType() == EDDGIVolumeProbeVisType::Hide_Inactive) desc.mask = 0x02;
+
                             desc.accelerationStructureReference = blasAddress;
+                            desc.instanceShaderBindingTableRecordOffset = 0;     // A single hit group for all geometry
                         #if (COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT) || (COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP)
                             desc.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FRONT_COUNTERCLOCKWISE_BIT_KHR;
                         #endif
@@ -317,10 +336,10 @@ namespace Graphics
                     return true;
                 }
 
-                bool UpdateTLAS(Globals& vk, Resources& resources, const Configs::Config& config)
+                bool UpdateTLAS(Globals& vk, GlobalResources& vkResources, Resources& resources, const Configs::Config& config)
                 {
                 #ifdef GFX_PERF_MARKERS
-                    AddPerfMarker(vk, GFX_PERF_MARKER_GREEN, "Update DDGI Visualizations TLAS");
+                    AddPerfMarker(vk, GFX_PERF_MARKER_GREEN, "RTXGI: Visualization, Update Probe TLAS");
                 #endif
 
                     // Update the instances and copy them to the GPU
@@ -330,7 +349,7 @@ namespace Graphics
                     if (resources.probeInstances.size() == 0) return true;
 
                     // Bind the descriptor set
-                    vkCmdBindDescriptorSets(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_COMPUTE, resources.pipelineLayout, 0, 1, &resources.descriptorSet, 0, nullptr);
+                    vkCmdBindDescriptorSets(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_COMPUTE, vkResources.pipelineLayout, 0, 1, &resources.descriptorSet, 0, nullptr);
 
                     // Bind the update pipeline
                     vkCmdBindPipeline(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_COMPUTE, resources.updateTlasPipeline);
@@ -343,17 +362,23 @@ namespace Graphics
                         // Skip this volume if the "Show Probes" flag is disabled
                         if (!volume->GetShowProbes()) continue;
 
-                        // Update constants
-                        resources.constants.volumeIndex = volume->GetIndex();
-                        resources.constants.instanceOffset = instanceOffset;
-                        resources.constants.probeRadius = config.ddgi.volumes[volumeIndex].probeRadius;
+                        // Update the constants
+                        vkResources.constants.ddgivis.instanceOffset = instanceOffset;
+                        vkResources.constants.ddgivis.probeRadius = config.ddgi.volumes[volumeIndex].probeRadius;
 
-                        // Set the push constants
-                        vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], resources.pipelineLayout, VK_SHADER_STAGE_ALL, 0, DDGIVisConstants::GetSizeInBytes(), resources.constants.GetData());
+                        // Update the vis push constants
+                        uint32_t offset = GlobalConstants::GetAlignedSizeInBytes() - DDGIVisConsts::GetAlignedSizeInBytes();
+                        vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, DDGIVisConsts::GetSizeInBytes(), vkResources.constants.ddgivis.GetData());
+
+                        // Update the DDGIRootConstants
+                        offset = GlobalConstants::GetAlignedSizeInBytes();
+                        vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, DDGIRootConstants::GetSizeInBytes(), volume->GetPushConstants().GetData());
 
                         // Dispatch the compute shader
+                        float groupSize = 32.f;
                         uint32_t numProbes = static_cast<uint32_t>(volume->GetNumProbes());
-                        vkCmdDispatch(vk.cmdBuffer[vk.frameIndex], numProbes, 1, 1);
+                        uint32_t numGroups = (uint32_t)ceil((float)numProbes / groupSize);
+                        vkCmdDispatch(vk.cmdBuffer[vk.frameIndex], numGroups, 1, 1);
 
                         // Increment the instance offset
                         instanceOffset += volume->GetNumProbes();
@@ -416,168 +441,34 @@ namespace Graphics
 
                 // --- Create -----------------------------------------------------------------------------------------
 
-                bool CreatePipelineLayout(Globals& vk, GlobalResources& vkResources, Resources& resources, std::ofstream& log)
-                {
-                    // Describe the descriptor set layout bindings (aligns with DDGI/Visualizations/Descriptors.hlsl)
-                    std::vector<VkDescriptorSetLayoutBinding> bindings;
-
-                    // 0: Samplers
-                    VkDescriptorSetLayoutBinding samplersBinding = {};
-                    samplersBinding.binding = DescriptorLayoutBindings::SAMPLERS;
-                    samplersBinding.descriptorCount = 10;
-                    samplersBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-                    samplersBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-
-                    bindings.push_back(samplersBinding);
-
-                    // 1: Camera constant buffer
-                    VkDescriptorSetLayoutBinding cameraCBBinding = {};
-                    cameraCBBinding.binding = 1;
-                    cameraCBBinding.descriptorCount = 1;
-                    cameraCBBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                    cameraCBBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-
-                    bindings.push_back(cameraCBBinding);
-
-                    // 2: Ray Tracing Acceleration Structure SRV
-                    VkDescriptorSetLayoutBinding bvhBinding = {};
-                    bvhBinding.binding = 2;
-                    bvhBinding.descriptorCount = 1;
-                    bvhBinding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-                    bvhBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;    // we do not allow tracing in hit shaders (i.e. recursive tracing)
-
-                    bindings.push_back(bvhBinding);
-
-                    // 3: DDGIVolume constants structured buffer SRV
-                    VkDescriptorSetLayoutBinding constantsSTBBinding = {};
-                    constantsSTBBinding.binding = 3;
-                    constantsSTBBinding.descriptorCount = 1;
-                    constantsSTBBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                    constantsSTBBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-
-                    bindings.push_back(constantsSTBBinding);
-
-                    // 4: TLAS Instances UAV (u0)
-                    VkDescriptorSetLayoutBinding tlasBinding = {};
-                    tlasBinding.binding = 4;
-                    tlasBinding.descriptorCount = 1;
-                    tlasBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                    tlasBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-
-                    bindings.push_back(tlasBinding);
-
-                    // 5: GBufferA UAV (u1)
-                    VkDescriptorSetLayoutBinding gbufferABinding = {};
-                    gbufferABinding.binding = 5;
-                    gbufferABinding.descriptorCount = 1;
-                    gbufferABinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                    gbufferABinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-
-                    bindings.push_back(gbufferABinding);
-
-                    // 6: GBufferB UAV (u2)
-                    VkDescriptorSetLayoutBinding gbufferBBinding = {};
-                    gbufferBBinding.binding = 6;
-                    gbufferBBinding.descriptorCount = 1;
-                    gbufferBBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                    gbufferBBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-
-                    bindings.push_back(gbufferBBinding);
-
-                    // 7: ByteAddress Buffers
-                    VkDescriptorSetLayoutBinding rawBufferBinding = {};
-                    rawBufferBinding.binding = 7;
-                    rawBufferBinding.descriptorCount = 500;
-                    rawBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                    rawBufferBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-
-                    bindings.push_back(rawBufferBinding);
-
-                    // 8: Textures (SRVs)
-                    VkDescriptorSetLayoutBinding tex2DBinding = {};
-                    tex2DBinding.binding = 8;
-                    tex2DBinding.descriptorCount = 500;
-                    tex2DBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-                    tex2DBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-
-                    bindings.push_back(tex2DBinding);
-
-                    // Describe the push constants
-                    VkPushConstantRange pushConstantRange = {};
-                    pushConstantRange.stageFlags = VK_SHADER_STAGE_ALL;
-                    pushConstantRange.offset = 0;
-                    pushConstantRange.size = DDGIVisConstants::GetAlignedSizeInBytes();
-
-                    VkDescriptorBindingFlags bindingFlags[] =
-                    {
-                        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 0: Samplers[]
-                        0, // 1: Camera Constant Buffer
-                        0, // 2: RT Acceleration Structure
-                        0, // 3: DDGIVolumes Structured Buffer
-                        0, // 4: Instances Structured Buffer
-                        0, // 5: GBufferA SRV
-                        0, // 6: GBufferB SRV
-                        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 7: ByteAddressBuffer[]
-                        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 8: Tex2D[]
-                    };
-                    assert(_countof(bindingFlags) == bindings.size()); // must have 1 binding flag per binding slot
-
-                    // Describe the descriptor bindings
-                    VkDescriptorSetLayoutBindingFlagsCreateInfo descriptorSetLayoutBindingsCreateInfo = {};
-                    descriptorSetLayoutBindingsCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-                    descriptorSetLayoutBindingsCreateInfo.pBindingFlags = bindingFlags;
-                    descriptorSetLayoutBindingsCreateInfo.bindingCount = _countof(bindingFlags);
-
-                    // Describe the global descriptor set layout
-                    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
-                    descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-                    descriptorSetLayoutCreateInfo.pNext = &descriptorSetLayoutBindingsCreateInfo;
-                    descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-                    descriptorSetLayoutCreateInfo.pBindings = bindings.data();
-
-                    // Create the descriptor set layout
-                    VKCHECK(vkCreateDescriptorSetLayout(vk.device, &descriptorSetLayoutCreateInfo, nullptr, &resources.descriptorSetLayout));
-                #ifdef GFX_NAME_OBJECTS
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.descriptorSetLayout), "DDGI Visualizations Descriptor Set Layout", VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT);
-                #endif
-
-                    // Describe the pipeline layout
-                    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
-                    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-                    pipelineLayoutCreateInfo.setLayoutCount = 1;
-                    pipelineLayoutCreateInfo.pSetLayouts = &resources.descriptorSetLayout;
-                    pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-                    pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
-
-                    // Create the pipeline layout
-                    VKCHECK(vkCreatePipelineLayout(vk.device, &pipelineLayoutCreateInfo, nullptr, &resources.pipelineLayout));
-                #ifdef GFX_NAME_OBJECTS
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.pipelineLayout), "DDGI Visualizations Pipeline Layout", VK_OBJECT_TYPE_PIPELINE_LAYOUT);
-                #endif
-
-                    return true;
-                }
-
                 bool LoadAndCompileShaders(Globals& vk, Resources& resources, std::ofstream& log)
                 {
                     // Release existing shaders
                     resources.rtShaders.Release();
+                    resources.rtShaders2.rgs.Release();
                     resources.textureVisCS.Release();
                     resources.updateTlasCS.Release();
 
                     std::wstring root = std::wstring(vk.shaderCompiler.root.begin(), vk.shaderCompiler.root.end());
 
-                    // Load and compile the ray generation shader
+                    // Load and compile the ray generation shaders
                     {
                         resources.rtShaders.rgs.filepath = root + L"shaders/ddgi/visualizations/ProbesRGS.hlsl";
                         resources.rtShaders.rgs.entryPoint = L"RayGen";
                         resources.rtShaders.rgs.exportName = L"DDGIVisProbesRGS";
-                        resources.rtShaders.rgs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
-
+                        resources.rtShaders.rgs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                        Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-
-                        // Load and compile RGS
                         CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.rgs, true), "compile DDGI Visualizations ray generation shader!\n", log);
+
+                        // Load and compile alternate RGS
+                        resources.rtShaders2.rgs.filepath = root + L"shaders/ddgi/visualizations/ProbesRGS.hlsl";
+                        resources.rtShaders2.rgs.entryPoint = L"RayGenHideInactive";
+                        resources.rtShaders2.rgs.exportName = L"DDGIVisProbesRGS";
+                        resources.rtShaders2.rgs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                        Shaders::AddDefine(resources.rtShaders2.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
+                        Shaders::AddDefine(resources.rtShaders2.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
+                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders2.rgs, true), "compile DDGI Visualizations ray generation shader!\n", log);
                     }
 
                     // Load and compile the miss shader
@@ -585,10 +476,12 @@ namespace Graphics
                         resources.rtShaders.miss.filepath = root + L"shaders/ddgi/visualizations/ProbesMiss.hlsl";
                         resources.rtShaders.miss.entryPoint = L"Miss";
                         resources.rtShaders.miss.exportName = L"DDGIVisProbesMiss";
-                        resources.rtShaders.miss.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
-
-                        // Load and compile
+                        resources.rtShaders.miss.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                        Shaders::AddDefine(resources.rtShaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.miss, true), "compile DDGI Visualizations miss shader!\n", log);
+
+                        // Copy to the alternate RT pipeline
+                        resources.rtShaders2.miss = resources.rtShaders.miss;
                     }
 
                     // Add the hit group
@@ -602,26 +495,34 @@ namespace Graphics
                         group.chs.filepath = root + L"shaders/ddgi/visualizations/ProbesCHS.hlsl";
                         group.chs.entryPoint = L"CHS";
                         group.chs.exportName = L"DDGIVisProbesCHS";
-                        group.chs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                        group.chs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
 
                         // Load and compile
+                        Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         CHECK(Shaders::Compile(vk.shaderCompiler, group.chs, true), "compile DDGI Visualizations closest hit shader!\n", log);
 
                         // Set the payload size
-                        resources.rtShaders.payloadSizeInBytes = sizeof(ProbesPayload);
+                        resources.rtShaders.payloadSizeInBytes = sizeof(ProbeVisualizationPayload);
+
+                        // Copy to the alternate RT pipeline
+                        resources.rtShaders2.hitGroups = resources.rtShaders.hitGroups;
+                        resources.rtShaders2.payloadSizeInBytes = resources.rtShaders.payloadSizeInBytes;
                     }
 
                     // Load and compile the volume texture shader
                     {
                         resources.textureVisCS.filepath = root + L"shaders/ddgi/visualizations/VolumeTexturesCS.hlsl";
                         resources.textureVisCS.entryPoint = L"CS";
-                        resources.textureVisCS.targetProfile = L"cs_6_0";
-                        resources.textureVisCS.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
-
+                        resources.textureVisCS.targetProfile = L"cs_6_6";
+                        resources.textureVisCS.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                        Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_TYPE", L"2");                                                 // use the application's push constants layout
+                        Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_STRUCT_NAME", L"GlobalConstants");                            // specify the struct name of the application's push constants
+                        Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_VARIABLE_NAME", L"GlobalConst");                              // specify the variable name of the application's push constants
+                        Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME", L"ddgi_volumeIndex");          // specify the name of the DDGIVolume index field in the application's push constants struct
+                        Shaders::AddDefine(resources.textureVisCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         Shaders::AddDefine(resources.textureVisCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
                         Shaders::AddDefine(resources.textureVisCS, L"THGP_DIM_X", L"8");
                         Shaders::AddDefine(resources.textureVisCS, L"THGP_DIM_Y", L"4");
-
                         CHECK(Shaders::Compile(vk.shaderCompiler, resources.textureVisCS, true), "compile DDGI Visualizations volume textures compute shader!\n", log);
                     }
 
@@ -629,11 +530,14 @@ namespace Graphics
                     {
                         resources.updateTlasCS.filepath = root + L"shaders/ddgi/visualizations/ProbesUpdateCS.hlsl";
                         resources.updateTlasCS.entryPoint = L"CS";
-                        resources.updateTlasCS.targetProfile = L"cs_6_0";
-                        resources.updateTlasCS.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
-
+                        resources.updateTlasCS.targetProfile = L"cs_6_6";
+                        resources.updateTlasCS.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                        Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_TYPE", L"2");                                                 // use the application's push constants layout
+                        Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_STRUCT_NAME", L"GlobalConstants");                            // specify the struct name of the application's push constants
+                        Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_VARIABLE_NAME", L"GlobalConst");                              // specify the variable name of the application's push constants
+                        Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME", L"ddgi_volumeIndex");          // specify the name of the DDGIVolume index field in the application's push constants struct
+                        Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-
                         CHECK(Shaders::Compile(vk.shaderCompiler, resources.updateTlasCS, true), "compile DDGI Visualizations probes update compute shader!\n", log);
                     }
 
@@ -647,7 +551,7 @@ namespace Graphics
                     descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
                     descriptorSetAllocateInfo.descriptorPool = vkResources.descriptorPool;
                     descriptorSetAllocateInfo.descriptorSetCount = 1;
-                    descriptorSetAllocateInfo.pSetLayouts = &resources.descriptorSetLayout;
+                    descriptorSetAllocateInfo.pSetLayouts = &vkResources.descriptorSetLayout;
 
                     // Allocate the descriptor set
                     VKCHECK(vkAllocateDescriptorSets(vk.device, &descriptorSetAllocateInfo, &resources.descriptorSet));
@@ -658,29 +562,42 @@ namespace Graphics
                     return true;
                 }
 
-                bool CreatePipelines(Globals& vk, Resources& resources, std::ofstream& log)
+                bool CreatePipelines(Globals& vk, GlobalResources& vkResources, Resources& resources, std::ofstream& log)
                 {
                     // Release existing shader modules
                     resources.rtShadersModule.Release(vk.device);
+                    resources.rtShadersModule2.Release(vk.device);
                     vkDestroyShaderModule(vk.device, resources.textureVisModule, nullptr);
                     vkDestroyShaderModule(vk.device, resources.updateTlasModule, nullptr);
 
                     // Release existing pipelines
                     vkDestroyPipeline(vk.device, resources.rtPipeline, nullptr);
+                    vkDestroyPipeline(vk.device, resources.rtPipeline2, nullptr);
                     vkDestroyPipeline(vk.device, resources.textureVisPipeline, nullptr);
                     vkDestroyPipeline(vk.device, resources.updateTlasPipeline, nullptr);
 
                     // Create the shader modules
                     {
-                        // Create the RT pipeline shader module
+                        // Create the probe visualization RT shader module (default)
                         CHECK(CreateRayTracingShaderModules(
                             vk.device,
                             resources.rtShaders,
                             resources.rtShadersModule),
                             "create DDGI Visualization RT shader modules!\n", log);
                     #ifdef GFX_NAME_OBJECTS
-                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rtShadersModule.rgs), "DDGI Probe RT Visualization RGS Shader Module", VK_OBJECT_TYPE_SHADER_MODULE);
-                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rtShadersModule.miss), "DDGI Probe RT Visualization MS Shader Module", VK_OBJECT_TYPE_SHADER_MODULE);
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rtShadersModule.rgs), "DDGI Probe RT Visualization RGS Shader Module (Default)", VK_OBJECT_TYPE_SHADER_MODULE);
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rtShadersModule.miss), "DDGI Probe RT Visualization MS Shader Module (Default)", VK_OBJECT_TYPE_SHADER_MODULE);
+                    #endif
+
+                        // Create the probe visualization RT shader module (alternate)
+                        CHECK(CreateRayTracingShaderModules(
+                            vk.device,
+                            resources.rtShaders2,
+                            resources.rtShadersModule2),
+                            "create DDGI Visualization RT shader modules!\n", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rtShadersModule2.rgs), "DDGI Probe RT Visualization RGS Shader Module (Alternate)", VK_OBJECT_TYPE_SHADER_MODULE);
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rtShadersModule2.miss), "DDGI Probe RT Visualization MS Shader Module (Alternate)", VK_OBJECT_TYPE_SHADER_MODULE);
                     #endif
 
                         // Create the texture vis shader module
@@ -706,23 +623,34 @@ namespace Graphics
 
                     // Create the pipelines
                     {
-                        // Create the probe RT pipeline
+                        // Create the probe visualization RT pipeline (default)
                         CHECK(CreateRayTracingPipeline(
                             vk.device,
-                            resources.pipelineLayout,
+                            vkResources.pipelineLayout,
                             resources.rtShaders,
                             resources.rtShadersModule,
                             &resources.rtPipeline),
                             "create DDGI Probe Visualization RT pipeline!\n", log);
-
                     #ifdef GFX_NAME_OBJECTS
-                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rtPipeline), "DDGI Probe Visualization RT Pipeline", VK_OBJECT_TYPE_PIPELINE);
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rtPipeline), "DDGI Probe Visualization RT Pipeline (Default)", VK_OBJECT_TYPE_PIPELINE);
+                    #endif
+
+                        // Create the probe visualization RT pipeline (alternate)
+                        CHECK(CreateRayTracingPipeline(
+                            vk.device,
+                            vkResources.pipelineLayout,
+                            resources.rtShaders2,
+                            resources.rtShadersModule2,
+                            &resources.rtPipeline2),
+                            "create DDGI Probe Visualization RT pipeline!\n", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rtPipeline2), "DDGI Probe Visualization RT Pipeline (Alternate)", VK_OBJECT_TYPE_PIPELINE);
                     #endif
 
                         // Create the volume texture visualization pipeline
                         CHECK(CreateComputePipeline(
                             vk.device,
-                            resources.pipelineLayout,
+                            vkResources.pipelineLayout,
                             resources.textureVisCS,
                             resources.textureVisModule,
                             &resources.textureVisPipeline),
@@ -735,7 +663,7 @@ namespace Graphics
                         // Create the probe update pipeline
                         CHECK(CreateComputePipeline(
                             vk.device,
-                            resources.pipelineLayout,
+                            vkResources.pipelineLayout,
                             resources.updateTlasCS,
                             resources.updateTlasModule,
                             &resources.updateTlasPipeline),
@@ -752,9 +680,13 @@ namespace Graphics
                 bool CreateShaderTable(Globals& vk, Resources& resources, std::ofstream& log)
                 {
                     // The Shader Table layout is as follows:
-                    //    Entry 0:  Probe Vis Ray Generation Shader
-                    //    Entry 1:  Probe Vis Miss Shader
-                    //    Entry 2+: Probe Vis HitGroups
+                    //    Entry 0:  Probe Vis Ray Generation Shader (default)
+                    //    Entry 2:  Probe Vis Miss Shader
+                    //    Entry 3:  Probe Vis HitGroup (CHS only)
+                    //    Entry 4:  Probe Vis Ray Generation Shader (alternate)
+                    //    Entry 5:  Probe Vis Miss Shader (alternate)
+                    //    Entry 6:  Probe Vis HitGroup (CHS only) (alternate)
+
                     // All shader records in the Shader Table must have the same size, so shader record size will be based on the largest required entry.
                     // The entries must be aligned to VkPhysicalDeviceRayTracingPipelinePropertiesKHR::shaderGroupBaseAlignment.
 
@@ -774,6 +706,7 @@ namespace Graphics
 
                     // Find the shader table size
                     resources.shaderTableSize = (2 + static_cast<uint32_t>(resources.rtShaders.hitGroups.size())) * resources.shaderTableRecordSize;
+                    resources.shaderTableSize *= 2; // for alternate pipeline
                     resources.shaderTableSize = ALIGN(vk.deviceRTPipelineProps.shaderGroupBaseAlignment, resources.shaderTableSize);
 
                     // Create the shader table upload buffer resource
@@ -928,7 +861,7 @@ namespace Graphics
                     // Get the maximum number of probe instances from all volumes
                     for (uint32_t volumeIndex = 0; volumeIndex < static_cast<uint32_t>(resources.volumes->size()); volumeIndex++)
                     {
-                        DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
+                        const DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
                         resources.maxProbeInstances += volume->GetNumProbes();
                     }
 
@@ -1036,15 +969,15 @@ namespace Graphics
                 bool Initialize(Globals& vk, GlobalResources& vkResources, DDGI::Resources& ddgiResources, Resources& resources, Instrumentation::Performance& perf, std::ofstream& log)
                 {
                     resources.volumes = &ddgiResources.volumes;
-                    resources.constantsSTB = ddgiResources.constantsSTB;
+                    resources.volumeConstantsSTB = ddgiResources.volumeConstantsSTB;
+                    resources.volumeResourceIndicesSTB = ddgiResources.volumeResourceIndicesSTB;
 
                     // Reset the command list before initialization
                     CHECK(ResetCmdList(vk), "reset command list!", log);
 
-                    if (!CreatePipelineLayout(vk, vkResources, resources, log)) return false;
                     if (!LoadAndCompileShaders(vk, resources, log)) return false;
                     if (!CreateDescriptorSets(vk, vkResources, resources, log)) return false;
-                    if (!CreatePipelines(vk, resources, log)) return false;
+                    if (!CreatePipelines(vk, vkResources, resources, log)) return false;
                     if (!CreateShaderTable(vk, resources, log)) return false;
                     if (!CreateGeometry(vk, vkResources, resources, log)) return false;
                     if (!CreateBLAS(vk, resources)) return false;
@@ -1079,11 +1012,12 @@ namespace Graphics
                 bool Reload(Globals& vk, GlobalResources& vkResources, DDGI::Resources& ddgiResources, Resources& resources, std::ofstream& log)
                 {
                     resources.volumes = &ddgiResources.volumes;
-                    resources.constantsSTB = ddgiResources.constantsSTB;
+                    resources.volumeConstantsSTB = ddgiResources.volumeConstantsSTB;
+                    resources.volumeResourceIndicesSTB = ddgiResources.volumeResourceIndicesSTB;
 
                     log << "Reloading DDGI Visualization shaders...";
                     if (!LoadAndCompileShaders(vk, resources, log)) return false;
-                    if (!CreatePipelines(vk, resources, log)) return false;
+                    if (!CreatePipelines(vk, vkResources, resources, log)) return false;
                     if (!UpdateShaderTable(vk, vkResources, resources)) return false;
                     if (!UpdateDescriptorSets(vk, vkResources, resources)) return false;
 
@@ -1120,31 +1054,31 @@ namespace Graphics
                     resources.enabled = config.ddgi.enabled;
                     if (resources.enabled)
                     {
+                        // Get the currently selected volume
                         Configs::DDGIVolume volume = config.ddgi.volumes[config.ddgi.selectedVolume];
+
+                        // Set the selected volume's index
+                        resources.selectedVolume = config.ddgi.selectedVolume;
 
                         if (resources.flags & VIS_FLAG_SHOW_PROBES)
                         {
-                            // Update constants
-                            resources.constants.probeType = volume.probeType;
-                            resources.constants.probeRadius = volume.probeRadius;
-                            resources.constants.probeAlpha = volume.probeAlpha;
-                            resources.constants.distanceDivisor = volume.probeDistanceDivisor;
+                            // Update probe visualization constants
+                            vkResources.constants.ddgivis.probeType = volume.probeType;
+                            vkResources.constants.ddgivis.probeRadius = volume.probeRadius;
+                            vkResources.constants.ddgivis.distanceDivisor = volume.probeDistanceDivisor;
 
                             // Update the TLAS instances and rebuild
-                            UpdateTLAS(vk, resources, config);
+                            UpdateTLAS(vk, vkResources, resources, config);
                         }
 
                         if (resources.flags & VIS_FLAG_SHOW_TEXTURES)
                         {
-                            // Update constants
-                            resources.constants.volumeIndex = config.ddgi.selectedVolume;
-                            resources.constants.distanceDivisor = volume.probeDistanceDivisor;
-
-                            resources.constants.rayDataTextureScale = volume.probeRayDataScale;
-                            resources.constants.irradianceTextureScale = volume.probeIrradianceScale;
-                            resources.constants.distanceTextureScale = volume.probeDistanceScale;
-                            resources.constants.relocationOffsetTextureScale = volume.probeRelocationOffsetScale;
-                            resources.constants.classificationStateTextureScale = volume.probeClassificationStateScale;
+                            // Update texture visualization constants
+                            vkResources.constants.ddgivis.distanceDivisor = volume.probeDistanceDivisor;
+                            vkResources.constants.ddgivis.rayDataTextureScale = volume.probeRayDataScale;
+                            vkResources.constants.ddgivis.irradianceTextureScale = volume.probeIrradianceScale;
+                            vkResources.constants.ddgivis.distanceTextureScale = volume.probeDistanceScale;
+                            vkResources.constants.ddgivis.probeDataTextureScale = volume.probeDataScale;
                         }
                     }
                     CPU_TIMESTAMP_END(resources.cpuStat);
@@ -1167,52 +1101,97 @@ namespace Graphics
                                 AddPerfMarker(vk, GFX_PERF_MARKER_GREEN, "Vis: DDGIVolume Probes");
                             #endif
 
-                                // Set the push constants
-                                DDGIVisConstants consts = resources.constants;
-                                vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], resources.pipelineLayout, VK_SHADER_STAGE_ALL, 0, DDGIConstants::GetSizeInBytes(), consts.GetData());
-
-                                // Bind the pipeline
-                                vkCmdBindPipeline(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, resources.rtPipeline);
+                                // Update the vis push constants
+                                GlobalConstants consts = vkResources.constants;
+                                uint32_t offset = GlobalConstants::GetAlignedSizeInBytes() - DDGIVisConsts::GetAlignedSizeInBytes();
+                                vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, DDGIVisConsts::GetSizeInBytes(), consts.ddgivis.GetData());
 
                                 // Bind the descriptor set
-                                vkCmdBindDescriptorSets(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, resources.pipelineLayout, 0, 1, &resources.descriptorSet, 0, nullptr);
+                                vkCmdBindDescriptorSets(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkResources.pipelineLayout, 0, 1, &resources.descriptorSet, 0, nullptr);
 
-                                // Describe the shader table
-                                VkStridedDeviceAddressRegionKHR raygenRegion = {};
-                                raygenRegion.deviceAddress = resources.shaderTableRGSStartAddress;
-                                raygenRegion.size = resources.shaderTableRecordSize;
-                                raygenRegion.stride = resources.shaderTableRecordSize;
+                                // Describe the shaders and dispatch (EDDGIVolumeProbeVisType::Default)
+                                {
+                                    VkStridedDeviceAddressRegionKHR raygenRegion = {};
+                                    raygenRegion.deviceAddress = resources.shaderTableRGSStartAddress;
+                                    raygenRegion.size = resources.shaderTableRecordSize;
+                                    raygenRegion.stride = resources.shaderTableRecordSize;
 
-                                VkStridedDeviceAddressRegionKHR missRegion = {};
-                                missRegion.deviceAddress = resources.shaderTableMissTableStartAddress;
-                                missRegion.size = resources.shaderTableMissTableSize;
-                                missRegion.stride = resources.shaderTableRecordSize;
+                                    VkStridedDeviceAddressRegionKHR missRegion = {};
+                                    missRegion.deviceAddress = resources.shaderTableMissTableStartAddress;
+                                    missRegion.size = resources.shaderTableMissTableSize;
+                                    missRegion.stride = resources.shaderTableRecordSize;
 
-                                VkStridedDeviceAddressRegionKHR hitRegion = {};
-                                hitRegion.deviceAddress = resources.shaderTableHitGroupTableStartAddress;
-                                hitRegion.size = resources.shaderTableHitGroupTableSize;
-                                hitRegion.stride = resources.shaderTableRecordSize;
+                                    VkStridedDeviceAddressRegionKHR hitRegion = {};
+                                    hitRegion.deviceAddress = resources.shaderTableHitGroupTableStartAddress;
+                                    hitRegion.size = resources.shaderTableHitGroupTableSize;
+                                    hitRegion.stride = resources.shaderTableRecordSize;
 
-                                VkStridedDeviceAddressRegionKHR callableRegion = {};
+                                    VkStridedDeviceAddressRegionKHR callableRegion = {};
 
-                                // Dispatch rays
-                                GPU_TIMESTAMP_BEGIN(resources.gpuProbeStat->GetQueryBeginIndex());
-                                vkCmdTraceRaysKHR(
-                                    vk.cmdBuffer[vk.frameIndex],
-                                    &raygenRegion,
-                                    &missRegion,
-                                    &hitRegion,
-                                    &callableRegion,
-                                    vk.width,
-                                    vk.height,
-                                    1);
-                                GPU_TIMESTAMP_END(resources.gpuProbeStat->GetQueryEndIndex());
+                                    // Bind the pipeline
+                                    vkCmdBindPipeline(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, resources.rtPipeline);
 
-                                // Wait for the ray trace to finish
-                                VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-                                ImageBarrierDesc barrier = { VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
-                                SetImageMemoryBarrier(vk.cmdBuffer[vk.frameIndex], vkResources.rt.GBufferA, barrier);
-                                SetImageMemoryBarrier(vk.cmdBuffer[vk.frameIndex], vkResources.rt.GBufferB, barrier);
+                                    // Dispatch rays
+                                    GPU_TIMESTAMP_BEGIN(resources.gpuProbeStat->GetGPUQueryBeginIndex());
+                                    vkCmdTraceRaysKHR(
+                                        vk.cmdBuffer[vk.frameIndex],
+                                        &raygenRegion,
+                                        &missRegion,
+                                        &hitRegion,
+                                        &callableRegion,
+                                        vk.width,
+                                        vk.height,
+                                        1);
+                                    GPU_TIMESTAMP_END(resources.gpuProbeStat->GetGPUQueryEndIndex());
+
+                                    // Wait for the ray trace to finish
+                                    VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+                                    ImageBarrierDesc barrier = { VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
+                                    SetImageMemoryBarrier(vk.cmdBuffer[vk.frameIndex], vkResources.rt.GBufferA, barrier);
+                                    SetImageMemoryBarrier(vk.cmdBuffer[vk.frameIndex], vkResources.rt.GBufferB, barrier);
+                                }
+
+                                // Describe the shaders and dispatch (EDDGIVolumeProbeVisType::Hide_Inactive)
+                                {
+                                    VkStridedDeviceAddressRegionKHR raygenRegion = {};
+                                    raygenRegion.deviceAddress = resources.shaderTableRGS2StartAddress;
+                                    raygenRegion.size = resources.shaderTableRecordSize;
+                                    raygenRegion.stride = resources.shaderTableRecordSize;
+
+                                    VkStridedDeviceAddressRegionKHR missRegion = {};
+                                    missRegion.deviceAddress = resources.shaderTableMissTable2StartAddress;
+                                    missRegion.size = resources.shaderTableMissTableSize;
+                                    missRegion.stride = resources.shaderTableRecordSize;
+
+                                    VkStridedDeviceAddressRegionKHR hitRegion = {};
+                                    hitRegion.deviceAddress = resources.shaderTableHitGroupTable2StartAddress;
+                                    hitRegion.size = resources.shaderTableHitGroupTableSize;
+                                    hitRegion.stride = resources.shaderTableRecordSize;
+
+                                    VkStridedDeviceAddressRegionKHR callableRegion = {};
+
+                                    // Bind the pipeline
+                                    vkCmdBindPipeline(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, resources.rtPipeline2);
+
+                                    // Dispatch rays
+                                    GPU_TIMESTAMP_BEGIN(resources.gpuProbeStat->GetGPUQueryBeginIndex());
+                                    vkCmdTraceRaysKHR(
+                                        vk.cmdBuffer[vk.frameIndex],
+                                        &raygenRegion,
+                                        &missRegion,
+                                        &hitRegion,
+                                        &callableRegion,
+                                        vk.width,
+                                        vk.height,
+                                        1);
+                                    GPU_TIMESTAMP_END(resources.gpuProbeStat->GetGPUQueryEndIndex());
+
+                                    // Wait for the ray trace to finish
+                                    VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+                                    ImageBarrierDesc barrier = { VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
+                                    SetImageMemoryBarrier(vk.cmdBuffer[vk.frameIndex], vkResources.rt.GBufferA, barrier);
+                                    SetImageMemoryBarrier(vk.cmdBuffer[vk.frameIndex], vkResources.rt.GBufferB, barrier);
+                                }
 
                             #ifdef GFX_PERF_MARKERS
                                 vkCmdEndDebugUtilsLabelEXT(vk.cmdBuffer[vk.frameIndex]);
@@ -1227,23 +1206,28 @@ namespace Graphics
                             AddPerfMarker(vk, GFX_PERF_MARKER_GREEN, "Vis: DDGIVolume Textures");
                         #endif
 
-                            // Set the push constants
-                            DDGIVisConstants consts = resources.constants;
-                            vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], resources.pipelineLayout, VK_SHADER_STAGE_ALL, 0, DDGIVisConstants::GetSizeInBytes(), consts.GetData());
+                            // Update the vis push constants
+                            GlobalConstants consts = vkResources.constants;
+                            uint32_t offset = GlobalConstants::GetAlignedSizeInBytes() - DDGIVisConsts::GetAlignedSizeInBytes();
+                            vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, DDGIVisConsts::GetSizeInBytes(), consts.ddgivis.GetData());
+
+                            // Update the DDGI push constants
+                            DDGIRootConstants pushConsts = { resources.selectedVolume, 0, 0 };
+                            vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, GlobalConstants::GetAlignedSizeInBytes(), DDGIRootConstants::GetSizeInBytes(), pushConsts.GetData());
 
                             // Bind the pipeline
                             vkCmdBindPipeline(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_COMPUTE, resources.textureVisPipeline);
 
                             // Bind the descriptor set
-                            vkCmdBindDescriptorSets(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_COMPUTE, resources.pipelineLayout, 0, 1, &resources.descriptorSet, 0, nullptr);
+                            vkCmdBindDescriptorSets(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_COMPUTE, vkResources.pipelineLayout, 0, 1, &resources.descriptorSet, 0, nullptr);
 
                             // Dispatch threads
                             uint32_t groupsX = DivRoundUp(vk.width, 8);
                             uint32_t groupsY = DivRoundUp(vk.height, 4);
 
-                            GPU_TIMESTAMP_BEGIN(resources.gpuTextureStat->GetQueryBeginIndex());
+                            GPU_TIMESTAMP_BEGIN(resources.gpuTextureStat->GetGPUQueryBeginIndex());
                             vkCmdDispatch(vk.cmdBuffer[vk.frameIndex], groupsX, groupsY, 1);
-                            GPU_TIMESTAMP_END(resources.gpuTextureStat->GetQueryEndIndex());
+                            GPU_TIMESTAMP_END(resources.gpuTextureStat->GetGPUQueryEndIndex());
 
                             // Wait for the ray trace to finish
                             VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
@@ -1285,22 +1269,21 @@ namespace Graphics
 
                     // Shaders
                     resources.rtShaders.Release();
+                    resources.rtShaders2.rgs.Release();
                     resources.textureVisCS.Release();
                     resources.updateTlasCS.Release();
 
                     // Shader Modules
                     resources.rtShadersModule.Release(device);
+                    resources.rtShadersModule2.Release(device);
                     vkDestroyShaderModule(device, resources.textureVisModule, nullptr);
                     vkDestroyShaderModule(device, resources.updateTlasModule, nullptr);
 
                     // Pipelines
                     vkDestroyPipeline(device, resources.rtPipeline, nullptr);
+                    vkDestroyPipeline(device, resources.rtPipeline2, nullptr);
                     vkDestroyPipeline(device, resources.textureVisPipeline, nullptr);
                     vkDestroyPipeline(device, resources.updateTlasPipeline, nullptr);
-
-                    // Descriptor Set Layout and Pipeline Layout
-                    vkDestroyDescriptorSetLayout(device, resources.descriptorSetLayout, nullptr);
-                    vkDestroyPipelineLayout(device, resources.pipelineLayout, nullptr);
 
                     resources.shaderTableSize = 0;
                     resources.shaderTableRecordSize = 0;
@@ -1317,12 +1300,12 @@ namespace Graphics
     namespace DDGI::Visualizations
     {
 
-        bool Initialize(Globals& vk, GlobalResources& vkResources, DDGI::Resources& ddgiResources, Resources& resources, Instrumentation::Performance& perf, std::ofstream& log)
+        bool Initialize(Globals& vk, GlobalResources& vkResources, DDGI::Resources& ddgiResources, Resources& resources, Instrumentation::Performance& perf, Configs::Config& config, std::ofstream& log)
         {
             return Graphics::Vulkan::DDGI::Visualizations::Initialize(vk, vkResources, ddgiResources, resources, perf, log);
         }
 
-        bool Reload(Globals& vk, GlobalResources& vkResources, DDGI::Resources& ddgiResources, Resources& resources, std::ofstream& log)
+        bool Reload(Globals& vk, GlobalResources& vkResources, DDGI::Resources& ddgiResources, Resources& resources, Configs::Config& config, std::ofstream& log)
         {
             return Graphics::Vulkan::DDGI::Visualizations::Reload(vk, vkResources, ddgiResources, resources, log);
         }

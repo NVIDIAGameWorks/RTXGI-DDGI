@@ -13,30 +13,40 @@
 #include "Common.h"
 #include "Configs.h"
 
-#include <dxcapi.use.h>
+#include <dxcapi.h>
 
 namespace Shaders
 {
     struct ShaderCompiler
     {
-        dxc::DxcDllSupport dxcDllHelper;
-        IDxcCompiler*      compiler = nullptr;
-        IDxcLibrary*       library = nullptr;
-        std::string        root = "";
-        std::string        rtxgi = "";
+    #if _WIN32
+        HINSTANCE             dll = nullptr;
+    #elif __linux__
+        void*                 dll = nullptr;
+    #endif
+        IDxcUtils*            utils = nullptr;
+        IDxcCompiler3*        compiler = nullptr;
+        IDxcIncludeHandler*   includes = nullptr;
+
+        DxcCreateInstanceProc DxcCreateInstance = nullptr;
+
+        std::string           root = "";
+        std::string           rtxgi = "";
     };
 
     struct ShaderProgram
     {
         std::wstring               filepath = L"";
-        std::wstring               targetProfile = L"lib_6_4";
+        std::wstring               targetProfile = L"lib_6_6";
         std::wstring               entryPoint = L"";
         std::wstring               exportName = L"";
         std::wstring               includePath = L"";
         std::vector<LPCWSTR>       arguments;
         std::vector<std::wstring*> defineStrs;
         std::vector<DxcDefine>     defines;
+
         IDxcBlob*                  bytecode = nullptr;
+        IDxcBlobWide*              shaderName = nullptr;
 
         void Release()
         {
@@ -48,6 +58,7 @@ namespace Shaders
             defines.clear();
             arguments.clear();
             SAFE_RELEASE(bytecode);
+            SAFE_RELEASE(shaderName);
         }
     };
 

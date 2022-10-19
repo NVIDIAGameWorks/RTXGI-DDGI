@@ -38,8 +38,8 @@ namespace Graphics
                 VIS_FLAG_SHOW_TEXTURES = 0x4
             };
 
-            bool Initialize(Globals& globals, GlobalResources& gfxResources, DDGI::Resources& ddgiResources, Resources& resources, Instrumentation::Performance& perf, std::ofstream& log);
-            bool Reload(Globals& globals, GlobalResources& gfxResources, DDGI::Resources& ddgiResources, Resources& resources, std::ofstream& log);
+            bool Initialize(Globals& globals, GlobalResources& gfxResources, DDGI::Resources& ddgiResources, Resources& resources, Instrumentation::Performance& perf, Configs::Config& config, std::ofstream& log);
+            bool Reload(Globals& globals, GlobalResources& gfxResources, DDGI::Resources& ddgiResources, Resources& resources, Configs::Config& config, std::ofstream& log);
             bool Resize(Globals& globals, GlobalResources& gfxResources, Resources& resources, std::ofstream& log);
             void Update(Globals& globals, GlobalResources& gfxResources, Resources& resources, const Configs::Config& config);
             void Execute(Globals& globals, GlobalResources& gfxResources, Resources& resources);

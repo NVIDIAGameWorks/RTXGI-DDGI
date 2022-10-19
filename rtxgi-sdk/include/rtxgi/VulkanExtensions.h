@@ -8,15 +8,21 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#ifndef PLATFORM_HLSL
-#define PLATFORM_HLSL
+#pragma once
 
-#ifdef __spirv__
-#define VK_BINDING(x, y)    [[vk::binding(x, y)]]
-#define VK_PUSH_CONST       [[vk::push_constant]]
-#else
-#define VK_BINDING(x, y) 
-#define VK_PUSH_CONST 
+#include "Common.h"
+
+#if _WIN32
+#define VK_USE_PLATFORM_WIN32_KHR
+#elif __linux__
+#define VK_USE_PLATFORM_XLIB_KHR
 #endif
+#include <vulkan/vulkan.h>
 
-#endif //PLATFORM_HLSL
+namespace rtxgi
+{
+    namespace vulkan
+    {
+        RTXGI_API void LoadExtensions(VkDevice device);
+    }
+}

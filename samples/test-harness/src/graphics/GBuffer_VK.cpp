@@ -29,19 +29,19 @@ namespace Graphics
                 std::wstring root = std::wstring(vk.shaderCompiler.root.begin(), vk.shaderCompiler.root.end());
 
                 // Load and compile the ray generation shader
-                std::wstring shaderPath = root + L"shaders/GBufferRGS.hlsl";
-                resources.shaders.rgs.filepath = shaderPath.c_str();
+                resources.shaders.rgs.filepath = root + L"shaders/GBufferRGS.hlsl";
                 resources.shaders.rgs.entryPoint = L"RayGen";
                 resources.shaders.rgs.exportName = L"GBufferRGS";
-                resources.shaders.rgs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                resources.shaders.rgs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                Shaders::AddDefine(resources.shaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                 CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.rgs, true), "compile GBuffer ray generation shader!\n", log);
 
                 // Load and compile the miss shader
-                shaderPath = root + L"shaders/Miss.hlsl";
-                resources.shaders.miss.filepath = shaderPath.c_str();
+                resources.shaders.miss.filepath = root + L"shaders/Miss.hlsl";
                 resources.shaders.miss.entryPoint = L"Miss";
                 resources.shaders.miss.exportName = L"GBufferMiss";
-                resources.shaders.miss.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                resources.shaders.miss.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                Shaders::AddDefine(resources.shaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                 CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.miss, true), "compile GBuffer miss shader!\n", log);
 
                 // Add the hit group
@@ -51,19 +51,19 @@ namespace Graphics
                 group.exportName = L"GBufferHitGroup";
 
                 // Load and compile the CHS
-                shaderPath = root + L"shaders/CHS.hlsl";
-                group.chs.filepath = shaderPath.c_str();
+                group.chs.filepath = root + L"shaders/CHS.hlsl";
                 group.chs.entryPoint = L"CHS_PRIMARY";
                 group.chs.exportName = L"GBufferCHS";
-                group.chs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                group.chs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                 CHECK(Shaders::Compile(vk.shaderCompiler, group.chs, true), "compile GBuffer closest hit shader!\n", log);
 
                 // Load and compile the AHS
-                shaderPath = root + L"shaders/AHS.hlsl";
-                group.ahs.filepath = shaderPath.c_str();
+                group.ahs.filepath = root + L"shaders/AHS.hlsl";
                 group.ahs.entryPoint = L"AHS_PRIMARY";
                 group.ahs.exportName = L"GBufferAHS";
-                group.ahs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                group.ahs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                Shaders::AddDefine(group.ahs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                 CHECK(Shaders::Compile(vk.shaderCompiler, group.ahs, true), "compile GBuffer any hit shader!\n", log);
 
                 return true;
@@ -210,85 +210,71 @@ namespace Graphics
             bool UpdateDescriptorSets(Globals& vk, GlobalResources& vkResources, Resources& resources, std::ofstream& log)
             {
                 // Store the data to be written to the descriptor set
-                std::vector<VkWriteDescriptorSet> writeDescriptorSets;
+                VkWriteDescriptorSet* descriptor = nullptr;
+                std::vector<VkWriteDescriptorSet> descriptors;
 
-                // Samplers
-                VkDescriptorImageInfo samplersInfo[] =
-                {
-                    { vkResources.samplers[0], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED },  // bilinear wrap sampler
-                    { vkResources.samplers[1], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED },  // point clamp sampler
-                    { vkResources.samplers[2], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED }   // aniso wrap sampler
-                };
+                // 0: Samplers
+                VkDescriptorImageInfo samplers[] = { vkResources.samplers[SamplerIndices::ANISO_WRAP], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED };
 
-                VkWriteDescriptorSet samplerSet = {};
-                samplerSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                samplerSet.dstSet = resources.descriptorSet;
-                samplerSet.dstBinding = DescriptorLayoutBindings::SAMPLERS;
-                samplerSet.dstArrayElement = SamplerIndices::BILINEAR_WRAP;
-                samplerSet.descriptorCount = _countof(samplersInfo);
-                samplerSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-                samplerSet.pImageInfo = samplersInfo;
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::SAMPLERS;
+                descriptor->dstArrayElement = SamplerIndices::ANISO_WRAP;
+                descriptor->descriptorCount = _countof(samplers);
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+                descriptor->pImageInfo = samplers;
 
-                writeDescriptorSets.push_back(samplerSet);
+                // 1: Camera Constant Buffer
+                VkDescriptorBufferInfo camera = { vkResources.cameraCB, 0, VK_WHOLE_SIZE };
 
-                // Camera constant buffer
-                VkDescriptorBufferInfo cameraCBInfo = { vkResources.cameraCB, 0, VK_WHOLE_SIZE };
-                VkWriteDescriptorSet cameraCBSet = {};
-                cameraCBSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                cameraCBSet.dstSet = resources.descriptorSet;
-                cameraCBSet.dstBinding = DescriptorLayoutBindings::CB_CAMERA;
-                cameraCBSet.dstArrayElement = 0;
-                cameraCBSet.descriptorCount = 1;
-                cameraCBSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                cameraCBSet.pBufferInfo = &cameraCBInfo;
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::CB_CAMERA;
+                descriptor->dstArrayElement = 0;
+                descriptor->descriptorCount = 1;
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                descriptor->pBufferInfo = &camera;
 
-                writeDescriptorSets.push_back(cameraCBSet);
+                // 2: Lights StructuredBuffer
+                VkDescriptorBufferInfo lights = { vkResources.lightsSTB, 0, VK_WHOLE_SIZE };
 
-                // Lights structured buffer
-                VkDescriptorBufferInfo lightsSTBInfo = { vkResources.lightsSTB, 0, VK_WHOLE_SIZE };
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::STB_LIGHTS;
+                descriptor->dstArrayElement = 0;
+                descriptor->descriptorCount = 1;
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                descriptor->pBufferInfo = &lights;
 
-                VkWriteDescriptorSet lightsSTBSet = {};
-                lightsSTBSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                lightsSTBSet.dstSet = resources.descriptorSet;
-                lightsSTBSet.dstBinding = DescriptorLayoutBindings::STB_LIGHTS;
-                lightsSTBSet.dstArrayElement = 0;
-                lightsSTBSet.descriptorCount = 1;
-                lightsSTBSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                lightsSTBSet.pBufferInfo = &lightsSTBInfo;
+                // 3: Materials StructuredBuffer
+                VkDescriptorBufferInfo materials = { vkResources.materialsSTB, 0, VK_WHOLE_SIZE };
 
-                writeDescriptorSets.push_back(lightsSTBSet);
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::STB_MATERIALS;
+                descriptor->dstArrayElement = 0;
+                descriptor->descriptorCount = 1;
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                descriptor->pBufferInfo = &materials;
 
-                // Materials structured buffer
-                VkDescriptorBufferInfo materialsSTBInfo = { vkResources.materialsSTB, 0, VK_WHOLE_SIZE };
+                // 4: Scene TLAS Instances StructuredBuffer
+                VkDescriptorBufferInfo instances = { vkResources.tlas.instances, 0, VK_WHOLE_SIZE };
 
-                VkWriteDescriptorSet materialsSTBSet = {};
-                materialsSTBSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                materialsSTBSet.dstSet = resources.descriptorSet;
-                materialsSTBSet.dstBinding = DescriptorLayoutBindings::STB_MATERIALS;
-                materialsSTBSet.dstArrayElement = 0;
-                materialsSTBSet.descriptorCount = 1;
-                materialsSTBSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                materialsSTBSet.pBufferInfo = &materialsSTBInfo;
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::STB_TLAS_INSTANCES;
+                descriptor->dstArrayElement = 0;
+                descriptor->descriptorCount = 1;
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                descriptor->pBufferInfo = &instances;
 
-                writeDescriptorSets.push_back(materialsSTBSet);
-
-                // Instances structured buffer
-                VkDescriptorBufferInfo instancesSTBInfo = { vkResources.tlas.instances, 0, VK_WHOLE_SIZE };
-
-                VkWriteDescriptorSet instancesSTBSet = {};
-                instancesSTBSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                instancesSTBSet.dstSet = resources.descriptorSet;
-                instancesSTBSet.dstBinding = DescriptorLayoutBindings::STB_INSTANCES;
-                instancesSTBSet.dstArrayElement = 0;
-                instancesSTBSet.descriptorCount = 1;
-                instancesSTBSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                instancesSTBSet.pBufferInfo = &instancesSTBInfo;
-
-                writeDescriptorSets.push_back(instancesSTBSet);
-
-                // RWTex2D UAVs
-                // GBufferA, GBufferB, GBufferC, GBufferD storage images
-                VkDescriptorImageInfo ptImageInfo[] =
+                // 8: Texture2D UAVs
+                VkDescriptorImageInfo rwTex2D[] =
                 {
                     { VK_NULL_HANDLE, vkResources.rt.GBufferAView, VK_IMAGE_LAYOUT_GENERAL },
                     { VK_NULL_HANDLE, vkResources.rt.GBufferBView, VK_IMAGE_LAYOUT_GENERAL },
@@ -296,97 +282,76 @@ namespace Graphics
                     { VK_NULL_HANDLE, vkResources.rt.GBufferDView, VK_IMAGE_LAYOUT_GENERAL }
                 };
 
-                VkWriteDescriptorSet rwTex2DSet = {};
-                rwTex2DSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                rwTex2DSet.dstSet = resources.descriptorSet;
-                rwTex2DSet.dstBinding = DescriptorLayoutBindings::UAV_START;
-                rwTex2DSet.dstArrayElement = RWTex2DIndices::GBUFFERA;
-                rwTex2DSet.descriptorCount = _countof(ptImageInfo);
-                rwTex2DSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                rwTex2DSet.pImageInfo = ptImageInfo;
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::UAV_TEX2D;
+                descriptor->dstArrayElement = RWTex2DIndices::GBUFFERA;
+                descriptor->descriptorCount = _countof(rwTex2D);
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                descriptor->pImageInfo = rwTex2D;
 
-                writeDescriptorSets.push_back(rwTex2DSet);
+                // 10: Scene TLAS
+                VkWriteDescriptorSetAccelerationStructureKHR sceneTLAS = {};
+                sceneTLAS.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+                sceneTLAS.accelerationStructureCount = 1;
+                sceneTLAS.pAccelerationStructures = &vkResources.tlas.asKHR;
 
-                // Ray Tracing TLAS
-                VkWriteDescriptorSetAccelerationStructureKHR tlasInfo = {};
-                tlasInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-                tlasInfo.accelerationStructureCount = 1;
-                tlasInfo.pAccelerationStructures = &vkResources.tlas.asKHR;
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::SRV_TLAS;
+                descriptor->dstArrayElement = TLASIndices::SCENE;
+                descriptor->descriptorCount = 1;
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                descriptor->pNext = &sceneTLAS;
 
-                VkWriteDescriptorSet tlasSet = {};
-                tlasSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                tlasSet.pNext = &tlasInfo;
-                tlasSet.dstSet = resources.descriptorSet;
-                tlasSet.dstBinding = DescriptorLayoutBindings::BVH_START;
-                tlasSet.dstArrayElement = 0;
-                tlasSet.descriptorCount = 1;
-                tlasSet.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                // 11: Texture2D SRVs
+                std::vector<VkDescriptorImageInfo> tex2D;
+                tex2D.push_back({ VK_NULL_HANDLE, vkResources.textureViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }); // blue noise texture
+                tex2D.push_back({ VK_NULL_HANDLE, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }); // imgui font texture
 
-                writeDescriptorSets.push_back(tlasSet);
-
-                // Tex2D SRVs (default textures)
-                VkDescriptorImageInfo tex2DInfo[] =
-                {
-                    { VK_NULL_HANDLE, vkResources.textureViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }, // blue noise texture
-                };
-
-                VkWriteDescriptorSet tex2DSet = {};
-                tex2DSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                tex2DSet.dstSet = resources.descriptorSet;
-                tex2DSet.dstBinding = DescriptorLayoutBindings::SRV_START;
-                tex2DSet.dstArrayElement = 0;
-                tex2DSet.descriptorCount = _countof(tex2DInfo);
-                tex2DSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-                tex2DSet.pImageInfo = tex2DInfo;
-
-                writeDescriptorSets.push_back(tex2DSet);
-
-                // Tex2D SRVs (scene textures)
-                std::vector<VkDescriptorImageInfo> sceneTexturesInfo;
+                // Scene textures
                 uint32_t numSceneTextures = static_cast<uint32_t>(vkResources.sceneTextureViews.size());
                 if (numSceneTextures > 0)
                 {
-                    // Gather the scene textures
                     for (uint32_t textureIndex = 0; textureIndex < numSceneTextures; textureIndex++)
                     {
-                        sceneTexturesInfo.push_back({ VK_NULL_HANDLE, vkResources.sceneTextureViews[textureIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+                        tex2D.push_back({ VK_NULL_HANDLE, vkResources.sceneTextureViews[textureIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
                     }
-
-                    // Describe the scene textures
-                    VkWriteDescriptorSet texturesSet = {};
-                    texturesSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    texturesSet.dstSet = resources.descriptorSet;
-                    texturesSet.dstBinding = DescriptorLayoutBindings::SRV_START;
-                    texturesSet.dstArrayElement = Tex2DIndices::SCENE_TEXTURES;
-                    texturesSet.descriptorCount = numSceneTextures;
-                    texturesSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-                    texturesSet.pImageInfo = sceneTexturesInfo.data();
-
-                    writeDescriptorSets.push_back(texturesSet);
                 }
 
-                // ByteAddress SRVs (material indices, index / vertex buffers)
-                std::vector<VkDescriptorBufferInfo> rawBuffersInfo;
-                rawBuffersInfo.push_back({ vkResources.materialIndicesRB, 0, VK_WHOLE_SIZE });
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::SRV_TEX2D;
+                descriptor->dstArrayElement = Tex2DIndices::BLUE_NOISE;
+                descriptor->descriptorCount = static_cast<uint32_t>(tex2D.size());
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                descriptor->pImageInfo = tex2D.data();
+
+                // 13: ByteAddressBuffer SRVs (material indices, index & vertex buffers)
+                std::vector<VkDescriptorBufferInfo> byteAddressBuffers;
+                byteAddressBuffers.push_back({ vkResources.materialIndicesRB, 0, VK_WHOLE_SIZE }); // material indices
+
+                // Scene index and vertex buffers
                 for (uint32_t bufferIndex = 0; bufferIndex < static_cast<uint32_t>(vkResources.sceneIBs.size()); bufferIndex++)
                 {
-                    rawBuffersInfo.push_back({ vkResources.sceneIBs[bufferIndex], 0, VK_WHOLE_SIZE });
-                    rawBuffersInfo.push_back({ vkResources.sceneVBs[bufferIndex], 0, VK_WHOLE_SIZE });
+                    byteAddressBuffers.push_back({ vkResources.sceneIBs[bufferIndex], 0, VK_WHOLE_SIZE });
+                    byteAddressBuffers.push_back({ vkResources.sceneVBs[bufferIndex], 0, VK_WHOLE_SIZE });
                 }
 
-                VkWriteDescriptorSet rawBuffersSet = {};
-                rawBuffersSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                rawBuffersSet.dstSet = resources.descriptorSet;
-                rawBuffersSet.dstBinding = DescriptorLayoutBindings::RAW_SRV_START;
-                rawBuffersSet.dstArrayElement = ByteAddressIndices::MATERIAL_INDICES;
-                rawBuffersSet.descriptorCount = static_cast<uint32_t>(rawBuffersInfo.size());
-                rawBuffersSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                rawBuffersSet.pBufferInfo = rawBuffersInfo.data();
-
-                writeDescriptorSets.push_back(rawBuffersSet);
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::SRV_BYTEADDRESS;
+                descriptor->dstArrayElement = ByteAddressIndices::MATERIAL_INDICES;
+                descriptor->descriptorCount = static_cast<uint32_t>(byteAddressBuffers.size());
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                descriptor->pBufferInfo = byteAddressBuffers.data();
 
                 // Update the descriptor set
-                vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+                vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(descriptors.size()), descriptors.data(), 0, nullptr);
 
                 return true;
             }
@@ -481,20 +446,20 @@ namespace Graphics
             #endif
                 CPU_TIMESTAMP_BEGIN(resources.cpuStat);
 
+                // Set the push constants
+                uint32_t offset = 0;
+                GlobalConstants consts = vkResources.constants;
+                vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, consts.app.GetSizeInBytes(), consts.app.GetData());
+                offset += AppConsts::GetAlignedSizeInBytes();
+                vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, consts.pt.GetSizeInBytes(), consts.pt.GetData());
+                offset += PathTraceConsts::GetAlignedSizeInBytes();
+                vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, consts.lights.GetSizeInBytes(), consts.lights.GetData());
+
                 // Bind the pipeline
                 vkCmdBindPipeline(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, resources.pipeline);
 
                 // Bind the descriptor set
                 vkCmdBindDescriptorSets(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkResources.pipelineLayout, 0, 1, &resources.descriptorSet, 0, nullptr);
-
-                // Set the push constants
-                uint32_t offset = 0;
-                GlobalConstants consts = vkResources.constants;
-                vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, consts.app.GetSizeInBytes(), consts.app.GetData());
-                offset += consts.app.GetAlignedSizeInBytes();
-                vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, consts.pt.GetSizeInBytes(), consts.pt.GetData());
-                offset += consts.pt.GetAlignedSizeInBytes();
-                vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, consts.lights.GetSizeInBytes(), consts.lights.GetData());
 
                 // Describe the shader table
                 VkStridedDeviceAddressRegionKHR raygenRegion = {};
@@ -515,9 +480,9 @@ namespace Graphics
                 VkStridedDeviceAddressRegionKHR callableRegion = {};
 
                 // Dispatch rays
-                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetQueryBeginIndex());
+                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
                 vkCmdTraceRaysKHR(vk.cmdBuffer[vk.frameIndex], &raygenRegion, &missRegion, &hitRegion, &callableRegion, vk.width, vk.height, 1);
-                GPU_TIMESTAMP_END(resources.gpuStat->GetQueryEndIndex());
+                GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
                 // Wait for the ray trace to complete
                 VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
@@ -566,10 +531,10 @@ namespace Graphics
                 CoInitialize(NULL);
             #endif
                 // Formats should match those from Graphics::Vulkan::CreateRenderTargets() in Vulkan.cpp
-                bool success = WriteResourceToDisk(vk, directory + "/GBufferA.png", vkResources.rt.GBufferA, vk.width, vk.height, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
-                success &= WriteResourceToDisk(vk, directory + "/GBufferB.png", vkResources.rt.GBufferB, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
-                success &= WriteResourceToDisk(vk, directory + "/GBufferC.png", vkResources.rt.GBufferC, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
-                success &= WriteResourceToDisk(vk, directory + "/GBufferD.png", vkResources.rt.GBufferD, vk.width, vk.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
+                bool success = WriteResourceToDisk(vk, directory + "/R-GBufferA", vkResources.rt.GBufferA, vk.width, vk.height, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "/R-GBufferB", vkResources.rt.GBufferB, vk.width, vk.height, 1, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "/R-GBufferC", vkResources.rt.GBufferC, vk.width, vk.height, 1, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
+                success &= WriteResourceToDisk(vk, directory + "/R-GBufferD", vkResources.rt.GBufferD, vk.width, vk.height, 1, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_GENERAL);
                 return success;
             }
 

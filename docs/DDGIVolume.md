@@ -1,47 +1,46 @@
 # RTXGI DDGIVolume Reference
 
-## Overview
-
 The implementation of the DDGI algorithm revolves around a defined volume of space that supports irradiance queries at arbitrary world-space locations. We refer to this space as a ```DDGIVolume```. The ```DDGIVolume``` can be used in a variety of ways, from placing stationary volumes in fixed positions in a world to attaching a ```DDGIVolume``` to a camera (or player) while scrolling the volume's internal probe grid when movement occurs (see [Volume Movement](#volume-movement) for more on this).
 
-Regardless of use case, the ```DDGIVolume``` executes a set of GPU workloads that implement important parts of the complete DDGI algorithm. The image below illustrates these steps with the GPU timeline scrubber view from [NVIDIA Nsight Graphics](https://developer.nvidia.com/nsight-graphics).
+Regardless of use case, the ```DDGIVolume``` executes a set of GPU workloads that implement important parts of the DDGI algorithm. The image below illustrates these steps with the GPU timeline scrubber view from [NVIDIA Nsight Graphics](https://developer.nvidia.com/nsight-graphics).
 
 <figure>
-<img src="images/ddgivolume-nsight-scrubber.jpg" width="1200px"></img>
-<figcaption><b>Figure 1: The DDGI algorithm in Nsight Graphics GPU Timeline Scrubber View</b></figcaption>
+<img src="images/ddgivolume-nsight-scrubber.jpg" width="1250px"></img>
+<figcaption><b>Figure 1: The DDGI algorithm (green) in the Nsight Graphics GPU Timeline Scrubber View</b></figcaption>
 </figure>
 
-As discussed in the [Integration Guide](Integration.md#integration-steps), the application is responsible for [tracing rays for ```DDGIVolume``` probes](Integration.md#tracing-probe-rays-for-a-ddgivolume) and [rendering indirect lighting](Integration.md#querying-irradiance-with-a-ddgivolume) using ```DDGIVolumes``` in the scene. The ```DDGIVolume``` handles probe irradiance and distance blending, border updates, probe relocation, and probe classification.
+As discussed in the [Integration Guide](Integration.md#integration-steps), the application is responsible for [tracing rays for ```DDGIVolume``` probes](Integration.md#tracing-probe-rays-for-a-ddgivolume) and [gathering indirect light in screen-space](Integration.md#querying-irradiance-with-a-ddgivolume) using the relevant ```DDGIVolumes``` in the scene. The ```DDGIVolume``` handles probe irradiance and distance blending, octahedral texture border updates, probe relocation, and probe classification.
 
 The following sections cover how to use the ```DDGIVolume``` and detail how its functionality is implemented.
 
-## Creating a DDGIVolume
+# Creating a DDGIVolume
 
 **Step 1:** to create a new ```DDGIVolume```, start by filling out a ```rtxgi::DDGIVolumeDesc``` structure.
 
-- All properties of the descriptor struct are explained in [DDGIVolume.h](../rtxgi-sdk/include/rtxgi/ddgi/DDGIVolume.h#L51-124).
-- Example usage is shown in ```GetDDGIVolumeDesc()``` of [DDGI_D3D12.cpp](../samples/test-harness/src/graphics/DDGI_D3D12.cpp) and [DDGI_VK.cpp](../samples/test-harness/src/graphics/DDGI_VK.cpp).
+- All properties of the descriptor struct are explained in [DDGIVolume.h](../rtxgi-sdk/include/rtxgi/ddgi/DDGIVolume.h#L78).
+- Example usage is shown in ```GetDDGIVolumeDesc()``` of [DDGI_D3D12.cpp](../samples/test-harness/src/graphics/DDGI_D3D12.cpp#L371) and [DDGI_VK.cpp](../samples/test-harness/src/graphics/DDGI_VK.cpp#L477).
 
 **Probe Irradiance Gamma**
 
 To improve the light-to-dark convergence and the efficiency of texture storage, we use exponential weighting when storing irradiance. The default gamma exponent is 5.f, but it can be modified by changing ```DDGIVolumeDesc::probeIrradianceEncodingGamma```.
 
-This exponent moves the stored irradiance value into a non-linear space that more closely matches human perception, while also allowing for a smaller texture format. If ```probeIrradianceEncodingGamma``` is set to 1.f, then the stored value remains in linear space and the quality of the lighting will decrease. To account for this quality loss when in linear space, ```DDGIVolumeDesc::probeIrradianceFormat``` can be set to ```RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R32G32B32A32_FLOAT``` to use a larger texture format.
+This exponent moves the stored irradiance value into a non-linear space that more closely matches human perception, while also allowing for a smaller texture format. If ```probeIrradianceEncodingGamma``` is set to 1.f, then the stored value remains in linear space and the quality of the lighting will decrease. To account for this quality loss when in linear space, ```DDGIVolumeDesc::probeIrradianceFormat``` can be set to ```RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F32x4``` to use a larger texture format.
 
 
-### Describing Resources
+## Describing Resources
 
-Next, specify information about the resources used by the volume (e.g. textures, shader bytecode/pipeline state objects, descriptors, etc.). This step is more involved since resources are API-specific. That said, there are not major differences in the process for D3D12 and Vulkan.
+Next, specify information about the resources used by the volume (e.g. textures, shader bytecode/pipeline state objects, descriptors, etc.). This step is more involved since resources are API-specific. That said, there are not major differences in the process between D3D12 and Vulkan.
 
-**Step 2:** fill out the appropriate ```rtxgi::d3d12::DDGIVolumeResources``` or ```rtxgi::vk::DDGIVolumeResources``` struct for the graphics API you are using (shown below).
+**Step 2:** fill out the appropriate ```rtxgi::d3d12::DDGIVolumeResources``` or ```rtxgi::vulkan::DDGIVolumeResources``` struct for the graphics API you are using (shown below).
 
 **D3D12**
 
 ```C++
 struct DDGIVolumeResources
 {
-    DDGIVolumeDescriptorHeapDesc descriptorHeapDesc;
-    DDGIVolumeBindlessDescriptorDesc descriptorBindlessDesc;
+    DDGIVolumeDescriptorHeapDesc descriptorHeap;
+    DDGIVolumeBindlessResourcesDesc bindless;
+
     DDGIVolumeManagedResourcesDesc managed;
     DDGIVolumeUnmanagedResourcesDesc unmanaged;
 
@@ -56,7 +55,8 @@ struct DDGIVolumeResources
 ```C++
 struct DDGIVolumeResources
 {
-    DDGIVolumeBindlessDescriptorDesc descriptorBindlessDesc;
+    DDGIVolumeBindlessResourcesDesc bindless;
+
     DDGIVolumeManagedResourcesDesc managed;
     DDGIVolumeUnmanagedResourcesDesc unmanaged;
 
@@ -69,192 +69,338 @@ struct DDGIVolumeResources
 
 The ```DDGIVolumeResources``` structs for D3D12 and Vulkan differ in how memory and descriptors are handled (e.g. D3D12's descriptor heap and Vulkan's ```VkDeviceMemory``` object), which reflects the differences in the APIs themselves.
 
-### Resource Management and Shaders
+### Resource Management
 
 **Step 2a:** the first decision to make as you begin to specify resources with a ```DDGIVolumeResources``` struct is *whether the application or the SDK* will own and manage the lifetime of resources.
 
 The SDK provides two modes for these scenarios:
 
-- **Managed Mode**: the SDK allocates and owns volume resources. Use this mode if you don't need explicit control of the resources and want a simpler setup process.
-- **Unmanaged Mode**: the application allocates and owns volume resources. Use this mode if you want to allocate, track, and own volume resources explicitly.
+- **Managed Mode**: the SDK allocates and owns volume resources.
+  - Use this mode if you don't need explicit control of the resources and want a simpler setup process.
+- **Unmanaged Mode**: the application allocates and owns volume resources.
+  - Use this mode if you want to allocate, track, and own volume resources explicitly yourself.
 
-**Step 2b:** the ```DDGIVolumeResources``` structs provide ```DDGIVolumeManagedResourcesDesc``` and ```DDGIVolumeUnmanagedResourcesDesc``` structs to describe the resources associated with their respective modes. Fill out the appropriate descriptor struct for the resource mode you want to use. Be sure to set the ```enabled``` field of that struct to ```true```.
+**Step 2b:** the ```DDGIVolumeResources``` structs include the ```DDGIVolumeManagedResourcesDesc``` and ```DDGIVolumeUnmanagedResourcesDesc``` structs to describe the resources associated with their respective modes. Fill out the appropriate descriptor struct for the resource mode you want to use. Be sure to set the ```enabled``` field of that struct to ```true```.
 
-- For a complete view of these resource descriptor structs, see [DDGIVolume_D3D12.h](../rtxgi-sdk/include/rtxgi/ddgi/gfx/DDGIVolume_D3D12.h) and [DDGIVolume_VK.h](../rtxgi-sdk/include/rtxgi/ddgi/gfx/DDGIVolume_VK.h).
-
+- For a complete view of these resource descriptor structs, see [DDGIVolume_D3D12.h](../rtxgi-sdk/include/rtxgi/ddgi/gfx/DDGIVolume_D3D12.h#L138) and [DDGIVolume_VK.h](../rtxgi-sdk/include/rtxgi/ddgi/gfx/DDGIVolume_VK.h#L148).
 
 **Managed Mode**
   - Provide a pointer to the graphics device (```ID3D12Device```/```VkDevice```).
-    - (Vulkan only) Provide a handle to the ``VkPhysicalDevice`` and a ```VkDescriptorPool```.
+    - (Vulkan only) Provide a handle to the ``VkPhysicalDevice`` and a ```VkDescriptorPool``` too.
   - Provide ```ShaderBytecode``` objects that contain the compiled DXIL shader bytecode for the SDK's DDGI shaders.
-    - See [Volume Shaders](#volume-shaders) for more information on required shaders and compilation.
+    - See [Preparing Shaders](#preparing-shaders) for more information on required shaders and compilation.
 
 **Unmanaged Mode**
-  - Create the volume's textures.
-  - D3D12
-    - Add descriptor heap entries for the volume's texture resources.
-    - Create the root signature (if not using bindless) using ```GetDDGIVolumeRootSignatureDesc()```.
+  - Create the volume's texture array resources.
+    - See [Texture Layout](#texture-layout) for more information.
+  - **D3D12**
+    - Add descriptor heap entries for the volume's texture array resources.
+    - Create render target views for the probe irradiance and distance texture arrays.
+    - Create a root signature (if not using bindless resources) with ```GetDDGIVolumeRootSignatureDesc()```.
     - Create a pipeline state object for each shader.
-  - Vulkan
-    - Create a shader module for each shader.
-    - Create a pipeline for each shader.
-  - See [Volume Shaders](#volume-shaders) for more information on required shaders and compilation.
+      - See [Preparing Shaders](#preparing-shaders) for more information on required shaders and compilation.
+    - Provide pointers for the API-specific resources above using the ```DDGIVolumeManagedResourcesDesc``` struct
+  - **Vulkan**
+    - Create a pipeline layout and descriptor set (if not using bindless resources) with ```GetDDGIVolumeLayoutDescs()```.
+    - Create texture memory and views for each of the volume's texture arrays.
+    - Create a shader module and pipeline for each shader.
+      - See [Preparing Shaders](#preparing-shaders) for more information on required shaders and compilation.
+    - Provide pointers for the API-specific resources above using the ```DDGIVolumeUnmanagedResourcesDesc``` struct
 
-Example usage is shown in ```GetDDGIVolumeResources()``` of [DDGI_D3D12.cpp](../samples/test-harness/src/graphics/DDGI_D3D12.cpp) and [DDGI_VK.cpp](../samples/test-harness/src/graphics/DDGI_VK.cpp).
+Example use of both Managed and Unmanaged modes is shown in ```GetDDGIVolumeResources()``` of [DDGI_D3D12.cpp](../samples/test-harness/src/graphics/DDGI_D3D12.cpp#L371) and [DDGI_VK.cpp](../samples/test-harness/src/graphics/DDGI_VK.cpp#L520).
 
-  - Managed vs. unmanaged code paths are grouped with the ```RTXGI_DDGI_RESOURCE_MANAGEMENT``` preprocessor define.
+  - In the Test Harness sample application, managed vs. unmanaged code paths are separated using the ```RTXGI_DDGI_RESOURCE_MANAGEMENT``` preprocessor define.
 
-**Constants**
+### Constants
 
-Regardless of the selected resource management mode, the application is responsible for managing device and upload resources for ```DDGIVolume``` constants data. Constants data for *all volumes* in a scene are expected to be maintained in a single structured buffer that is sized for double (or arbitrary) buffering.
+Regardless of the selected resource management mode, the application is responsible for managing device and upload resources for ```DDGIVolume``` constant data. Constant data for *all volumes* in a scene are expected to be maintained in a structured buffer that is sized for double (or arbitrary) buffering.
 
-- See ```CreateDDGIVolumeConstantsBuffer(...)``` in [DDGI_D3D12.cpp](../samples/test-harness/src/graphics/DDGI_D3D12.cpp) and [DDGI_VK.cpp](../samples/test-harness/src/graphics/DDGI_VK.cpp) for an example of resource creation for constants data.
+- See ```CreateDDGIVolumeConstantsBuffer(...)``` in [DDGI_D3D12.cpp](../samples/test-harness/src/graphics/DDGI_D3D12.cpp#L605) and [DDGI_VK.cpp](../samples/test-harness/src/graphics/DDGI_VK.cpp#L698) for an example of resource creation for constants data.
 
-- ```DDGIVolumeResources::constantsBufferSizeInBytes``` specifies the size (in bytes) of constants data for all volumes in a scene. This value is **not** multiplied by the number of frames being buffered (e.g. 2 or 3).
+- ```DDGIVolumeResources::constantsBufferSizeInBytes``` specifies the size (in bytes) of constants data for all volumes in a scene. This value is **not** multiplied by the number of frames being buffered (e.g. 2 or 3) - it is the size (in bytes) of constants for all volumes *for a single frame*.
 
-- ```rtxgi::UploadDDGIVolumeConstants(...)``` is a helper function that transfers constants data for one or more volumes from the CPU to GPU.
+- ```rtxgi::[d3d12|vulkan]::UploadDDGIVolumeConstants(...)``` is an SDK helper function that transfers constants data for one or more volumes from the CPU to GPU for you.
 
-**D3D12 Descriptor Heap**
+### Resource Indices
 
-Similar to constants data, the application is responsible for allocating, managing, and providing information about the descriptor heap to the ```DDGIVolume```. Specifically, the application provides offsets to where on the descriptor heap various volume resource descriptors should be placed. Shown below, the application provides this information with the ```DDGIVolumeDescriptorHeapDesc``` struct (part of ```DDGIVolumeResources```).
+Similar to volume constants, when using bindless resources the application is responsible for managing device and upload resources for ```DDGIVolume``` resource index constant data. **If you are not using bindless resources, skip this section**.
+
+Resource indices specify the location of a resource in a typed resource array (D3D12 and Vulkan) or the location of a resource on the D3D12 Descriptor or Sampler Heaps (Shader Model 6.6 and higher only). Resource indices are specified using the ```DDGIVolumeResourceIndices``` struct, shown below.
+
+```C++
+struct DDGIVolumeResourceIndices
+{
+    uint rayDataUAVIndex;
+    uint rayDataSRVIndex;
+    uint probeIrradianceUAVIndex;
+    uint probeIrradianceSRVIndex;
+    uint probeDistanceUAVIndex;
+    uint probeDistanceSRVIndex;
+    uint probeDataUAVIndex;
+    uint probeDataSRVIndex;
+};
+```
+
+The ```DDGIVolumeResourceIndices``` struct is part of the ```DDGIVolumeBindlessResourcesDesc```, where you can specify the size and location of the CPU and GPU resources that hold the resource index data.
+
+**D3D12**
+
+When using D3D12, it is necessary to specify the bindless implementation type of since there are multiple options (```EBindlessType::RESOURCE_ARRAYS``` or ```EBindlessType::DESCRIPTOR_HEAP```)). When using the Descriptor Heap implementation type, resource indices should be specified using the ```DDGIVolumeDescriptorHeapDesc``` struct instead. See [D3D12 Descriptor and Sampler Heaps](#d3d12-descriptor-and-sampler-heaps) for more information.
+
+```C++
+struct DDGIVolumeBindlessResourcesDesc
+{
+    bool enabled;
+    EBindlessType type;
+
+    DDGIVolumeResourceIndices resourceIndices;
+
+    ID3D12Resource* resourceIndicesBuffer;
+    ID3D12Resource* resourceIndicesBufferUpload;
+    UINT64 resourceIndicesBufferSizeInBytes;
+};
+```
+
+**Vulkan**
+
+When using Vulkan, it is necessary to specify the byte offset in the push constants block where ```DDGIRootConstants``` are stored. This offset is not relevant when using bound resources since the SDK uses its own pipeline layout and descriptor set configuration.
+
+```C++
+struct DDGIVolumeBindlessResourcesDesc
+{
+    bool enabled;
+    uint32_t pushConstantsOffset;
+
+    DDGIVolumeResourceIndices resourceIndices;
+
+    VkBuffer resourceIndicesBuffer;
+    VkBuffer resourceIndicesBufferUpload;
+    VkDeviceMemory resourceIndicesBufferUploadMemory;
+    uint64_t resourceIndicesBufferSizeInBytes;
+};
+```
+
+As with volume constants, resource index data for *all volumes* in a scene are expected to be maintained in a structured buffer that is sized for double (or arbitrary) buffering.
+
+- See ```CreateDDGIVolumeResourceIndicesBuffer(...)``` in [DDGI_D3D12.cpp](../samples/test-harness/src/graphics/DDGI_D3D12.cpp#L568) and [DDGI_VK.cpp](../samples/test-harness/src/graphics/DDGI_VK.cpp#L669) for an example of resource creation for resource indices data.
+
+- ```DDGIVolumeBindlessResourcesDesc::resourceIndicesBufferSizeInBytes``` specifies the size (in bytes) of resource indices data for all volumes in a scene. This value is **not** multiplied by the number of frames being buffered (e.g. 2 or 3) - it is the size (in bytes) for resource indices across all volumes *for a single frame*.
+
+- ```rtxgi::[d3d|vulkan]::UploadDDGIVolumeResourceIndices(...)``` is an SDK helper function that transfers constants data for one or more volumes from the CPU to GPU for you.
+
+### D3D12 Descriptor and Sampler Heaps
+
+The application is responsible for allocating, managing, and providing information about the descriptor and sampler heaps to the ```DDGIVolume```. For best performance, ```DDGIVolume```s use existing descriptor heaps provided by the application instead of creating their own.
+
+Specify the descriptor and sampler heaps, heap entry size, and location of the constant and resource indices structured buffers on the descriptor heap using the ```DDGIVolumeDescriptorHeapDesc``` struct. 
+
+When using Descriptor Heap bindless (Shader Model 6.6+ only), provide the descriptor heap indices where various volume resources are (or should be) located.
 
 ```C++
 struct DDGIVolumeDescriptorHeapDesc
 {
-    ID3D12DescriptorHeap*       heap = nullptr;
-    uint32_t                    constsOffset;     // Offset to the constants structured buffer SRV
-    uint32_t                    uavOffset;        // Offset to the texture UAVs
-    uint32_t                    srvOffset;        // Offset to the texture SRVs
+    ID3D12DescriptorHeap* resources = nullptr; 
+    ID3D12DescriptorHeap* samplers = nullptr;
+
+    UINT entrySize;
+    UINT constantsIndex;
+    UINT resourceIndicesIndex;
+    DDGIVolumeResourceIndices resourceIndices;
 };
 ```
-The application can query how many descriptor heap slots to reserve for volume resources, using the ```rtxgi``` namespace helper functions below:
+The application can query how many descriptor heap slots to reserve for each volume's resources, using the ```rtxgi``` namespace helper functions below:
 
 ```C++
 int GetDDGIVolumeNumRTVDescriptors();
-int GetDDGIVolumeNumSRVDescriptors();
-int GetDDGIVolumeNumUAVDescriptors();
+int GetDDGIVolumeNumTex2DArrayDescriptors();
+int GetDDGIVolumeNumResourceDescriptors();
 ```
 
-**Textures**
+## Preparing Shaders
 
-See [Volume Textures](#volume-textures) for more information.
+The main workloads executed by a ```DDGIVolume``` are implemented in three shader files:
+ * ProbeBlendingCS.hlsl
+ * ProbeRelocationCS.hlsl
+ * ProbeClassificationCS.hlsl
 
-### Create()
+ To make it possible to directly use the SDK's shader files in your codebase (with or without the RTXGI SDK), shader functionality is configured through shader compiler defines. All shaders support both traditionally bound and bindless resource access methods.
 
-**Step 3:** with the ```DDGIVolumeDesc``` and ```DDGIVolumeResources``` structs prepared, the final step to create a new volume is to instantiate a ```DDGIVolume``` instance and call the ```DDGIVolume::Create()``` function. The ```Create()``` function validates the parameters passed via the structs and creates the appropriate resources (if in managed mode).
+### Common Shader Defines
 
-- ```Create()``` checks for errors and reports them using the ```ERTXGIStatus``` enumeration. See [Common.h](../rtxgi-sdk/include/rtxgi/Common.h) for the complete list of return status codes.
+The below defines are required for each shader entry point that is compiled.
 
-After a successful ```Create()``` call the ```DDGIVolume``` is ready to use. See [Updating a DDGIVolume](#updating-a-ddgivolume), [Volume Movement](#volume-movement), [Probe Relocation](#probe-relocation), and [Probe Classification](#probe-classification) for more information on use.
+```RTXGI_COORDINATE_SYSTEM [0|1|2|3]```
+
+  * Specifies the coordinate system. The options are:
+    * ```RTXGI_COORDINATE_SYSTEM_LEFT (0)```
+    * ```RTXGI_COORDINATE_SYSTEM_LEFT_Z_UP (1)```
+    * ```RTXGI_COORDINATE_SYSTEM_RIGHT (2)```
+    * ```RTXGI_COORDINATE_SYSTEM_RIGHT_Z_UP (3)```
+
+```RTXGI_DDGI_RESOURCE_MANAGEMENT [0|1]```
+  * Specifies if the application (0: unmanaged) or the SDK (1: managed) own and manage the volume's resources.
+  
+```RTXGI_DDGI_BINDLESS_RESOURCES [0|1]```
+  * Specifies resource access mode (0: bound, 1: bindless).
+    * ***Note:** bindless resources are **not** compatible with managed resources mode.*
+
+```RTXGI_BINDLESS_TYPE [0|1]```
+  * Specifies the implementation type for bindless resource access. The options are:
+    * ```RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS (0)```
+    * ```RTXGI_BINDLESS_TYPE_DESCRIPTOR_HEAP (1)```
+
+```RTXGI_DDGI_SHADER_REFLECTION [0|1]```
+  * Specifies if the application uses shader reflection to discover resources declared in shaders.
+
+```RTXGI_DDGI_USE_SHADER_CONFIG_FILE [0|1]```
+  * Specifies if a configuration file is used to specify shader defines. This is useful when shader define values are the same across multiples shaders being compiled.
+
+### Resource Defines
+
+When managing resources manually (i.e. using unmanaged resource mode), it is necessary to specify the binding register and space (or binding slot and descriptor set index in Vulkan) of each resource for the SDK shaders to properly look up resources.
+
+This process differs slightly between traditional bound and bindless resource access methods. As a result, different shader defines are expected. The defines for each mode are listed below.
+
+***Note:** when using D3D12 Descriptor Heap bindless resource access, *it is not necessary* to specify binding registers or spaces since resources are retrieved directly from the descriptor heap. Convenient!*
+
+---
+
+***D3D12 Only***
+
+```CONSTS_REGISTER [bX]``` <br> ```CONSTS_SPACE [spaceY]```
+  * The shader register ```X``` and space ```Y``` of the DDGI root constants. See [DDGIRootConstants.hlsl](../rtxgi-sdk/shaders/ddgi/include/DDGIRootConstants.hlsl) for more information.
+
+---
+
+***Bindless Resources***
+
+```VOLUME_CONSTS_REGISTER [tX|X]``` <br> ```VOLUME_CONSTS_SPACE [spaceY|Y]```
+  * *D3D12:* the SRV shader register ```X``` and space ```Y``` of the DDGIVolume constants structured buffer.
+  * *Vulkan:* the binding slot ```X``` and descriptor set index ```Y``` of the DDGIVolume constants structured buffer.
+
+```VOLUME_RESOURCES_REGISTER [tX|X]``` <br> ```VOLUME_RESOURCES_SPACE [spaceY|Y]```
+  * *D3D12:* the SRV shader register ```X``` and space ```Y``` of the DDGIVolume resource indices structured buffer.
+  * *Vulkan:* the binding slot ```X``` and descriptor set index ```Y``` of the DDGIVolume resource indices structured buffer.
+
+```RWTEX2DARRAY_REGISTER [uX|X]``` <br> ```RWTEX2DARRAY_SPACE [spaceY|Y]```
+  * *D3D12:* the UAV shader register ```X``` and space ```Y``` of the bindless RWTexture2DArray resource array.
+  * *Vulkan:* the binding slot ```X``` and descriptor set index ```Y``` of the bindless RWTexture2DArray resource array.
 
 
-## Volume Shaders
+***Vulkan Bindless Only***
 
-The ```DDGIVolume``` uses the below shaders for the workloads it executes. To make it possible to directly use any of the shader files in your own codebase (with or without the RTXGI SDK host code), shader functionality is driven by shader compiler defines and all shaders support both traditionally bound and bindless resource access methods.
+Unlike D3D12, it is not possible to specify multiple (virtual) blocks of push constants in Vulkan. Instead, all push constants exist in the same memory block and it is necessary for shaders to understand the organization of that memory block to look up values correctly. This makes it more complicated for SDK shaders to index into the application's push constants block.
 
-**Common Shader Defines**
+The following defines provide SDK shaders with the information necessary to understand the application's push constants block. This requires a strong understanding of Vulkan and your application, so things can get hairy quickly. An example is shown in the Test Harness's [DDGI.cpp](../samples/test-harness/src/graphics/DDGI.cpp#L47).
 
-- ```RTXGI_DDGI_RESOURCE_MANAGEMENT``` specifies if the application (0: unmanaged) or the SDK (1: managed) own and manage the volume's resources.
-- ```RTXGI_DDGI_BINDLESS_RESOURCES``` specifies resource access mode (0: bound, 1: bindless).
-  - **Note:** bindless resources are not compatible with managed mode.
-- ```RTXGI_DDGI_SHADER_REFLECTION``` specifies if the application uses shader reflection to discover resources.
+```RTXGI_PUSH_CONSTS_TYPE [0|1|2]```
+  * Specifies how an SDK shader references push constants data. The options are:
+    * ```NONE (0)```
+      * The shader doesn't use push constants
+    * ```RTXGI_PUSH_CONSTS_TYPE_SDK (1)```
+      * The shader uses the SDK's push constants layout
+    * ```RTXGI_PUSH_CONSTS_TYPE_APPLICATION (2)```
+      * The shader uses the application's push constants layout
 
+```RTXGI_DECLARE_PUSH_CONSTS [0|1]```
+  * Specifies whether ```DDGIRootConstants.hlsl``` should declare the push constants struct. Useful when the push constants struct is not already declared elsewhere.
 
-To ease the shader configuration process, all shaders support the ```RTXGI_DDGI_USE_SHADER_CONFIG_FILE``` define that allows shader defines to be specified by a configuration file. This is useful when shader define values are the same across all shaders to be compiled.
+```RTXGI_PUSH_CONSTS_STRUCT_NAME```
+  * Specifies the struct (type) name of the application's push constants struct
 
+```RTXGI_PUSH_CONSTS_VARIABLE_NAME```
+  * Specifies the variable name of the application's push constants
 
+```RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME```
+  * Specifies the name of the DDGIVolume index field in the application's push constants struct
+
+---
+
+***Bound Resources***
+
+```VOLUME_CONSTS_REGISTER [tX|X]``` <br> ```VOLUME_CONSTS_SPACE [spaceY|Y]```
+  * *D3D12:* the SRV shader register ```X``` and space ```Y``` of the DDGIVolume constants structured buffer.
+  * *Vulkan:* the binding slot ```X``` and descriptor set index ```Y``` of the DDGIVolume constants structured buffer.
+
+```RAY_DATA_REGISTER [uX|X]``` <br> ```RAY_DATA_SPACE [spaceY|Y]```
+  * *D3D12:* the UAV shader register ```X``` and space ```Y``` of the DDGIVolume ray data texture array.
+  * *Vulkan:* the binding slot ```X``` and descriptor set index ```Y```of the DDGIVolume ray data texture array.
+
+```OUTPUT_REGISTER [uX|X]``` <br> ```OUTPUT_SPACE [spaceY|Y]```
+  * *D3D12:* the UAV shader register ```X``` and space ```Y``` of the DDGIVolume irradiance or distance texture array.
+  * *Vulkan:* the binding slot ```X``` and descriptor set index ```Y``` of the DDGIVolume irradiance or distance texture array.
+
+```PROBE_DATA_REGISTER [uX|X]``` <br> ```PROBE_DATA_SPACE [spaceY|Y]```
+  * *D3D12:* the UAV shader register ```X``` and space ```Y``` of the DDGIVolume probe data texture array.
+  * *Vulkan:* the binding slot ```X``` and descriptor set index ```Y``` of the DDGIVolume probe data texture array.
+
+---
 
 ### [```ProbeBlendingCS.hlsl```](../rtxgi-sdk/shaders/ddgi/ProbeBlendingCS.hlsl)
 
-Compute shader code that updates (blends) either radiance or distance values into an octahedral texture atlas based on information in a volume's Probe Ray Data Texture. Irradiance and distance texels for *all probes of a single volume* are processed in parallel, across two dispatch calls (without serializing barriers). 
+This file contains compute shader code that updates (i.e. blends) either radiance or distance values in a texture array of probes stored with an octahedral parameterization. Irradiance and distance texels for *all probes of a volume* are processed in parallel, across two overlapping dispatch calls (i.e. without serializing barriers). During this process, radiance and ray hit distance data are read from the volume's Probe Ray Data texture array.
 
-- This shader is used by the ```rtxgi::UpdateDDGIVolumeProbes(...)``` function.
-
-**Configuration Defines**
-
-- ```RTXGI_DDGI_PROBE_NUM_TEXELS``` specifies the number of texels in one dimension of a probe, **not including** the 1-texel border.
-  - For example, this define is 6 for an 8x8 texel probe.
-- ```RTXGI_DDGI_BLEND_RADIANCE``` specifies the blending mode (0: distance, 1: radiance).
-- ```RTXGI_DDGI_BLEND_SHARED_MEMORY``` toggles shared memory use. This can substantially improve performance at the cost of higher register and shared memory use (potentially lowering occupancy).
-- ```RTXGI_DDGI_BLEND_RAYS_PER_PROBE``` specifies the number of rays traced per probe. Required when shared memory is enabled.
-- ```RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY``` toggles the use of shared memory to store the result of probe scroll clear tests. When enabled, the scroll clear tests are performed by the group's first thread and written to shared memory for use by the rest of the thread group . This can reduce the compute workload and improve performance on some hardware.
-
-**Debug Defines**
-
-Debug modes are available to help visualize data in the probes. Visualized data is output to the probe irradiance texture atlas. To use these modes, the irradiance atlas texture format must be set to ```RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R32G32B32A32_FLOAT```.
-
-- ```RTXGI_DDGI_DEBUG_PROBE_INDEXING``` toggles a visualization mode that outputs probe indices as colors.
-- ```RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING``` toggles a visualization mode that outputs colors for the directions computed for the octahedral UV coordinates returned by ```DDGIGetNormalizedOctahedralCoordinates()```.
+This shader is used by the SDK's ```rtxgi::[d3d12|vulkan]::UpdateDDGIVolumeProbes(...)``` function.
 
 **Compilation Instructions**
 
-Compile **two** versions of this shader: one for radiance blending and another for distance blending.
-  - **Managed Mode:** set the compiled DXIL bytecode of the two shader versions on:
+Compile **two** versions of this shader: one for 1) radiance blending and another for 2) distance blending. See the Configuration Defines (below) to specify the blending mode before compilation. After successful shader compilation, set the compiled DXIL bytecode (or pipelines/shader modules) on the appropriate fields of the managed or unmanaged resources struct. See ```CompileDDGIVolumeShaders()``` in [DDGI.cpp](../samples/test-harness/src/graphics/DDGI.cpp#L107) for an example.
+
+  - **Managed Mode:** set the compiled DXIL bytecode of the two blending shaders:
     - ```DDGIVolumeManagedResourcesDesc::probeBlendingIrradianceCS```
     - ```DDGIVolumeManagedResourcesDesc::probeBlendingDistanceCS```
-  - **Unmanaged Mode:** create and set the pipeline state objects of the two shader versions on:
+  - **Unmanaged Mode:** create and set the pipeline state objects of the two blending shaders:
     - ```DDGIVolumeUnmanagedResourcesDesc::probeBlendingIrradiance[PSO|Pipeline]```
     - ```DDGIVolumeUnmanagedResourcesDesc::probeBlendingDistance[PSO|Pipeline]```
-      - In Vulkan, also create and set shader modules for the two shader versions on:
+      - In Vulkan, also create and set shader modules of the two blending shaders:
         - ```DDGIVolumeUnmanagedResourcesDesc::probeBlendingIrradianceModule```
         - ```DDGIVolumeUnmanagedResourcesDesc::probeBlendingDistanceModule```
 
-See ```CompileDDGIVolumeShaders()``` in [DDGI.cpp](../samples/test-harness/src/graphics/DDGI.cpp) for an example.
-
-
-
-### [```ProbeBorderUpdateCS.hlsl```](../rtxgi-sdk/shaders/ddgi/ProbeBlendingCS.hlsl)
-
-Compute shader code that updates the 1-texel probe borders of the irradiance and distance octahedral texture atlases. Irradiance and distance atlas rows and columns for all probes of a single volume are processed in parallel, across four dispatch calls (without serializing barriers).
-
-- This shader is used by the ```rtxgi::UpdateDDGIVolumeProbes(...)``` function.
-
 **Configuration Defines**
 
-- ```RTXGI_DDGI_PROBE_NUM_TEXELS``` specifies the number of texels in one dimension of a probe, **not including** the 1-texel border.
-  - This should be the same value that is used with ```ProbeBlending.hlsl```.
+```RTXGI_DDGI_PROBE_NUM_TEXELS [n]```
+  * Specifies the number of texels ```n``` in one dimension of a probe ***including the 1-texel border***.
+    * For example, set this define to 8 for a probe with 8x8 texels.
+
+```RTXGI_DDGI_BLEND_RADIANCE [0|1]```
+  * Specifies the probe blending mode (0: distance, 1: radiance).
+
+```RTXGI_DDGI_BLEND_SHARED_MEMORY [0|1]```
+  * Toggles using shared memory to cache ray radiance and distance values. Enabling this can substantially improve performance at the cost of higher register and shared memory use (potentially lowering occupancy).
+
+```RTXGI_DDGI_BLEND_RAYS_PER_PROBE [n]```
+  * Specifies the number of rays ```n``` traced per probe. *Required when blending shared memory is enabled*.
+
+```RTXGI_DDGI_BLEND_SCROLL_SHARED_MEMORY [0|1]``` 
+  * Toggles the use of shared memory to store the result of probe scroll clear tests. When enabled, the scroll clear tests are performed by the group's first thread and written to shared memory for use by the rest of the thread group . This can reduce the compute workload and improve performance on some hardware.
 
 **Debug Defines**
 
-- ```RTXGI_DDGI_DEBUG_BORDER_COPY_INDEXING``` toggles a visualization mode that outputs the coordinates of the texel to be copied to the border texel.
+Debug modes are available to help visualize data in the probes. Visualized data is output to the probe irradiance texture array. To use the debug modes, the irradiance texture array format must be set to ```RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F32x4```.
 
-**Compilation Instructions**
+```RTXGI_DDGI_DEBUG_PROBE_INDEXING [0|1]```
+  * Toggles a visualization mode that outputs probe indices as colors.
 
-Similar to ```ProbeBlendingCS.hlsl```, compile irradiance and distance versions of each entry point available in the shader file. There are two entry points: ```DDGIProbeBorderRowUpdateCS()``` and ```DDGIProbeBorderColumnUpdateCS()```. This amounts to a total of **four** compiled shaders.
+```RTXGI_DDGI_DEBUG_OCTAHEDRAL_INDEXING [0|1]```
+  * Toggles a visualization mode that outputs colors for the directions computed for the octahedral UV coordinates returned by ```DDGIGetNormalizedOctahedralCoordinates()```.
 
- - **Managed Mode:** set the compiled DXIL bytecode of the four shader versions on:
-    - ```DDGIVolumeManagedResourcesDesc::probeBorderRowUpdateIrradianceCS```
-    - ```DDGIVolumeManagedResourcesDesc::probeBorderRowUpdateDistanceCS```
-    - ```DDGIVolumeManagedResourcesDesc::probeBorderColumnUpdateIrradianceCS```
-    - ```DDGIVolumeManagedResourcesDesc::probeBorderColumnUpdateDistanceCS```
- - **Unmanaged Mode:** create and set the pipeline state objects of the four shader versions on:
-    - ```DDGIVolumeUnmanagedResourcesDesc::probeBorderRowUpdateIrradiance[PSO|Pipeline]```
-    - ```DDGIVolumeUnmanagedResourcesDesc::probeBorderRowUpdateDistance[PSO|Pipeline]```
-    - ```DDGIVolumeUnmanagedResourcesDesc::probeBorderColumnUpdateIrradiance[PSO|Pipeline]```
-    - ```DDGIVolumeUnmanagedResourcesDesc::probeBorderColumnUpdateDistance[PSO|Pipeline]```
-    - In Vulkan, also create and set shader modules for the four shader versions on:
-        - ```DDGIVolumeUnmanagedResourcesDesc::probeBorderRowUpdateIrradianceModule```
-        - ```DDGIVolumeUnmanagedResourcesDesc::probeBorderRowUpdateDistanceModule```
-        - ```DDGIVolumeUnmanagedResourcesDesc::probeBorderRowUpdateIrradianceModule```
-        - ```DDGIVolumeUnmanagedResourcesDesc::probeBorderRowUpdateDistanceModule```
 
-See ```CompileDDGIVolumeShaders()``` in [DDGI.cpp](/samples/test-harness/src/graphics/DDGI.cpp) for an example.
-
+---
 
 
 ### [```ProbeRelocationCS.hlsl```](../rtxgi-sdk/shaders/ddgi/ProbeRelocationCS.hlsl)
 
-Compute shader code that attempts to reposition probes if they are inside of or too close to surrounding geometry. See [Probe Relocation](#probe-relocation) for more information.
+This file contains compute shader code that attempts to reposition probes if they are inside of or too close to surrounding geometry. See [Probe Relocation](#probe-relocation) for more information.
 
-- This shader is used by the ```rtxgi::RelocateDDGIVolumeProbes()``` function.
+This shader is used by the ```rtxgi::[d3d12|vulkan]::RelocateDDGIVolumeProbes(...)``` function.
 
 **Compilation Instructions**
 
 This shader file provides two entry points:
- - ```DDGIProbeRelocationCS()``` performs probe relocation, moving probes within their grid voxel.
- - ```DDGIProbeRelocationResetCS()``` resets all probe world-space positions to the center of their grid voxel.
+ - ```DDGIProbeRelocationCS()``` - performs probe relocation, moving probes within their grid voxel.
+ - ```DDGIProbeRelocationResetCS()``` - resets all probe world-space positions to the center of their grid voxel.
 
-Pass compiled shader bytecode or pipeline state objects to the  `ProbeRelocationBytecode` or `ProbeRelocation[PSO|Pipeline]` structs that map to the entry points in the shader file.
+Pass compiled shader bytecode or pipeline state objects to the  `ProbeRelocationBytecode` or `ProbeRelocation[PSO|Pipeline]` structs that correspond to the entry points in the shader file (see below).
 
 ```C++
 struct ProbeRelocationBytecode
@@ -265,21 +411,22 @@ struct ProbeRelocationBytecode
 ```
 
 
+---
 
 
 ### [```ProbeClassificationCS.hlsl```](../rtxgi-sdk/shaders/ddgi/ProbeClassificationCS.hlsl)
 
-Compute shader code that classifies probes into various states for performance optimization. See [Probe Classification](#probe-classification).
+This file contains compute shader code that classifies probes into various states for performance optimization. See [Probe Classification](#probe-classification) for more information.
 
-- This shader is used by the ```rtxgi::ClassifyDDGIVolumeProbes()``` function.
+This shader is used by the ```rtxgi::[d3d12|vulkan]::ClassifyDDGIVolumeProbes(...)``` function.
 
 **Compilation Instructions**
 
-Similar to ```ProbeClassification.hlsl```, this shader file provides two entry points:
- - ```DDGIProbeClassificationCS()``` performs probe classification.
- - ```DDGIProbeClassificationResetCS()``` resets all probes to the default state classification.
+Similar to ```ProbeRelocationCS.hlsl```, this shader file provides two entry points:
+ - ```DDGIProbeClassificationCS()``` - performs probe classification.
+ - ```DDGIProbeClassificationResetCS()``` - resets all probes to the default classification state.
 
-Pass compiled shader bytecode or pipeline state objects to the  `ProbeClassificationBytecode` or `ProbeClassification[PSO|Pipeline]` structs that map to the entry points in the shader file.
+Pass compiled shader bytecode or pipeline state objects to the  `ProbeClassificationBytecode` or `ProbeClassification[PSO|Pipeline]` structs that corresponds to the entry points in the shader file (see below).
 
 ```C++
 struct ProbeRelocationBytecode
@@ -289,97 +436,170 @@ struct ProbeRelocationBytecode
 };
 ```
 
+---
 
+## Texture Layout
 
-
-## Volume Textures
-
-Each ```DDGIVolume``` uses a set of four textures:
+The ```DDGIVolume``` uses four texture arrays to store its data:
 
  1. Probe Ray Data
- 2. Probe Irradiance Atlas
- 3. Probe Distance Atlas
+ 2. Probe Irradiance
+ 3. Probe Distance
  4. Probe Data
 
 ### Probe Ray Data
 
-This texture stores ray hit data for all probes in a volume.
+This texture array stores the radiance from and distance to surfaces intersected by rays traced from probes in the volume.
 
- - Texture `rows` represent probes in the volume's probe grid. Row number is the probe's index.
- - Texture `columns` represent rays traced from probes. Column number is the ray index.
- - Each `texel` contains the incoming radiance and distance to the closest surface obtained by ray `column#` for probe `row#`.
+ - The texture array is composed of ```slices``` that correspond to planes of probes oriented perpendicular to the coordinate system's up axis.
 
 <figure>
-<img src="images/ddgivolume-textures-raydata.jpg" width=500px></img>
-<figcaption><b>Figure 2: The Probe Ray Data texture (zoomed) from the Cornell Box scene</b></figcaption>
+<img src="images/ddgivolume-textures-ray-data-slices.jpg" width=900px></img>
+<figcaption><b>Figure 2: The Probe Ray Data texture array (all slices) from the Cornell Box scene</b></figcaption>
 </figure>
 
-### Probe Irradiance and Distance Atlases
+- A texture array slice ```row``` represents a single probe within the horizontal plane of probes. The row number is the probe's index *within that slice*.
+- A texture array slice ```column``` represents rays traced from probes. Column number is the ray's index.
+ - Each ```texel``` contains the incoming radiance from and distance to the closest surface obtained by ray ```column#```.
 
-Irradiance and distance data for all probes of a volume are stored in two texture atlases. Each probe stored in an atlas is an octahedral parameterization of a sphere unwrapped to the unit square as described by [Cigolle et al](http://jcgt.org/published/0003/02/01/).
+<figure>
+<img src="images/ddgivolume-textures-raydata.jpg" width=650px></img>
+<figcaption><b>Figure 3: The Probe Ray Data texture (zoomed, brightened) from the Cornell Box scene</b></figcaption>
+</figure>
+
+### Probe Irradiance and Distance Texture Arrays
+
+Irradiance and distance data for the probes of a volume are stored in two texture arrays (one for irradiance, one for distance). Each probe is stored using an octahedral parameterization of a sphere unwrapped to the unit square as described by [Cigolle et al](http://jcgt.org/published/0003/02/01/).
 
 <figure>
 <img src="images/ddgivolume-octahedral-param.jpg" width=750px></img>
-<figcaption><b>Figure 3: Octahedral parameterization of a sphere <a href="http://jcgt.org/published/0003/02/01/" target="_blank">[Cigolle et al. 2014]</b></a></figcaption>
+<figcaption><b>Figure 4: Octahedral parameterization of a sphere <a href="http://jcgt.org/published/0003/02/01/" target="_blank">[Cigolle et al. 2014]</b></a></figcaption>
 </figure>
 
-To support fast hardware bilinear texture sampling of the unwrapped probes, our octahedral textures include a 1-texel border.
+To support hardware bilinear texture sampling of the unwrapped probes, our octahedral textures include a 1-texel border.
 
-- Note that these border texels are *added* to the values specified in the ```DDGIVolumeDesc::probeNumIrradianceTexels``` and ```DDGIVolumeDesc::probeNumDistanceTexels```.
+***Note:** the ```DDGIVolumeDesc``` struct includes fields to make clear how many texels are part of the probe interior vs. border. For example, see ```DDGIVolumeDesc::probeNumIrradianceTexels``` and ```DDGIVolumeDesc::probeNumIrradianceInteriorTexels```.*
 
 Below are annotated diagrams of the unwrapped octahedral unit square for a single probe. The left and center diagrams highlight the 1-texel border added to a 6x6 texel interior and identify the texels that map to the "front" and "back" hemispheres of the probe. The scheme to populate border texels with the data for bilinear interpolation is shown on the right.
 
 <figure>
 <img src="images/ddgivolume-octahedral-border.png" width=1000px></img>
-<figcaption><b>Figure 4: Octahedral map interior and border texel layout</b></a></figcaption>
+<figcaption><b>Figure 5: Octahedral map interior and border texel layout</b></a></figcaption>
 </figure>
 
-Probe octahedral maps are organized in an atlas based on the 3D grid-space coordinates of probes in the ```DDGIVolume```. For example, in a right-handed y-up coordinate system the dimensions of the irradiance texture atlas are:
+Probe octahedral maps for a volume are organized in texture arrays, based on the 3D grid-space coordinates of probes in the ```DDGIVolume```. Just like the Probe Ray Data texture array, each irradiance and distance texture array slice represents a plane of probes oriented perpendicular to the coordinate system's up axis.
 
-- Width: ```(probeSpacing.x``` * ```probeSpacing.y```) * (```probeNumIrradianceTexels``` + 2)
-- Height: ```probeSpacing.z``` * (```probeNumIrradianceTexels``` + 2)
+***Note:** the ```rtxgi::GetDDGIVolumeTextureDimensions(...)``` function returns the texture array dimensions for a given volume and texture resource type based on the active coordinate system.*
 
-For convenience, the ```rtxgi``` namespace includes the ```GetDDGIVolumeTextureDimensions()``` function that returns the proper atlas texture dimensions based on the coordinate system.
-
-This scheme always lays out horizontal planes of probes in the atlas texture (i.e. each plane is a "slice" of the vertical axis). A visualization of the irradiance and distance atlas textures is below:
+A visualization of irradiance and distance texture array slices is below:
 
 <figure>
 <img src="images/ddgivolume-textures-atlases.jpg" width=950px></img>
-<figcaption><b>Figure 5: Irradiance (top) and distance (bottom) probe atlases for the Cornell Box scene</b></a></figcaption>
+<figcaption><b>Figure 6: Irradiance (top) and distance (bottom) probe atlases for the Cornell Box scene</b></a></figcaption>
 </figure>
-
-#### **Probe Limits**
-
-A consequence of this atlas layout scheme is a limit on the maximum number of probes that can be distributed across a given axis of a volume. This upper limit is a function of the number of texels in a probe and the resource limits of the graphics API and/or hardware. Since distance data uses the most texels per probe, its dimensions determine the upper limit.
-
-The upper limits, as per-axis probe counts, can be written as:
-  - <img src="https://render.githubusercontent.com/render/math?math=L_a = floor(T_l/D_t)"></img>
-  - <img src="https://render.githubusercontent.com/render/math?math=L_b = floor(L_a/P_c)"></img>
-  - <img src="https://render.githubusercontent.com/render/math?math=L_c = floor(L_a/P_b)"></img>
-
-where, <img src="https://render.githubusercontent.com/render/math?math=L_a"></img>, <img src="https://render.githubusercontent.com/render/math?math=L_b"></img>, and <img src="https://render.githubusercontent.com/render/math?math=L_c"></img> are the maximum number of probes across axes <img src="https://render.githubusercontent.com/render/math?math=A"></img>, <img src="https://render.githubusercontent.com/render/math?math=B"></img>, and <img src="https://render.githubusercontent.com/render/math?math=C"></img>. <img src="https://render.githubusercontent.com/render/math?math=T_l"></img> is the graphics API's texel count limit and <img src="https://render.githubusercontent.com/render/math?math=D_t"></img> is the number of texels in one dimension of a probe's distance data. <img src="https://render.githubusercontent.com/render/math?math=P_b"></img> and <img src="https://render.githubusercontent.com/render/math?math=P_c"></img> are the number of probes across axes <img src="https://render.githubusercontent.com/render/math?math=B"></img> and <img src="https://render.githubusercontent.com/render/math?math=C"></img>, respectively.
-
-  - **D3D12:** the maximum texture dimension size is **16384 texels**. See ```D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION``` in [d3d12.h](https://docs.microsoft.com/en-us/windows/win32/direct3d12/constants)
-  - **Vulkan:** the specification requires a maximum texture dimension size of at least 4096 texels. Most implementations on [Windows](https://vulkan.gpuinfo.org/displaydevicelimit.php?name=maxImageDimension2D&platform=windows) and [Linux](https://vulkan.gpuinfo.org/displaydevicelimit.php?name=maxImageDimension2D&platform=linux) support **16384** or even **32768** texels. Check [vkGetPhysicalDeviceImageFormatProperties()](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetPhysicalDeviceImageFormatProperties.html) for the limits of your hardware and platform combination.
 
 ### Probe Data
 
-This texture stores world-space offsets and classification states for all probes of a volume. This information is used in the [Probe Relocation](#probe-relocation) and [Probe Classification](#probe-classification) passes that optimize the probe configuration for image quality and performance.
+This texture array stores world-space offsets and classification states for all probes of a volume. World-space probe offsets are used in [Probe Relocation](#probe-relocation) and probe states are used in [Probe Classification](#probe-classification). As with the other texture array resources, each Probe Data texture array slice represents a plane of probes oriented perpendicular to the coordinate system's up axis. The main difference is that each probe is represented with *one texel*.
 
+Within a texel:
 - World-space offsets for probe relocation are stored in the XYZ channels.
   - ```ProbeDataCommon.hlsl``` contains helper functions for reading and writing world-space offset data.
 - Probe classification state is stored in the W channel.
 
-The texture's layout is the same as the irradiance and distance texture altases, except here each probe is represented by just *one texel*. Below is a visualization of the probe data texture's world-space offsets (top) and probe states (bottom).
+ Below is a visualization of the probe data texture's world-space offsets (top) and probe states (bottom).
 
 <figure>
 <img src="images/ddgivolume-textures-probedata.jpg" width=800px></img>
-<figcaption><b>Figure 6: A visualization of the Probe Data texture (zoomed) for the Crytek Sponza scene</b></figcaption>
+<figcaption><b>Figure 7: A visualization of the Probe Data texture (zoomed) for the Crytek Sponza scene</b></figcaption>
 </figure>
 
+### Probe Count Limits
+
+In addition to the available memory of the physical device, the number of probes a volume can contain is bounded by the graphics API's limits on texture (array) resources.
+
+The relevant limits are the:
+
+1. maximum number of texels allowed *in a single dimension* of a two dimensional texture
+   * **D3D12:** 16,384 texels. See ```D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION``` in [d3d12.h](https://docs.microsoft.com/en-us/windows/win32/direct3d12/constants)
+   * **Vulkan:** the specification requires support for *at least* 4,096 texels. Most implementations on [Windows](https://vulkan.gpuinfo.org/displaydevicelimit.php?name=maxImageDimension2D&platform=windows) and [Linux](https://vulkan.gpuinfo.org/displaydevicelimit.php?name=maxImageDimension2D&platform=linux) support 16,384 or even 32,768 texels. Check [vkGetPhysicalDeviceImageFormatProperties()](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetPhysicalDeviceImageFormatProperties.html) for the limits of your hardware and platform combination. 16,384 is a safe assumption for hardware that supports D3D12.
+
+2. maximum number of texture array slices (called `layers` in Vulkan)
+   * **D3D12:** 2,048 slices. See ```D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION``` in [d3d12.h](https://docs.microsoft.com/en-us/windows/win32/direct3d12/constants)
+   * **Vulkan**: See [```VkPhysicalDeviceProperties::maxImageArrayLayers```](https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkPhysicalDeviceLimits.html). 2,048 is a safe assumption for devices that support D3D12.
+
+**Maximum Probes Per Plane**
+
+Since the Probe Ray Data texture array stores one probe per row *and* all probes of a horizontal plane in a texture array slice, **API limit #1 determines the maximum number of probes that can be represented in a horizontal plane of probes**.
+
+Using D3D12 limits, the maximum:
+* number of probes per horizontal plane is **16,384**
+* number of probes per horizontal plane *axis* (e.g. X and Z in a right hand, y-up coordinate system) is:
+```C++
+    maxProbeCountX = 16,384 / probeCountZ
+    maxProbeCountZ = 16,384 / probeCountX
+```
+
+***Note:** although less flexible, **128** (i.e. the square root of 16,384) is a simple maximum to enforce per horizontal axis that may be more straight-forward to expose in tools for artists. Otherwise, using the above equations to dynamically display maximums per dimension is recommended.*
+
+**Maximum Planes Per Volume**
+
+With the maximum number of probes per plane known, the maximum number of probes per volume becomes a function of how many planes of probes are permitted. This maps to **API limit #2**.
+
+Using D3D12 limits, the *theoretical* maximum number of probes per volume is:
+```C++
+maxTheoreticalProbesPerVolume = 16,384 probes/plane * 2,048 planes = 33,554,432 probes
+```
+
+This is a *theoretical* maximum since storing this number of probes requires 64 gibibytes of dedicated VRAM (a quantity that no consumer GPU yet contains). Additionally, **graphics APIs also restrict the maximum size (in bytes) of any *single* memory resource**. In D3D12, attempting to create any single resource larger than **four gibibytes** results in the create call failing, an E_OUTOFMEMORY error being returned, and the graphics device being removed. 
+
+When using the default texture format settings and tracing 256 rays per probe, the Probe Ray Data texture array will be the largest resource (in bytes). As a result, **the maximum *practical* number of probe planes (slices) per volume** is:
+```C++
+maxPlanesPerVolume = 4,294,967,296 bytes / (p probes/plane * r rays/probe * b bytes/ray)
+```
+
+For example, consider a volume with 128 probes on both the X and Z axes that traces 256 rays per probe and uses the ```EDDGIVolumeTextureFormat::F32x2``` texture format for the Probe Ray Data texture array:
+```C++
+maxPlanesPerVolume = 4,294,967,296 bytes / (16,384 probes/plane * 256 rays/probe * 8 bytes/ray)
+maxPlanesPerVolume = 4,294,967,296 bytes / (33,554,432 bytes/plane)
+maxPlanesPerVolume = 128 planes
+```
+
+***Note:** Depending on the number of rays traced per probe and texture format(s) chosen, the Probe Distance texture array may be the largest of the four volume texture resources. In this case, the formula to determine the maximum number of planes per volume will instead be:*
+```C++
+maxPlanesPerVolume = 4,294,967,296 bytes / (p probes/plane * t texels/probe * b bytes/texel)
+```
+
+For example, consider a volume that traces 128 rays per probe and uses ```EDDGIVolumeTextureFormat::F32x2``` for the distance texture array format.
+```C++
+maxPlanesPerVolume = 4,294,967,296 bytes / (p probes/plane * 16x16 texels/probe * 8 bytes/texel)
+```
+
+**Maximum Probes Per Volume**
+
+With the maximum number of probes per horizontal plane *and* the maximum number of planes known, the maximum number of probes per volume is given by multiplying the two values:
+```C++
+maxProbesPerVolume = maxProbesPerPlane * maxPlanesPerVolume
+```
+
+Following the examples above, a volume with 128 probes on all three axes that traces 256 rays/probe and uses the default texture formats can contain a maximum of ~2 million probes.
+```C++
+maxProbesPerVolume = 16,384 * 128
+maxProbesPerVolume = 2,097,152
+```
 
 
-## Updating a ```DDGIVolume```
+## Create()
+
+**Step 3:** with the ```DDGIVolumeDesc``` and ```DDGIVolumeResources``` structs prepared, the final step to create a new volume is to instantiate a ```DDGIVolume``` instance and call the ```DDGIVolume::Create()``` function. The ```Create()``` function validates the parameters passed via the structs and creates the appropriate resources (if in managed mode).
+
+- ```Create()``` checks for errors and reports them using the ```ERTXGIStatus``` enumeration. See [Common.h](../rtxgi-sdk/include/rtxgi/Common.h) for the complete list of return status codes.
+
+After a successful ```Create()``` call the ```DDGIVolume``` is ready to use!
+
+See [Updating a DDGIVolume](#updating-a-ddgivolume), [Volume Movement](#volume-movement), [Probe Relocation](#probe-relocation), and [Probe Classification](#probe-classification) for more information on use.
+
+# Updating a ```DDGIVolume```
 
 Before tracing rays for a volume, call the ```DDGIVolume::Update()``` function to:
   - Compute a new random rotation to apply to the ray directions generated for each probe with ```DDGIGetProbeRayDirection()```.
@@ -387,11 +607,11 @@ Before tracing rays for a volume, call the ```DDGIVolume::Update()``` function t
 
 Well distributed random rotations are computed using [James Arvo’s implementation from Graphics Gems 3 (pg 117-120)](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.53.1357&rep=rep1&type=pdf) in the ```DDGIVolume::ComputeRandomRotation()``` function.
 
-If ```Update()``` is not called, the previous rotation is used and the same data as the previous frame is unnecessarily recomputed. A common update frequency is to update the probes with newly ray traced data every frame; however, this is not the only option. Aternatively, updates may be scheduled at a lower frequency than the frame rate, or even as asynchronous workloads that execute continuously on lower priority background queues - essentially streaming radiance and distance data to ```DDGIVolume``` probes. This functionality is not directly implemented by the SDK, but the separation of functionality in the ```DDGIVolume::Update()``` and ```rtxgi::UpdateDDGIVolumeProbes()``` functions provides the flexibility for this possibility.
+If ```Update()``` is not called, the previous rotation is used and the same data as the previous frame is unnecessarily recomputed. A common update frequency is to update the probes with newly ray traced data every frame; however, this is not the only option. Aternatively, updates may be scheduled at a lower frequency than the frame rate, or even as asynchronous workloads that execute continuously on lower priority background queues - essentially streaming radiance and distance data to ```DDGIVolume``` probes. This functionality is not directly implemented by the SDK, but the separation of functionality in the ```DDGIVolume::Update()``` and ```rtxgi::[d3d12|vulkan]::UpdateDDGIVolumeProbes(...)``` functions provides the flexibility for this possibility.
 
 
 
-## Volume Movement
+# Volume Movement
 
 The simplest use of a ```DDGIVolume``` is to place it in a fixed location of the world that never changes. There are many scenarios where this basic use case is not sufficient though; for example, when the space requiring global illumination *is itself not stationary*. Examples of this include elevators, trains, cars, spaceships, and many more.
 
@@ -402,7 +622,7 @@ To achieve consistent results in moving spaces:
 
 ```DDGIVolume``` translation and rotation functions are also useful for in-editor debugging purposes, to visualize how various probe configurations function in different locations of a scene.
 
-### Infinite Scrolling Movement
+## Infinite Scrolling Movement
 
 If the scene requiring dynamic global illumination exists in an open or large world setting, it may not be possible (or practical) to cover the entire space with one, or even multiple, ```DDGIVolume``` due to memory and/or performance limits. To address this problem and provide a solution with fixed memory and performance characteristics, the ```DDGIVolume``` includes a mode called *Infinite Scrolling Volume (ISV)*.
 
@@ -416,7 +636,7 @@ Critically, instead of adjusting the position of all probes when the active area
 
 <figure>
 <img src="images/ddgivolume-movement-isv.gif" width="700px"></img>
-<figcaption><b>Figure 7: Infinite Scrolling Volume Movement</b></figcaption>
+<figcaption><b>Figure 8: Infinite Scrolling Volume Movement</b></figcaption>
 </figure>
 
 ISVs are also useful when dynamic indirect lighting is desired around the camera view or a player character. Anchor the infinite scrolling volume to the camera view or a player character and use the camera or player's movement to drive the volume's scrolling of the active area.
@@ -434,25 +654,25 @@ To adjust the active area of the ISV (i.e. perform scrolling):
   - Volumes with infinite scrolling movement ignore rotation transforms.
   - Volumes with infinite scrolling movement can be translated with ```DDGIVolume::SetOrigin(...)``` if the space itself moves too.
 
-## Probe Relocation
+# Probe Relocation
 
 Any regular grid of sampling points will struggle to robustly handle all content in all lighting situations. The probe grids employed by DDGI are no exception. To mitigate this shortcoming, the ```DDGIVolume``` provides a "relocation" feature that automatically adjusts the world-space position of probes at runtime to avoid common problematic scenarios (see below).
 
 <figure>
 <img src="images/ddgivolume-relocation-off.jpg" width=49%></img>
 <img src="images/ddgivolume-relocation-on.jpg" width=49%></img>
-<figcaption><b>Figure 8: (Left) Probes falling inside wall geometry without probe relocation. (Right) Probes adjusted to a more useful locations with probe relocation enabled.</b></figcaption>
+<figcaption><b>Figure 9: (Left) Probes falling inside wall geometry without probe relocation. (Right) Probes adjusted to a more useful locations with probe relocation enabled.</b></figcaption>
 </figure>
 
 To use Probe Relocation:
   - Set ```DDGIVolumeDesc::probeRelocationEnabled``` to ```true``` during initialization or call ```DDGIVolume::SetProbeRelocationEnabled()``` at runtime.
   - Provide the compiled DXIL shader bytecode (or PSOs) for relocation during initialization.
-    - See [Volume Shaders](#volume-shaders) for more information.
-  - Call ```rtxgi::RelocateDDGIVolumeProbes(...)``` at render-time (at some frequency).
+    - See [Preparing Shaders](#preparing-shaders) for more information.
+  - Call ```rtxgi::[d3d12|vulkan]::RelocateDDGIVolumeProbes(...)``` at render-time (at some frequency).
 
 As shown in the above images, a common problem case occurs when probes land inside of geometry (e.g. walls). To move probes from the interior of geometry to a more useful location, probe relocation determines if the probe is inside of geometry and then adjusts its position. This is implemented by using a threshold value for backface probe rays hits. If enough of the probe's total rays are backfaces hits, then the probe is likely inside geometry. The ```DDGIVolumeDesc::probeBackfaceThreshold``` variable controls this ratio. When a probe is determined to be inside of geometry, the maximum adjustment to its position is 45% of the grid cell distance to prevent probes from being relocated outside of their grid voxel.
 
-## Probe Classification
+# Probe Classification
 
 Probe classification aims to improve performance by identifying ```DDGIVolume``` probes that do not contribute to the final lighting result and disabling GPU work for these probes. For example, probes may be stuck inside geometry (even after relocation attempts to move them), exist in spaces without nearby geometry, or be far enough outside the play space that they are never relevant. In these cases, there is no need to spend time tracing and shading rays or updating the irradiance and distance texture atlases for these probes.
 
@@ -472,12 +692,12 @@ Classification is executed in two phases:
 <figure>
 <img src="images/ddgivolume-classification-01.jpg" width=49%></img>
 <img src="images/ddgivolume-classification-02.jpg" width=49%></img>
-<figcaption><b>Figure 9: Disabled probes are highlighted with red outlines. Probes inside of geometry or with no surrounding geometry are disabled.</b></figcaption>
+<figcaption><b>Figure 10: Disabled probes are highlighted with red outlines. Probes inside of geometry or with no surrounding geometry are disabled.</b></figcaption>
 </figure>
 
 
 
-## Fixed Probe Rays for Relocation and Classification
+# Fixed Probe Rays for Relocation and Classification
 
 Since probe relocation and classification can run continuously at arbitrary frequencies, temporal stability is essential to ensure probe irradiance and distance values remain accurate and reliable. To generate stable results, a subset of the rays traced for a probe are designated as *fixed rays*. Fixed rays have the *same* direction(s) every update cycle and are **not** randomly rotated. Fixed rays are *excluded* from probe blending since their regularity would bias the radiance and distance results. Consequently, lighting and shading can be skipped for fixed rays since these rays are never used for irradiance.
 
@@ -487,14 +707,14 @@ The number of fixed rays is specified by the ```RTXGI_DDGI_NUM_FIXED_RAYS``` def
 
 <figure>
 <img src="images/ddgivolume-fixedRays.gif"></img>
-<figcaption><b>Figure 10: The default fixed rays distribution used in probe relocation and classification.</b></figcaption>
+<figcaption><b>Figure 11: The default fixed rays distribution used in probe relocation and classification.</b></figcaption>
 </figure>
 
-## Rules of Thumb
+# Rules of Thumb
 
 Below are rules of thumb related to ```DDGIVolume``` configuration and how a volume's settings affect the lighting results and content creation.
 
-### Geometry Configuration
+## Geometry Configuration
 
 - To achieve proper occlusion results from DDGI, **avoid representing walls with zero thickness planes**.
   - Walls should have a "thickness" that is proportional to the probe density of the containing ```DDGIVolume```.
@@ -502,14 +722,14 @@ Below are rules of thumb related to ```DDGIVolume``` configuration and how a vol
 - The planes that walls consist of should be **single-sided**.
   - The probe relocation and probe classification features track backfaces in order to make decisions.
 
-### Probe Density and Counts
+## Probe Density and Counts
 
 - High probe counts within a volume are usually not necessary (with properly configured wall geometry).
 - **We recommend a probe every 2-3 meters for typical use cases.**
 - Sparse probe grids can often produce better visual results than dense probe grids, since dense probes grids localize the effect of each probe and can (at times) reveal the structure of the probe grid.
 - When in doubt, use the minimum number of probes necessary to get the desired result.
 
-### View Bias
+## View Bias
 
 - If light leaking occurs - and zero thickness planes are not used for walls - the volume's ```probeViewBias``` value probably needs to be adjusted.
   - **Reminder:** ```probeViewBias``` is a world-space offset along the camera view ray applied to the shaded surface point to avoid numerical instabilities when determining visibility.

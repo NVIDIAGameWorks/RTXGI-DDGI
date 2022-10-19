@@ -22,12 +22,16 @@ float3 TracePath(RayDesc ray, uint seed)
     float3 throughput = float3(1.f, 1.f, 1.f);
     float3 color = float3(0.f, 0.f, 0.f);
 
+    // Get the lights and scene acceleration structure
+    StructuredBuffer<Light> Lights = GetLights();
+    RaytracingAccelerationStructure SceneTLAS = GetAccelerationStructure(SCENE_TLAS_INDEX);
+
     for (int bounceIndex = 0; bounceIndex < GetGlobalConst(pt, numBounces); bounceIndex++)
     {
         // Trace the ray
         PackedPayload packedPayload = (PackedPayload)0;
         TraceRay(
-            SceneBVH,
+            SceneTLAS,
             RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
             0xFF,
             0,
@@ -47,7 +51,7 @@ float3 TracePath(RayDesc ray, uint seed)
         }
 
         // Direct Lighting
-        float3 diffuse = DirectDiffuseLighting(payload, GetGlobalConst(pt, rayNormalBias), GetGlobalConst(pt, rayViewBias), SceneBVH);
+        float3 diffuse = DirectDiffuseLighting(payload, GetGlobalConst(pt, rayNormalBias), GetGlobalConst(pt, rayViewBias), SceneTLAS, Lights);
 
         // Attenuate the color
         color += diffuse * throughput;
@@ -90,6 +94,11 @@ void RayGen()
     uint seed = (LaunchIndex.y * LaunchDimensions.x) + LaunchIndex.x;
     seed *= GetGlobalConst(app, frameNumber);
 
+    // Get the (bindless) resources
+    RWTexture2D<float4> PTOutput = GetRWTex2D(PT_OUTPUT_INDEX);
+    RWTexture2D<float4> PTAccumulation = GetRWTex2D(PT_ACCUMULATION_INDEX);
+    Texture2D<float4> BlueNoise = GetTex2D(BLUE_NOISE_INDEX);
+
     // Trace the paths for this pixel
     float3 color = float3(0.f, 0.f, 0.f);
     float2 offsets = float2(0.5f, 0.5f);
@@ -97,7 +106,7 @@ void RayGen()
     {
         // Setup the ray
         RayDesc ray = (RayDesc)0;
-        ray.Origin = Camera.position;
+        ray.Origin = GetCamera().position;
         ray.TMin = 0.f;
         ray.TMax = 1e27f;
 
@@ -110,11 +119,11 @@ void RayGen()
         }
 
         // Compute the primary ray direction
-        float  halfHeight = Camera.tanHalfFovY;
-        float  halfWidth = (Camera.aspect * halfHeight);
-        float3 lowerLeftCorner = Camera.position - (halfWidth * Camera.right) - (halfHeight * Camera.up) + Camera.forward;
-        float3 horizontal = (2.f * halfWidth) * Camera.right;
-        float3 vertical = (2.f * halfHeight) * Camera.up;
+        float  halfHeight = GetCamera().tanHalfFovY;
+        float  halfWidth = (GetCamera().aspect * halfHeight);
+        float3 lowerLeftCorner = GetCamera().position - (halfWidth * GetCamera().right) - (halfHeight * GetCamera().up) + GetCamera().forward;
+        float3 horizontal = (2.f * halfWidth) * GetCamera().right;
+        float3 vertical = (2.f * halfHeight) * GetCamera().up;
 
         float s = ((float)LaunchIndex.x + offsets.x) / (float)LaunchDimensions.x;
         float t = 1.f - (((float)LaunchIndex.y + offsets.y) / (float)LaunchDimensions.y);

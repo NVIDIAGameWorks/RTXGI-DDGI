@@ -34,9 +34,9 @@ namespace Graphics
                 VkDeviceMemory                 shaderTableUploadMemory = nullptr;
 
                 Shaders::ShaderRTPipeline      rtShaders;
-                Shaders::ShaderProgram         filterShader;
+                Shaders::ShaderProgram         filterCS;
                 RTShaderModules                rtShaderModules;
-                VkShaderModule                 filterShaderModule = nullptr;
+                VkShaderModule                 filterCSModule = nullptr;
 
                 VkDescriptorSet                descriptorSet = nullptr;
                 VkPipeline                     rtPipeline = nullptr;

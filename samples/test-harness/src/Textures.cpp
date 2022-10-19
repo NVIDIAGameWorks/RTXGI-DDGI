@@ -8,9 +8,6 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#include "Textures.h"
-#include "UI.h"
-
 #define STBI_NO_BMP
 #define STBI_NO_GIF
 #define STBI_NO_PIC
@@ -21,6 +18,9 @@
 #define STBI_NO_PNM
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#include "Textures.h"
+#include "UI.h"
 
 #if defined(GPU_COMPRESSION)
 #include <d3d11.h>

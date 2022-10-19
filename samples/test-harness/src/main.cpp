@@ -25,22 +25,37 @@
 #include "graphics/RTAO.h"
 #include "graphics/Composite.h"
 
-#include <sstream>
 #include <filesystem>
 
-void WriteImages(
+#if _WIN32
+extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 606; }
+extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8".\\D3D12\\"; }
+#endif
+
+void StoreImages(
+    Inputs::EInputEvent& event,
     Configs::Config& config,
     Graphics::Globals& gfx,
     Graphics::GlobalResources& gfxResources,
     Graphics::RTAO::Resources& rtao,
     Graphics::DDGI::Resources& ddgi)
 {
+    if(config.app.benchmarkRunning) return; // Not allowed while benchmark is running
+
     std::filesystem::create_directories(config.scene.screenshotPath.c_str());
 
-    Graphics::WriteBackBufferToDisk(gfx, config.scene.screenshotPath);
-    Graphics::GBuffer::WriteGBufferToDisk(gfx, gfxResources, config.scene.screenshotPath);
-    Graphics::RTAO::WriteRTAOBuffersToDisk(gfx, gfxResources, rtao, config.scene.screenshotPath);
-    Graphics::DDGI::WriteVolumesToDisk(gfx, gfxResources, ddgi, config.scene.screenshotPath);
+    if (event == Inputs::EInputEvent::SCREENSHOT)
+    {
+        Graphics::WriteBackBufferToDisk(gfx, config.scene.screenshotPath);
+        event = Inputs::EInputEvent::NONE;
+    }
+    else if (event == Inputs::EInputEvent::SAVE_IMAGES)
+    {
+        Graphics::GBuffer::WriteGBufferToDisk(gfx, gfxResources, config.scene.screenshotPath);
+        Graphics::RTAO::WriteRTAOBuffersToDisk(gfx, gfxResources, rtao, config.scene.screenshotPath);
+        Graphics::DDGI::WriteVolumesToDisk(gfx, gfxResources, ddgi, config.scene.screenshotPath);
+        event = Inputs::EInputEvent::NONE;
+    }
 }
 
 /**
@@ -165,11 +180,9 @@ int Run(const std::vector<std::string>& arguments)
     CHECK(Graphics::PathTracing::Initialize(gfx, gfxResources, pt, perf, log), "initialize path tracing workload!\n", log);
     CHECK(Graphics::GBuffer::Initialize(gfx, gfxResources, gbuffer, perf, log), "initialize gbuffer workload!\n", log);
     CHECK(Graphics::DDGI::Initialize(gfx, gfxResources, ddgi, config, perf, log), "initialize dynamic diffuse global illumination workload!\n", log);
-    CHECK(Graphics::DDGI::Visualizations::Initialize(gfx, gfxResources, ddgi, ddgiVis, perf, log), "initialize dynamic diffuse global illumination visualization workload!\n", log);
+    CHECK(Graphics::DDGI::Visualizations::Initialize(gfx, gfxResources, ddgi, ddgiVis, perf, config, log), "initialize dynamic diffuse global illumination visualization workload!\n", log);
     CHECK(Graphics::RTAO::Initialize(gfx, gfxResources, rtao, perf, log), "initialize ray traced ambient occlusion workload!\n", log);
     CHECK(Graphics::Composite::Initialize(gfx, gfxResources, composite, perf, log), "initialize composition workload!\n", log);
-
-    log << "\nInitializing graphics...done.\n";
 
     // Initialize the user interface system
     log << "Initializing user interface...";
@@ -188,6 +201,10 @@ int Run(const std::vector<std::string>& arguments)
 
     log << "Main loop...\n";
     std::flush(log);
+
+#ifdef GFX_PERF_INSTRUMENTATION
+    Graphics::BeginFrame(gfx, gfxResources, perf);
+#endif
 
     // Main loop
     while(!glfwWindowShouldClose(gfx.window))
@@ -228,7 +245,7 @@ int Run(const std::vector<std::string>& arguments)
         }
 
         // Initialize the benchmark
-        if (input.event == Inputs::EInputEvent::RUN_BENCHMARK)
+        if (!config.app.benchmarkRunning && input.event == Inputs::EInputEvent::RUN_BENCHMARK)
         {
             Benchmark::StartBenchmark(benchmarkRun, perf, config, gfx);
             input.event = Inputs::EInputEvent::NONE;
@@ -250,10 +267,13 @@ int Run(const std::vector<std::string>& arguments)
             if (config.ddgi.reload)
             {
                 if (!Graphics::DDGI::Reload(gfx, gfxResources, ddgi, config, log)) break;
-                if (!Graphics::DDGI::Visualizations::Reload(gfx, gfxResources, ddgi, ddgiVis, log)) break;
+                if (!Graphics::DDGI::Visualizations::Reload(gfx, gfxResources, ddgi, ddgiVis, config, log)) break;
                 config.ddgi.reload = false;
                 CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
             #ifdef GFX_PERF_INSTRUMENTATION
+                Graphics::EndFrame(gfx, gfxResources, perf);
+                Graphics::ResolveTimestamps(gfx, gfxResources, perf);
+                if (!Graphics::UpdateTimestamps(gfx, gfxResources, perf)) break;
                 Graphics::BeginFrame(gfx, gfxResources, perf);
             #endif
                 continue;
@@ -344,7 +364,7 @@ int Run(const std::vector<std::string>& arguments)
 
         // UI
         CPU_TIMESTAMP_BEGIN(perf.cpuTimes[perf.cpuTimes.size() - 2]);
-        Graphics::UI::Update(gfx, ui, config, scene, ddgi.volumes, perf);
+        Graphics::UI::Update(gfx, ui, config, input, scene, ddgi.volumes, perf);
         Graphics::UI::Execute(gfx, gfxResources, ui, config);
         CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[perf.cpuTimes.size() - 2]);
 
@@ -358,14 +378,10 @@ int Run(const std::vector<std::string>& arguments)
         CPU_TIMESTAMP_BEGIN(perf.cpuTimes.back());
         if (!Graphics::SubmitCmdList(gfx)) break;
         if (!Graphics::Present(gfx)) continue;
-        if (!Graphics::WaitForGPU(gfx)) break;
+        if (!Graphics::WaitForGPU(gfx)) { log << "GPU took too long to complete, device removed!"; break; }
 
         // Image Capture
-        if (input.event == Inputs::EInputEvent::SAVE_IMAGE)
-        {
-            WriteImages(config, gfx, gfxResources, rtao, ddgi);
-            input.event = Inputs::EInputEvent::NONE;
-        }
+        StoreImages(input.event, config, gfx, gfxResources, rtao, ddgi);
 
         if (!Graphics::MoveToNextFrame(gfx)) break;
         if (!Graphics::ResetCmdList(gfx)) break;
@@ -374,14 +390,7 @@ int Run(const std::vector<std::string>& arguments)
 
     #ifdef GFX_PERF_INSTRUMENTATION
         if (!Graphics::UpdateTimestamps(gfx, gfxResources, perf)) break;
-        if (input.runBenchmark)
-        {
-            input.runBenchmark = Benchmark::UpdateBenchmark(benchmarkRun, perf, config, gfx, log);
-            if (benchmarkRun.numFramesBenched == Benchmark::NumBenchmarkFrames)
-            {
-                WriteImages(config, gfx, gfxResources, rtao, ddgi);
-            }
-        }
+        if (config.app.benchmarkRunning) Benchmark::UpdateBenchmark(benchmarkRun, perf, config, gfx, log);
         Graphics::BeginFrame(gfx, gfxResources, perf);
     #endif
     }

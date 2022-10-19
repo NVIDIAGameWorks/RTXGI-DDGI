@@ -15,7 +15,7 @@
 void AHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttributes attrib)
 {
     // Load the material
-    Material material = Materials[GetMaterialIndex(InstanceID())];
+    Material material = GetMaterial(GetMaterialIndex(InstanceID()));
 
     float alpha = material.opacity;
     if (material.alphaMode == 2)
@@ -25,7 +25,7 @@ void AHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttr
         float2 uv0 = LoadAndInterpolateUV0(InstanceID(), PrimitiveIndex(), barycentrics);
         if (material.albedoTexIdx > -1)
         {
-            alpha = Tex2D[material.albedoTexIdx].SampleLevel(BilinearWrapSampler, uv0, 0).a;
+            alpha = GetTex2D(material.albedoTexIdx).SampleLevel(GetBilinearWrapSampler(), uv0, 0).a;
         }
     }
 
@@ -36,7 +36,7 @@ void AHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttr
 void AHS_PRIMARY(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes attrib)
 {
     // Load the material
-    Material material = Materials[GetMaterialIndex(InstanceID())];
+    Material material = GetMaterial(GetMaterialIndex(InstanceID()));
 
     float alpha = material.opacity;
     if (material.alphaMode == 2)
@@ -49,6 +49,10 @@ void AHS_PRIMARY(inout PackedPayload payload, BuiltInTriangleIntersectionAttribu
         float2 dUVdx, dUVdy;
         ComputeUV0Differentials(vertices, WorldRayDirection(), RayTCurrent(), dUVdx, dUVdy);
 
+        // TODO-ACM: passing ConstantBuffer<T> to functions crashes DXC HLSL->SPIRV
+        //ConstantBuffer<Camera> camera = GetCamera();
+        //ComputeUV0Differentials(vertices, camera, WorldRayDirection(), RayTCurrent(), dUVdx, dUVdy);
+
         // Interpolate the triangle's texture coordinates
         float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
         Vertex v = InterpolateVertexUV0(vertices, barycentrics);
@@ -56,7 +60,7 @@ void AHS_PRIMARY(inout PackedPayload payload, BuiltInTriangleIntersectionAttribu
         // Sample the texture
         if (material.albedoTexIdx > -1)
         {
-            alpha = Tex2D[material.albedoTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy).a;
+            alpha = GetTex2D(material.albedoTexIdx).SampleGrad(GetAnisoWrapSampler(), v.uv0, dUVdx, dUVdy).a;
         }
     }
 
@@ -67,7 +71,7 @@ void AHS_PRIMARY(inout PackedPayload payload, BuiltInTriangleIntersectionAttribu
 void AHS_GI(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes attrib)
 {
     // Load the surface material
-    Material material = Materials[GetMaterialIndex(InstanceID())];
+    Material material = GetMaterial(GetMaterialIndex(InstanceID()));
 
     float alpha = material.opacity;
     if (material.alphaMode == 2)
@@ -85,10 +89,10 @@ void AHS_GI(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes a
         {
             // Get the number of mip levels
             uint width, height, numLevels;
-            Tex2D[material.albedoTexIdx].GetDimensions(0, width, height, numLevels);
+            GetTex2D(material.albedoTexIdx).GetDimensions(0, width, height, numLevels);
 
             // Sample the texture
-            alpha = Tex2D[material.albedoTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, numLevels * 0.6667f).a;
+            alpha = GetTex2D(material.albedoTexIdx).SampleLevel(GetBilinearWrapSampler(), v.uv0, numLevels * 0.6667f).a;
         }
     }
 

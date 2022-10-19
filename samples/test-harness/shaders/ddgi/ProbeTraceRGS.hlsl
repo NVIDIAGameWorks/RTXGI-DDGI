@@ -12,6 +12,7 @@
 #include "../include/Lighting.hlsl"
 #include "../include/RayTracing.hlsl"
 
+#include "../../../../rtxgi-sdk/shaders/ddgi/include/DDGIRootConstants.hlsl"
 #include "../../../../rtxgi-sdk/shaders/ddgi/Irradiance.hlsl"
 
 // ---[ Ray Generation Shader ]---
@@ -19,19 +20,26 @@
 [shader("raygeneration")]
 void RayGen()
 {
-    uint2 DispatchIndex = DispatchRaysIndex().xy;
-    int rayIndex = DispatchIndex.x;                    // index of the current probe ray
-    int probeIndex = DispatchIndex.y;                  // index of current probe
+    // Get the DDGIVolume's index (from root/push constants)
+    uint volumeIndex = GetDDGIVolumeIndex();
 
-    // Get the DDGIVolume's index
-#if SPIRV
-    uint volumeIndex = Global.ddgi_volumeIndex;
-#else
-    uint volumeIndex = DDGI.volumeIndex;
-#endif
+    // Get the DDGIVolume structured buffers
+    StructuredBuffer<DDGIVolumeDescGPUPacked> DDGIVolumes = GetDDGIVolumeConstants(GetDDGIVolumeConstantsIndex());
+    StructuredBuffer<DDGIVolumeResourceIndices> DDGIVolumeBindless = GetDDGIVolumeResourceIndices(GetDDGIVolumeResourceIndicesIndex());
 
-    // Get the DDGIVolume's constants
+    // Get the DDGIVolume's bindless resource indices
+    DDGIVolumeResourceIndices resourceIndices = DDGIVolumeBindless[volumeIndex];
+
+    // Get the DDGIVolume's constants from the structured buffer
     DDGIVolumeDescGPU volume = UnpackDDGIVolumeDescGPU(DDGIVolumes[volumeIndex]);
+
+    // Compute the probe index for this thread
+    int rayIndex = DispatchRaysIndex().x;                    // index of the ray to trace for this probe
+    int probePlaneIndex = DispatchRaysIndex().y;             // index of this probe within the plane of probes
+    int planeIndex = DispatchRaysIndex().z;                  // index of the plane this probe is part of
+    int probesPerPlane = DDGIGetProbesPerPlane(volume.probeCounts);
+
+    int probeIndex = (planeIndex * probesPerPlane) + probePlaneIndex;
 
     // Get the probe's grid coordinates
     float3 probeCoords = DDGIGetProbeCoords(probeIndex, volume);
@@ -39,8 +47,8 @@ void RayGen()
     // Adjust the probe index for the scroll offsets
     probeIndex = DDGIGetScrollingProbeIndex(probeCoords, volume);
 
-    // Get the probe data texture
-    Texture2D<float4> ProbeData = GetDDGIVolumeProbeDataSRV(volumeIndex);
+    // Get the probe data texture array
+    Texture2DArray<float4> ProbeData = GetTex2DArray(resourceIndices.probeDataSRVIndex);
 
     // Get the probe's state
     float probeState = DDGILoadProbeState(probeIndex, ProbeData, volume);
@@ -55,9 +63,9 @@ void RayGen()
     // Get a random normalized ray direction to use for a probe ray
     float3 probeRayDirection = DDGIGetProbeRayDirection(rayIndex, volume);
 
-    // Texture output coordinates
+    // Get the coordinates for the probe ray in the RayData texture array
     // Note: probe index is the scroll adjusted index (if scrolling is enabled)
-    uint2 texCoords = uint2(rayIndex, probeIndex);
+    uint3 outputCoords = DDGIGetRayDataTexelCoords(rayIndex, probeIndex, volume);
 
     // Setup the probe ray
     RayDesc ray;
@@ -72,9 +80,12 @@ void RayGen()
     // If classification is enabled, pass the probe's state to hit shaders through the payload
     if(volume.probeClassificationEnabled) packedPayload.packed0.x = probeState;
 
+    // Get the acceleration structure
+    RaytracingAccelerationStructure SceneTLAS = GetAccelerationStructure(SCENE_TLAS_INDEX);
+
     // Trace the Probe Ray
     TraceRay(
-        SceneBVH,
+        SceneTLAS,
         RAY_FLAG_NONE,
         0xFF,
         0,
@@ -83,25 +94,25 @@ void RayGen()
         ray,
         packedPayload);
 
-    // Get the ray data texture
-    RWTexture2D<float4> RayData = GetDDGIVolumeRayDataUAV(volumeIndex);
+    // Get the ray data texture array
+    RWTexture2DArray<float4> RayData = GetRWTex2DArray(resourceIndices.rayDataUAVIndex);
 
     // The ray missed. Store the miss radiance, set the hit distance to a large value, and exit early.
     if (packedPayload.hitT < 0.f)
     {
         // Store the ray miss
-        DDGIStoreProbeRayMiss(RayData, texCoords, volume, GetGlobalConst(app, skyRadiance));
+        DDGIStoreProbeRayMiss(RayData, outputCoords, volume, GetGlobalConst(app, skyRadiance));
         return;
     }
 
     // Unpack the payload
     Payload payload = UnpackPayload(packedPayload);
 
-    // The ray hit a surface backface.
+    // The ray hit a surface backface
     if (payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE)
     {
         // Store the ray backface hit
-        DDGIStoreProbeRayBackfaceHit(RayData, texCoords, volume, payload.hitT);
+        DDGIStoreProbeRayBackfaceHit(RayData, outputCoords, volume, payload.hitT);
         return;
     }
 
@@ -110,22 +121,25 @@ void RayGen()
     if((volume.probeRelocationEnabled || volume.probeClassificationEnabled) && rayIndex < RTXGI_DDGI_NUM_FIXED_RAYS)
     {
         // Store the ray front face hit distance (only)
-        DDGIStoreProbeRayFrontfaceHit(RayData, texCoords, volume, payload.hitT);
+        DDGIStoreProbeRayFrontfaceHit(RayData, outputCoords, volume, payload.hitT);
         return;
     }
 
+    // Get the (dynamic) lights
+    StructuredBuffer<Light> Lights = GetLights();
+
     // Direct Lighting and Shadowing
-    float3 diffuse = DirectDiffuseLighting(payload, GetGlobalConst(pt, rayNormalBias), GetGlobalConst(pt, rayViewBias), SceneBVH);
+    float3 diffuse = DirectDiffuseLighting(payload, GetGlobalConst(pt, rayNormalBias), GetGlobalConst(pt, rayViewBias), SceneTLAS, Lights);
 
     // Indirect Lighting (recursive)
     float3 irradiance = 0.f;
     float3 surfaceBias = DDGIGetSurfaceBias(payload.normal, ray.Direction, volume);
 
-    // Setup the volume resources needed for the irradiance query
+    // Get the volume resources needed for the irradiance query
     DDGIVolumeResources resources;
-    resources.probeIrradiance = GetDDGIVolumeIrradianceSRV(volumeIndex);
-    resources.probeDistance = GetDDGIVolumeDistanceSRV(volumeIndex);
-    resources.probeData = GetDDGIVolumeProbeDataSRV(volumeIndex);
+    resources.probeIrradiance = GetTex2DArray(resourceIndices.probeIrradianceSRVIndex);
+    resources.probeDistance = GetTex2DArray(resourceIndices.probeDistanceSRVIndex);
+    resources.probeData = GetTex2DArray(resourceIndices.probeDataSRVIndex);
     resources.bilinearSampler = GetBilinearWrapSampler();
 
     // Compute volume blending weight
@@ -152,5 +166,5 @@ void RayGen()
 
     // Store the final ray radiance and hit distance
     float3 radiance = diffuse + ((min(payload.albedo, float3(maxAlbedo, maxAlbedo, maxAlbedo)) / PI) * irradiance);
-    DDGIStoreProbeRayFrontfaceHit(RayData, texCoords, volume, radiance, payload.hitT);
+    DDGIStoreProbeRayFrontfaceHit(RayData, outputCoords, volume, radiance, payload.hitT);
 }

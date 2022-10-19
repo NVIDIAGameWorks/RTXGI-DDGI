@@ -61,18 +61,24 @@ void KeyHandler(GLFWwindow* window, int key, int scancode, int action, int mods)
         return;
     }
 
-    // Save debug images
+    // Save a screenshot
     if(IsKeyReleased(key, action, GLFW_KEY_F1))
     {
-        inputPtr->event = Inputs::EInputEvent::SAVE_IMAGE;
+        inputPtr->event = Inputs::EInputEvent::SCREENSHOT;
+        return;
+    }
+
+    // Save debug images
+    if (IsKeyReleased(key, action, GLFW_KEY_F2))
+    {
+        inputPtr->event = Inputs::EInputEvent::SAVE_IMAGES;
         return;
     }
 
     // Run benchmark
-    if (IsKeyReleased(key, action, GLFW_KEY_F2))
+    if (IsKeyReleased(key, action, GLFW_KEY_F4))
     {
         inputPtr->event = Inputs::EInputEvent::RUN_BENCHMARK;
-        inputPtr->runBenchmark = true;
         return;
     }
 
@@ -182,8 +188,8 @@ void MousePositionHandler(GLFWwindow* window, double x, double y)
         camera.yaw += (float)(inputPtr->mousePos.x - inputPtr->prevMousePos.x) * degreesPerPixelX * configPtr->input.rotationSpeed;
         camera.pitch += (float)(inputPtr->mousePos.y - inputPtr->prevMousePos.y) * degreesPerPixelY * configPtr->input.rotationSpeed;
 
-        if (abs(camera.yaw) >= 360) camera.yaw = 0.f;
-        if (abs(camera.pitch) >= 360) camera.pitch = 0.f;
+        if (rtxgi::abs(camera.yaw) >= 360) camera.yaw = 0.f;
+        if (rtxgi::abs(camera.pitch) >= 360) camera.pitch = 0.f;
 
         //char buffer[100];
         //sprintf_s(buffer, "mouse delta: (%i, %i)\n", (mouse.x - input.lastMouseXY.x), (mouse.y - input.lastMouseXY.y));

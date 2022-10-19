@@ -22,17 +22,17 @@ namespace Geometry
     //----------------------------------------------------------------------------------------------------------
 
     /**
-    * Generate vertices for a sphere.
-    */
+     * Generate the vertices for a sphere.
+     */
     std::vector<Graphics::Vertex> GetSphereVertices(uint32_t latitudes, uint32_t longitudes)
     {
         std::vector<Graphics::Vertex> vertices;
         float x, y, z;
         float theta, phi;
 
-    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT
+    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT
         vertices.insert(vertices.end(), { { 0.f, 0.5f, 0.f } });
-    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP || COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
         vertices.insert(vertices.end(), { { 0.f, 0.f, 0.5f } });
     #endif
 
@@ -67,9 +67,9 @@ namespace Geometry
             }
         }
 
-    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT
+    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT
         vertices.insert(vertices.end(), { { 0.f, -0.5f, 0.f } });
-    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP || COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
         vertices.insert(vertices.end(), { {0.f, 0.f, -0.5f } });
     #endif
 
@@ -77,8 +77,8 @@ namespace Geometry
     }
 
     /**
-    * Generate the indices for a sphere with the given number of vertices.
-    */
+     * Generate the indices for a sphere with the given number of vertices.
+     */
     std::vector<uint32_t> GetSphereIndices(uint32_t latitudes, uint32_t longitudes, uint32_t numVertices)
     {
         std::vector<uint32_t> indices;
@@ -90,11 +90,7 @@ namespace Geometry
         {
             v1 = (i + 1) % longitudes + 1;
             v2 = (i + 1);
-        #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
             indices.insert(indices.end(), { 0, v2, v1 });
-        #else
-            indices.insert(indices.end(), { 0, v1, v2 });
-        #endif
         }
 
         // Add internal triangles
@@ -109,12 +105,7 @@ namespace Geometry
                 v2 = aStart + (j + 1) % longitudes;
                 v3 = bStart + j;
                 v4 = bStart + (j + 1) % longitudes;
-
-            #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
                 indices.insert(indices.end(), { v1, v4, v2, v3, v4, v1 });
-            #else
-                indices.insert(indices.end(), { v1, v2, v4, v4, v3, v1 });
-            #endif
             }
         }
 
@@ -125,11 +116,7 @@ namespace Geometry
             endVertex = (numVertices - 1);
             v1 = startVertex + (i % longitudes);
             v2 = startVertex + ((i + 1) % longitudes);
-        #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
             indices.insert(indices.end(), { endVertex, v2, v1 });
-        #else
-            indices.insert(indices.end(), { endVertex, v1, v2 });
-        #endif
         }
 
         return indices;

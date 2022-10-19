@@ -45,10 +45,21 @@ namespace Graphics
             return true;
         }
 
+        void ConvertWideStringToNarrow(std::wstring& wide, std::string& narrow)
+        {
+            narrow.resize(wide.size());
+        #if defined(_WIN32) || defined(WIN32)
+            size_t converted = 0;
+            wcstombs_s(&converted, narrow.data(), (narrow.size() + 1), wide.c_str(), wide.size());
+        #else
+            wcstombs(narrow.data(), wide.c_str(), narrow.size() + 1);
+        #endif
+        }
+
         /**
          * Device creation helper.
          */
-        bool CreateDeviceInternal(ID3D12Device5*& device, IDXGIFactory7*& factory, Configs::Config& config)
+        bool CreateDeviceInternal(ID3D12Device6*& device, IDXGIFactory7*& factory, Configs::Config& config)
         {
             // Create the device
             IDXGIAdapter1* adapter = nullptr;
@@ -61,12 +72,33 @@ namespace Graphics
                     continue;   // Don't select the Basic Render Driver adapter
                 }
 
-                if (SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_1, _uuidof(ID3D12Device5), (void**)&device)))
+                if (SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_0, _uuidof(ID3D12Device6), (void**)&device)))
                 {
                     // Check if the device supports ray tracing
-                    D3D12_FEATURE_DATA_D3D12_OPTIONS5 features = {};
-                    HRESULT hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &features, sizeof(features));
-                    if (FAILED(hr) || features.RaytracingTier < D3D12_RAYTRACING_TIER_1_0)
+                    D3D12_FEATURE_DATA_D3D12_OPTIONS5 features5;
+                    HRESULT hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &features5, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
+                    if (FAILED(hr) || features5.RaytracingTier < D3D12_RAYTRACING_TIER_1_0)
+                    {
+                        SAFE_RELEASE(device);
+                        device = nullptr;
+                        continue;
+                    }
+
+                    // Check if the device supports SM6.6
+                    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel;
+                    shaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_6;
+                    hr = device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(D3D12_FEATURE_DATA_SHADER_MODEL));
+                    if (FAILED(hr))
+                    {
+                        SAFE_RELEASE(device);
+                        device = nullptr;
+                        continue;
+                    }
+
+                    // Resource binding tier 3 is required for SM6.6 dynamic resources
+                    D3D12_FEATURE_DATA_D3D12_OPTIONS features;
+                    hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &features, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS));
+                    if (FAILED(hr) || features.ResourceBindingTier < D3D12_RESOURCE_BINDING_TIER_3)
                     {
                         SAFE_RELEASE(device);
                         device = nullptr;
@@ -78,7 +110,7 @@ namespace Graphics
 
                     // Save the GPU name
                     std::wstring name(adapterDesc.Description);
-                    config.app.gpuName = std::string(name.begin(), name.end());
+                    ConvertWideStringToNarrow(name, config.app.gpuName);
                 #ifdef GFX_NAME_OBJECTS
                     device->SetName(name.c_str());
                 #endif
@@ -200,7 +232,7 @@ namespace Graphics
         }
 
         /**
-         * Create the RTV, CBV/SRV/UAV, and Sampler descriptor heaps.
+         * Create the RTV, Resource, and Sampler descriptor heaps.
          */
         bool CreateDescriptorHeaps(Globals& d3d, Resources& resources, const Scenes::Scene& scene)
         {
@@ -243,7 +275,7 @@ namespace Graphics
             heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
             heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
-            // Create the descriptor heap
+            // Create the resources descriptor heap
             D3DCHECK(d3d.device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&resources.srvDescHeap)));
         #ifdef GFX_NAME_OBJECTS
             resources.srvDescHeap->SetName(L"Descriptor Heap");
@@ -321,8 +353,8 @@ namespace Graphics
         }
 
         /**
-        * Create the raster viewport.
-        */
+         * Create the raster viewport.
+         */
         bool CreateViewport(Globals& d3d)
         {
             d3d.viewport.Width = static_cast<float>(d3d.width);
@@ -359,7 +391,6 @@ namespace Graphics
             desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
             desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
             desc.MipLODBias = 0.f;
-            desc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
             desc.MinLOD = 0.f;
             desc.MaxLOD = D3D12_FLOAT32_MAX;
             desc.MaxAnisotropy = 1;
@@ -405,7 +436,7 @@ namespace Graphics
             if (!CreateBuffer(d3d, desc, upload)) return false;
 
             // Create the index buffer device resource
-            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, device)) return false;
 
             // Initialize the index buffer view
@@ -448,7 +479,7 @@ namespace Graphics
             if (!CreateBuffer(d3d, desc, upload)) return false;
 
             // Create the vertex buffer device resource
-            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, device)) return false;
 
             // Initialize the vertex buffer view
@@ -518,7 +549,7 @@ namespace Graphics
                 asPreBuildInfo.ScratchDataSizeInBytes,
                 D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT,
                 EHeapType::DEFAULT,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                D3D12_RESOURCE_STATE_COMMON,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
             };
             if (!CreateBuffer(d3d, blasScratchDesc, &resources.blas[primitive.index].scratch)) return false;
@@ -580,7 +611,7 @@ namespace Graphics
                 ASPreBuildInfo.ScratchDataSizeInBytes,
                 D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT,
                 EHeapType::DEFAULT,
-                D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                D3D12_RESOURCE_STATE_COMMON,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
             };
             if (!CreateBuffer(d3d, desc, &resources.tlas.scratch)) return false;
@@ -640,7 +671,7 @@ namespace Graphics
 
             // Create the default heap texture resource
             {
-                TextureDesc desc = { texture.width, texture.height, texture.mips, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+                TextureDesc desc = { texture.width, texture.height, 1, texture.mips, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
                 if(texture.format == Textures::ETextureFormat::BC7) desc.format = DXGI_FORMAT_BC7_TYPELESS;
                 CHECK(CreateTexture(d3d, desc, &resource), "create the texture default heap resource!", log);
             #ifdef GFX_NAME_OBJECTS
@@ -763,127 +794,220 @@ namespace Graphics
         }
 
         /**
-         * Create the global (bindless) root signature.
+         * Create the global root signature.
          */
         bool CreateGlobalRootSignature(Globals& d3d, Resources& resources)
         {
-            D3D12_DESCRIPTOR_RANGE ranges[9];
-            UINT rangeIndex = 0;
+            std::vector<D3D12_ROOT_PARAMETER> rootParameters;
 
-            // Samplers
-            D3D12_DESCRIPTOR_RANGE samplerRange;
-            samplerRange.BaseShaderRegister = 0;
-            samplerRange.NumDescriptors = UINT_MAX;
-            samplerRange.RegisterSpace = 0;
-            samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
-            samplerRange.OffsetInDescriptorsFromTableStart = 0;
-
-            // Sampler Descriptor Table
-            D3D12_ROOT_PARAMETER param0 = {};
-            param0.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-            param0.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-            param0.DescriptorTable.NumDescriptorRanges = 1;
-            param0.DescriptorTable.pDescriptorRanges = &samplerRange;
+        #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+            // Descriptor Heap Ranges
+            std::vector<D3D12_DESCRIPTOR_RANGE> ranges;
 
             // Cameras Constant Buffer CBV (b1, space0)
-            ranges[rangeIndex].BaseShaderRegister = 1;
-            ranges[rangeIndex].NumDescriptors = 1;
-            ranges[rangeIndex].RegisterSpace = 0;
-            ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-            ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::CBV_CAMERA;
-            rangeIndex++;
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 1;
+                range.NumDescriptors = 1;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::CBV_CAMERA;
+                ranges.push_back(range);
+            }
 
             // Lights StructuredBuffer SRV (t2, space0)
-            ranges[rangeIndex].BaseShaderRegister = 2;
-            ranges[rangeIndex].NumDescriptors = 1;
-            ranges[rangeIndex].RegisterSpace = 0;
-            ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_LIGHTS;
-            rangeIndex++;
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 2;
+                range.NumDescriptors = 1;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_LIGHTS;
+                ranges.push_back(range);
+            }
 
             // Materials StructuredBuffer SRV (t3, space0)
-            ranges[rangeIndex].BaseShaderRegister = 3;
-            ranges[rangeIndex].NumDescriptors = 1;
-            ranges[rangeIndex].RegisterSpace = 0;
-            ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_MATERIALS;
-            rangeIndex++;
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 3;
+                range.NumDescriptors = 1;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_MATERIALS;
+                ranges.push_back(range);
+            }
 
             // TLAS Instances StructuredBuffer SRV (t4, space0)
-            ranges[rangeIndex].BaseShaderRegister = 4;
-            ranges[rangeIndex].NumDescriptors = 1;
-            ranges[rangeIndex].RegisterSpace = 0;
-            ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_INSTANCES;
-            rangeIndex++;
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 4;
+                range.NumDescriptors = 1;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_TLAS_INSTANCES;
+                ranges.push_back(range);
+            }
 
-            // DDGIVolume StructuredBuffer SRV (t5, space0)
-            ranges[rangeIndex].BaseShaderRegister = 5;
-            ranges[rangeIndex].NumDescriptors = 1;
-            ranges[rangeIndex].RegisterSpace = 0;
-            ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_DDGI_VOLUMES;
-            rangeIndex++;
+            // DDGIVolume Constants StructuredBuffer SRV (t5, space0)
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 5;
+                range.NumDescriptors = 1;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_DDGI_VOLUME_CONSTS;
+                ranges.push_back(range);
+            }
 
-            // Bindless UAVs (u6, space0)
-            ranges[rangeIndex].BaseShaderRegister = 6;
-            ranges[rangeIndex].NumDescriptors = UINT_MAX;
-            ranges[rangeIndex].RegisterSpace = 0;
-            ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-            ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::UAV_START;
-            rangeIndex++;
+            // DDGIVolume Bindless Resource Indices StructuredBuffer SRV (t6, space0)
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 6;
+                range.NumDescriptors = 1;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_DDGI_VOLUME_RESOURCE_INDICES;
+                ranges.push_back(range);
+            }
+
+            // TLAS Instances RWStructuredBuffer UAV (u5, space0)
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 5;
+                range.NumDescriptors = 1;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::UAV_STB_TLAS_INSTANCES;
+                ranges.push_back(range);
+            }
+
+            // Bindless UAVs, RWTexture2D (u6, space0)
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 6;
+                range.NumDescriptors = UINT_MAX;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::UAV_TEX2D_START;
+                ranges.push_back(range);
+            }
+
+            // Bindless UAVs, RWTexture2DArray (u6, space1)
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 6;
+                range.NumDescriptors = UINT_MAX;
+                range.RegisterSpace = 1;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::UAV_TEX2DARRAY_START;
+                ranges.push_back(range);
+            }
 
             // Bindless SRVs, RaytracingAccelerationStructure (t7, space0)
-            ranges[rangeIndex].BaseShaderRegister = 7;
-            ranges[rangeIndex].NumDescriptors = UINT_MAX;
-            ranges[rangeIndex].RegisterSpace = 0;
-            ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::SRV_BVH_START;
-            rangeIndex++;
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 7;
+                range.NumDescriptors = UINT_MAX;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::SRV_TLAS_START;
+                ranges.push_back(range);
+            }
 
             // Bindless SRVs, Texture2D (t7, space1)
-            ranges[rangeIndex].BaseShaderRegister = 7;
-            ranges[rangeIndex].NumDescriptors = UINT_MAX;
-            ranges[rangeIndex].RegisterSpace = 1;
-            ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::SRV_TEXTURE2D_START;
-            rangeIndex++;
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 7;
+                range.NumDescriptors = UINT_MAX;
+                range.RegisterSpace = 1;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::SRV_TEX2D_START;
+                ranges.push_back(range);
+            }
 
-            // Bindless SRVs, ByteAddressBuffers (t7, space2)
-            ranges[rangeIndex].BaseShaderRegister = 7;
-            ranges[rangeIndex].NumDescriptors = UINT_MAX;
-            ranges[rangeIndex].RegisterSpace = 2;
-            ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::SRV_BYTEADDRESS_START;
-            rangeIndex++;
+            // Bindless SRVs, Texture2DArray (t7, space2)
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 7;
+                range.NumDescriptors = UINT_MAX;
+                range.RegisterSpace = 2;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::SRV_TEX2DARRAY_START;
+                ranges.push_back(range);
+            }
 
-            // Primary Resource Descriptor Table
-            D3D12_ROOT_PARAMETER param1 = {};
-            param1.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-            param1.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-            param1.DescriptorTable.NumDescriptorRanges = _countof(ranges);
-            param1.DescriptorTable.pDescriptorRanges = ranges;
+            // Bindless SRVs, ByteAddressBuffers (t7, space3)
+            {
+                D3D12_DESCRIPTOR_RANGE range = {};
+                range.BaseShaderRegister = 7;
+                range.NumDescriptors = UINT_MAX;
+                range.RegisterSpace = 3;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                range.OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::SRV_BYTEADDRESS_START;
+                ranges.push_back(range);
+            }
+        #endif
 
-            // Global Root Constants (b0, space0)
-            D3D12_ROOT_PARAMETER param2 = {};
-            param2.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-            param2.Constants.ShaderRegister = 0;
-            param2.Constants.RegisterSpace = 0;
-            param2.Constants.Num32BitValues = GlobalConstants::GetAlignedNum32BitValues();
+            // Root Parameter 0: Global Root Constants (b0, space0)
+            {
+                D3D12_ROOT_PARAMETER param = {};
+                param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+                param.Constants.ShaderRegister = 0;
+                param.Constants.RegisterSpace = 0;
+                param.Constants.Num32BitValues = GlobalConstants::GetAlignedNum32BitValues();
+                rootParameters.push_back(param);
+            }
 
-            // DDGI Root Constants (b0, space1)
-            D3D12_ROOT_PARAMETER param3 = {};
-            param3.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-            param3.Constants.ShaderRegister = 0;
-            param3.Constants.RegisterSpace = 1;
-            param3.Constants.Num32BitValues = DDGIConstants::GetAlignedNum32BitValues();
+            // Root Parameter 1: DDGI Root Constants (b0, space1)
+            {
+                D3D12_ROOT_PARAMETER param = {};
+                param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+                param.Constants.ShaderRegister = 0;
+                param.Constants.RegisterSpace = 1;
+                param.Constants.Num32BitValues = DDGIRootConstants::GetAlignedNum32BitValues();
+                rootParameters.push_back(param);
+            }
 
-            D3D12_ROOT_PARAMETER rootParams[4] = { param0, param1, param2, param3 };
+        #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+            // Root Parameter 2: Sampler Descriptor Table
+            {
+                // Bindless Samplers (s0, space0)
+                D3D12_DESCRIPTOR_RANGE range;
+                range.BaseShaderRegister = 0;
+                range.NumDescriptors = UINT_MAX;
+                range.RegisterSpace = 0;
+                range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                range.OffsetInDescriptorsFromTableStart = 0;
 
+                // Sampler Descriptor Table
+                D3D12_ROOT_PARAMETER param = {};
+                param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                param.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+                param.DescriptorTable.NumDescriptorRanges = 1;
+                param.DescriptorTable.pDescriptorRanges = &range;
+                rootParameters.push_back(param);
+            }
+
+            // Root Parameter 3: Resource Descriptor Table
+            {
+                D3D12_ROOT_PARAMETER param = {};
+                param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                param.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+                param.DescriptorTable.NumDescriptorRanges = (UINT)ranges.size();
+                param.DescriptorTable.pDescriptorRanges = ranges.data();
+                rootParameters.push_back(param);
+            }
+        #endif
+
+            // Describe the root signature
             D3D12_ROOT_SIGNATURE_DESC desc = {};
-            desc.NumParameters = _countof(rootParams);
-            desc.pParameters = rootParams;
+            desc.NumParameters = static_cast<UINT>(rootParameters.size());
+            desc.pParameters = rootParameters.data();
             desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+        #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_DESCRIPTOR_HEAP
+            desc.Flags |= D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
+            desc.Flags |= D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED;
+        #endif
 
             // Create the global root signature
             resources.rootSignature = CreateRootSignature(d3d, desc);
@@ -901,7 +1025,7 @@ namespace Graphics
         bool CreateRenderTargets(Globals& d3d, Resources& resources)
         {
             // Create the GBufferA (R8G8B8A8_UNORM) texture resource
-            TextureDesc desc = { static_cast<UINT>(d3d.width), static_cast<UINT>(d3d.height), 1, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+            TextureDesc desc = { static_cast<UINT>(d3d.width), static_cast<UINT>(d3d.height), 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
             if(!CreateTexture(d3d, desc, &resources.rt.GBufferA)) return false;
         #ifdef GFX_NAME_OBJECTS
             resources.rt.GBufferA->SetName(L"GBufferA");
@@ -1099,7 +1223,7 @@ namespace Graphics
         #endif
 
             // Create the lights device buffer resource
-            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, &resources.lightsSTB)) return false;
         #ifdef GFX_NAME_OBJECTS
             resources.lightsSTB->SetName(L"Lights Structured Buffer");
@@ -1158,10 +1282,17 @@ namespace Graphics
         #endif
 
             // Create the materials buffer device resource
-            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, &resources.materialsSTB)) return false;
         #ifdef GFX_NAME_OBJECTS
             resources.materialsSTB->SetName(L"Materials Structured Buffer");
+        #endif
+
+            // Determine the texture index offset
+        #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+            const int SCENE_TEXTURES_INDEX = DescriptorHeapOffsets::SRV_SCENE_TEXTURES - DescriptorHeapOffsets::SRV_TEX2D_START;
+        #elif RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_DESCRIPTOR_HEAP
+            const int SCENE_TEXTURES_INDEX = DescriptorHeapOffsets::SRV_SCENE_TEXTURES;
         #endif
 
             // Copy the materials to the upload buffer
@@ -1170,12 +1301,19 @@ namespace Graphics
             D3DCHECK(resources.materialsSTBUpload->Map(0, &readRange, reinterpret_cast<void**>(&resources.materialsSTBPtr)));
             for (UINT materialIndex = 0; materialIndex < static_cast<UINT>(scene.materials.size()); materialIndex++)
             {
+                // Get the material
                 Scenes::Material material = scene.materials[materialIndex];
-                if (material.data.albedoTexIdx > -1) material.data.albedoTexIdx += BindlessResourceOffsets::SRV_SCENE_TEXTURES;
-                if (material.data.normalTexIdx > -1) material.data.normalTexIdx += BindlessResourceOffsets::SRV_SCENE_TEXTURES;
-                if (material.data.roughnessMetallicTexIdx > -1) material.data.roughnessMetallicTexIdx += BindlessResourceOffsets::SRV_SCENE_TEXTURES;
-                if (material.data.emissiveTexIdx > -1) material.data.emissiveTexIdx += BindlessResourceOffsets::SRV_SCENE_TEXTURES;
+
+                // Add the offset to the textures (in resource arrays or on the descriptor heap)
+                if (material.data.albedoTexIdx > -1) material.data.albedoTexIdx += SCENE_TEXTURES_INDEX;
+                if (material.data.normalTexIdx > -1) material.data.normalTexIdx += SCENE_TEXTURES_INDEX;
+                if (material.data.roughnessMetallicTexIdx > -1) material.data.roughnessMetallicTexIdx += SCENE_TEXTURES_INDEX;
+                if (material.data.emissiveTexIdx > -1) material.data.emissiveTexIdx += SCENE_TEXTURES_INDEX;
+
+                // Copy the material
                 memcpy(resources.materialsSTBPtr + offset, material.GetGPUData(), Scenes::Material::GetGPUDataSize());
+
+                // Move the destination pointer to the next material
                 offset += Scenes::Material::GetGPUDataSize();
             }
             resources.materialsSTBUpload->Unmap(0, nullptr);
@@ -1216,7 +1354,7 @@ namespace Graphics
         #endif
 
             // Create the material indices device buffer resource
-            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, &resources.materialIndicesRB)) return false;
         #ifdef GFX_NAME_OBJECTS
             resources.materialIndicesRB->SetName(L"Material Indices Raw Buffer");
@@ -1273,7 +1411,7 @@ namespace Graphics
         #endif
 
             // Create the TLAS instance device buffer resource
-            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, &resources.tlas.instances)) return false;
         #ifdef GFX_NAME_OBJECTS
             resources.tlas.instances->SetName(L"TLAS Instance Descriptors Buffer");
@@ -1308,7 +1446,7 @@ namespace Graphics
             srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
             D3D12_CPU_DESCRIPTOR_HANDLE handle;
-            handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::STB_INSTANCES * resources.srvDescHeapEntrySize);
+            handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::STB_TLAS_INSTANCES * resources.srvDescHeapEntrySize);
             d3d.device->CreateShaderResourceView(resources.tlas.instances, &srvDesc, handle);
 
             return true;
@@ -1494,7 +1632,7 @@ namespace Graphics
             srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
             D3D12_CPU_DESCRIPTOR_HANDLE handle;
-            handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_BVH * resources.srvDescHeapEntrySize);
+            handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_SCENE_TLAS * resources.srvDescHeapEntrySize);
             d3d.device->CreateShaderResourceView(nullptr, &srvDesc, handle);
 
             return true;
@@ -1591,30 +1729,10 @@ namespace Graphics
         //----------------------------------------------------------------------------------------------------------
 
         /**
-         * Write an image to disk from the given D3D12 resource.
+         * Write an image (or images) to disk from the given D3D12 resource.
          */
         bool WriteResourceToDisk(Globals& d3d, std::string file, ID3D12Resource* pResource, D3D12_RESOURCE_STATES state)
         {
-            // Get the resource descriptor
-            const D3D12_RESOURCE_DESC desc = pResource->GetDesc();
-
-            // Get the row count, pitch, and size of the top mip level
-            UINT64 totalResourceSize = 0;
-            UINT64 fpRowPitch = 0;
-            UINT fpRowCount = 0;
-            d3d.device->GetCopyableFootprints(
-                &desc,
-                0,
-                1,
-                0,
-                nullptr,
-                &fpRowCount,
-                &fpRowPitch,
-                &totalResourceSize);
-
-            // Round up the srcPitch to multiples of 256
-            UINT64 dstRowPitch = (fpRowPitch + 255) & ~0xFF;
-
             // Get the heap properties
             D3D12_HEAP_PROPERTIES sourceHeapProperties = {};
             D3D12_HEAP_FLAGS sourceHeapFlags = {};
@@ -1632,7 +1750,27 @@ namespace Graphics
             ID3D12Fence* fence = nullptr;
             D3DCHECK(d3d.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
 
-            // Describe the read-back buffer resource
+            // Get the resource descriptor
+            const D3D12_RESOURCE_DESC desc = pResource->GetDesc();
+
+            // Get the row count, row size in bytes, and size in bytes of the (sub)resource
+            UINT numRows;
+            UINT64 rowSizeInBytes;
+            UINT64 sizeInBytes;
+            d3d.device->GetCopyableFootprints(
+                &desc,
+                0,
+                1,
+                0,
+                nullptr,
+                &numRows,
+                &rowSizeInBytes,
+                &sizeInBytes);
+
+            // Round up the source row size (pitch) to multiples of 256B
+            UINT64 dstRowPitch = (rowSizeInBytes + 255) & ~0xFF;
+
+            // Describe the staging (read-back) buffer resource
             D3D12_RESOURCE_DESC bufferDesc = {};
             bufferDesc.Alignment = desc.Alignment;
             bufferDesc.DepthOrArraySize = 1;
@@ -1646,60 +1784,58 @@ namespace Graphics
             bufferDesc.SampleDesc.Count = 1;
             bufferDesc.SampleDesc.Quality = 0;
 
-            // Create a staging texture resource
-            ID3D12Resource* pStaging = nullptr;
-            D3DCHECK(d3d.device->CreateCommittedResource(
-                &readbackHeapProps,
-                D3D12_HEAP_FLAG_NONE,
-                &bufferDesc,
-                D3D12_RESOURCE_STATE_COPY_DEST,
-                nullptr,
-                IID_PPV_ARGS(&pStaging)));
+            // Transition the source texture resource to a copy source
+            D3D12_RESOURCE_BARRIER barrier = {};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Transition.pResource = pResource;
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            barrier.Transition.StateBefore = state;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
 
+            commandList->ResourceBarrier(1, &barrier);
+
+            // Loop over the subresources (array slices), copying them from the GPU
+            std::vector<ID3D12Resource*> stagingResources;
+            for(UINT subresourceIndex = 0; subresourceIndex < desc.DepthOrArraySize; subresourceIndex++)
             {
-                // Transition the staging texture resource to a copy source
-                D3D12_RESOURCE_BARRIER barrier = {};
-                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-                barrier.Transition.pResource = pResource;
-                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-                barrier.Transition.StateBefore = state;
-                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-                commandList->ResourceBarrier(1, &barrier);
+                // Create a staging texture resource
+                stagingResources.emplace_back(nullptr);
+                D3DCHECK(d3d.device->CreateCommittedResource(
+                    &readbackHeapProps,
+                    D3D12_HEAP_FLAG_NONE,
+                    &bufferDesc,
+                    D3D12_RESOURCE_STATE_COPY_DEST,
+                    nullptr,
+                    IID_PPV_ARGS(&stagingResources[subresourceIndex])));
+
+                // Describe the copy footprint of the resource
+                D3D12_PLACED_SUBRESOURCE_FOOTPRINT subresource = {};
+                subresource.Footprint.Width = static_cast<UINT>(desc.Width);
+                subresource.Footprint.Height = desc.Height;
+                subresource.Footprint.Depth = 1;
+                subresource.Footprint.RowPitch = static_cast<UINT>(dstRowPitch);
+                subresource.Footprint.Format = desc.Format;
+
+                // Describe the copy source resource
+                D3D12_TEXTURE_COPY_LOCATION copySrc = {};
+                copySrc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                copySrc.pResource = pResource;
+                copySrc.SubresourceIndex = subresourceIndex;
+
+                // Describe the copy destination resource
+                D3D12_TEXTURE_COPY_LOCATION copyDest = {};
+                copyDest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                copyDest.pResource = stagingResources[subresourceIndex];
+                copyDest.PlacedFootprint = subresource;
+
+                // Schedule the texture copy
+                commandList->CopyTextureRegion(&copyDest, 0, 0, 0, &copySrc, nullptr);
             }
 
-            // Describe the copy footprint of the resource
-            D3D12_PLACED_SUBRESOURCE_FOOTPRINT bufferFootprint = {};
-            bufferFootprint.Footprint.Width = static_cast<UINT>(desc.Width);
-            bufferFootprint.Footprint.Height = desc.Height;
-            bufferFootprint.Footprint.Depth = 1;
-            bufferFootprint.Footprint.RowPitch = static_cast<UINT>(dstRowPitch);
-            bufferFootprint.Footprint.Format = desc.Format;
-
-            // Describe the copy source resource
-            D3D12_TEXTURE_COPY_LOCATION copySrc = {};
-            copySrc.pResource = pResource;
-            copySrc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            copySrc.SubresourceIndex = 0;
-
-            // Describe the copy destination resource
-            D3D12_TEXTURE_COPY_LOCATION copyDest = {};
-            copyDest.pResource = pStaging;
-            copyDest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-            copyDest.PlacedFootprint = bufferFootprint;
-
-            // Schedule the texture copy
-            commandList->CopyTextureRegion(&copyDest, 0, 0, 0, &copySrc, nullptr);
-
-            {
-                // Transition the staging texture resource to the specified state
-                D3D12_RESOURCE_BARRIER barrier = {};
-                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-                barrier.Transition.pResource = pResource;
-                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
-                barrier.Transition.StateAfter = state;
-                commandList->ResourceBarrier(1, &barrier);
-            }
+            // Transition the source texture resource to the specified state
+            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+            barrier.Transition.StateAfter = state;
+            commandList->ResourceBarrier(1, &barrier);
 
             // Close the command list
             D3DCHECK(commandList->Close());
@@ -1714,24 +1850,34 @@ namespace Graphics
             while (fence->GetCompletedValue() < 1)
                 SwitchToThread();
 
-            // Map the staging texture resource
-            unsigned char* pData = nullptr;
-            UINT64 imageSize = dstRowPitch * fpRowCount;
-            D3D12_RANGE readRange = { 0, static_cast<SIZE_T>(imageSize) };
-            D3DCHECK(pStaging->Map(0, &readRange, (void**)&pData));
+            // Copy the staging resources and write them to disk
+            bool result = true;
+            for (UINT subresourceIndex = 0; subresourceIndex < desc.DepthOrArraySize; subresourceIndex++)
+            {
+                // Map the staging texture resource
+                UINT8* pData = nullptr;
+                UINT64 imageSize = dstRowPitch * numRows;
+                D3D12_RANGE readRange = { 0, static_cast<size_t>(imageSize) };
+                D3DCHECK(stagingResources[subresourceIndex]->Map(0, &readRange, (void**)&pData));
 
-            // Convert the resource to RGBA8 UNORM (using WIC)
-            std::vector<unsigned char> converted(desc.Width * desc.Height * ImageCapture::NumChannels);
-            D3DCHECK(ImageCapture::ConvertTextureResource(desc, imageSize, dstRowPitch, pData, converted));
+                // Convert the resource to RGBA8 UNORM (using WIC)
+                std::vector<unsigned char> converted(desc.Width * desc.Height * ImageCapture::NumChannels);
+                D3DCHECK(ImageCapture::ConvertTextureResource(desc, imageSize, dstRowPitch, pData, converted));
 
-            // Write the resource to disk as a PNG file (using STB)
-            bool result = ImageCapture::CapturePng(file, static_cast<uint32_t>(desc.Width), static_cast<uint32_t>(desc.Height), converted.data());
+                // Write the resource to disk as a PNG file (using STB)
+                std::string filename = file;
+                if(desc.DepthOrArraySize > 1) filename += "-Layer-" + std::to_string(subresourceIndex);
+                filename.append(".png");
+                result &= ImageCapture::CapturePng(filename, static_cast<uint32_t>(desc.Width), static_cast<uint32_t>(desc.Height), converted.data());
 
-            // Unmap the staging texture
-            pStaging->Unmap(0, nullptr);
+                // Unmap the staging texture
+                stagingResources[subresourceIndex]->Unmap(0, nullptr);
+
+                // Release the staging texture
+                SAFE_RELEASE(stagingResources[subresourceIndex]);
+            }
 
             // Clean up
-            SAFE_RELEASE(pStaging);
             SAFE_RELEASE(fence);
             SAFE_RELEASE(commandList);
             SAFE_RELEASE(commandAlloc);
@@ -1826,7 +1972,7 @@ namespace Graphics
          */
         bool CreateBuffer(Globals& d3d, const BufferDesc& info, ID3D12Resource** ppResource)
         {
-            // Describe the upload buffer resource
+            // Describe the buffer resource
             D3D12_RESOURCE_DESC desc = {};
             desc.Alignment = 0;
             desc.Height = 1;
@@ -1867,7 +2013,7 @@ namespace Graphics
             desc.Height = info.height;
             desc.MipLevels = info.mips;
             desc.Format = info.format;
-            desc.DepthOrArraySize = 1;
+            desc.DepthOrArraySize = (UINT16)info.arraySize;
             desc.SampleDesc.Count = 1;
             desc.SampleDesc.Quality = 0;
             desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -1876,6 +2022,7 @@ namespace Graphics
 
             // Setup the optimized clear value
             D3D12_CLEAR_VALUE clear = {};
+            clear.Color[3] = 1.f;
             clear.Format = info.format;
 
             // Create the texture resource
@@ -2372,7 +2519,7 @@ namespace Graphics
             return !FAILED(hr);
         }
 
-        /*
+        /**
          * Wait for pending GPU work to complete.
          */
         bool WaitForGPU(Globals& d3d)
@@ -2410,42 +2557,50 @@ namespace Graphics
     #ifdef GFX_PERF_INSTRUMENTATION
         void BeginFrame(Globals& d3d, GlobalResources& resources, Instrumentation::Performance& performance)
         {
-            d3d.cmdList->EndQuery(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, 0);
+            d3d.cmdList->EndQuery(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, performance.gpuTimes[0]->GetGPUQueryBeginIndex());
         }
 
         void EndFrame(Globals& d3d, GlobalResources& resources, Instrumentation::Performance& performance)
         {
-            d3d.cmdList->EndQuery(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, 1);
+            d3d.cmdList->EndQuery(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, performance.gpuTimes[0]->GetGPUQueryEndIndex());
         }
 
         void ResolveTimestamps(Globals& d3d, GlobalResources& resources, Instrumentation::Performance& performance)
         {
-            d3d.cmdList->ResolveQueryData(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, 0, performance.GetNumGPUQueries(), resources.timestamps, 0);
+            d3d.cmdList->ResolveQueryData(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, 0, performance.GetNumActiveGPUQueries(), resources.timestamps, 0);
         }
 
         bool UpdateTimestamps(Globals& d3d, GlobalResources& resources, Instrumentation::Performance& performance)
         {
             std::vector<UINT64> queries;
-            queries.resize(performance.GetNumGPUQueries());
+            queries.resize(performance.GetNumActiveGPUQueries());
 
             // Copy the timestamps from the read-back buffer
             UINT64* pData = nullptr;
             D3D12_RANGE readRange = {};
             D3DCHECK(resources.timestamps->Map(0, &readRange, reinterpret_cast<void**>(&pData)));
-            memcpy(queries.data(), pData, sizeof(UINT64) * performance.GetNumGPUQueries());
+            memcpy(queries.data(), pData, sizeof(UINT64) * performance.GetNumActiveGPUQueries());
             resources.timestamps->Unmap(0, nullptr);
 
-            // Compute the elapsed gpu time in milliseconds
-            UINT64 elapsedTicks;
-            for (UINT timestampIndex = 0; timestampIndex < static_cast<UINT>(performance.gpuTimes.size()); timestampIndex++)
+            // Update the GPU performance stats for the active GPU timestamp queries
+            UINT64 elapsedTicks = 0;
+            for (UINT statIndex = 0; statIndex < static_cast<UINT>(performance.gpuTimes.size()); statIndex++)
             {
-                Instrumentation::Stat*& s = performance.gpuTimes[timestampIndex];
-                if (queries[s->GetQueryBeginIndex()] == 0) continue;
+                // Get the stat
+                Instrumentation::Stat*& s = performance.gpuTimes[statIndex];
 
-                elapsedTicks = queries[s->GetQueryEndIndex()] - queries[s->GetQueryBeginIndex()];
+                // Skip the stat if it wasn't active this frame
+                if(s->gpuQueryStartIndex == -1) continue;
+
+                // Compute the elapsed GPU time in milliseconds
+                elapsedTicks = queries[s->gpuQueryEndIndex] - queries[s->gpuQueryStartIndex];
                 s->elapsed = (1000 * static_cast<double>(elapsedTicks)) / static_cast<double>(resources.timestampFrequency);
                 Instrumentation::Resolve(s);
+
+                // Reset the GPU query indices for a new frame
+                s->ResetGPUQueryIndices();
             }
+            Instrumentation::Stat::ResetGPUQueryCount();
 
             return true;
         }
@@ -2465,7 +2620,7 @@ namespace Graphics
          */
         bool WriteBackBufferToDisk(Globals& d3d, std::string directory)
         {
-            return WriteResourceToDisk(d3d, directory + "/backbuffer.png", d3d.backBuffer[d3d.frameIndex], D3D12_RESOURCE_STATE_PRESENT);
+            return WriteResourceToDisk(d3d, directory + "/R-BackBuffer", d3d.backBuffer[d3d.frameIndex], D3D12_RESOURCE_STATE_PRESENT);
         }
     }
 

@@ -117,7 +117,7 @@ namespace ImageCapture
         }
 
         // Initialize the WIC converter
-        hr = converter->Initialize(bitmap, GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeMedianCut);
+        hr = converter->Initialize(bitmap, GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
         if(FAILED(hr))
         {
             SAFE_RELEASE(converter);

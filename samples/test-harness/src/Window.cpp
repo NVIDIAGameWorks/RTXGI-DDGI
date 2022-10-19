@@ -10,8 +10,6 @@
 
 #include "Window.h"
 
-//#include "UI.h" // previously for the WinProc
-
 #include <stb_image.h>
 
 using namespace DirectX;
@@ -27,64 +25,16 @@ namespace Windows
     //----------------------------------------------------------------------------------------------------------
 
     /**
-    * Handle frame buffer resize events.
-    */
+     * Handle frame buffer resize events.
+     */
     void onFramebufferResize(GLFWwindow* window, int width, int height)
     {
         state = EWindowEvent::RESIZE;
     }
 
     /**
-     * Windows message loop.
+     * Create a window.
      */
-    /*LRESULT CALLBACK WndProc(HWND hWnd, uint32_t message, WPARAM wParam, LPARAM lParam)
-    {
-        if (Graphics::UI::WndProc(hWnd, message, wParam, lParam)) return true;
-
-        switch (message)
-        {
-        case WM_SIZE:
-            state = EWindowEvent::RESIZE;
-            break;
-        case WM_SYSCOMMAND:
-            if ((wParam & 0xfff0) == SC_KEYMENU) return 0; // Disable ALT application menu
-            break;
-        case WM_ACTIVATEAPP:
-            Keyboard::ProcessMessage(message, wParam, lParam);
-            Mouse::ProcessMessage(message, wParam, lParam);
-            break;
-        case WM_INPUT:
-        case WM_MOUSEMOVE:
-        case WM_LBUTTONDOWN:
-        case WM_LBUTTONUP:
-        case WM_RBUTTONDOWN:
-        case WM_RBUTTONUP:
-        case WM_MBUTTONDOWN:
-        case WM_MBUTTONUP:
-        case WM_MOUSEWHEEL:
-        case WM_XBUTTONDOWN:
-        case WM_XBUTTONUP:
-        case WM_MOUSEHOVER:
-            if (Graphics::UI::WantsMouseCapture()) return false;
-            Mouse::ProcessMessage(message, wParam, lParam);
-            break;
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
-        case WM_KEYUP:
-        case WM_SYSKEYUP:
-            Keyboard::ProcessMessage(message, wParam, lParam);
-            break;
-        case WM_CLOSE:
-            state = EWindowEvent::QUIT;
-            PostQuitMessage(0);
-            break;
-        }
-        return DefWindowProc(hWnd, message, wParam, lParam);
-    }*/
-
-    /**
-    * Create a window.
-    */
     bool Create(Configs::Config& config, GLFWwindow*& window)
     {
         config.app.title.append(", ");

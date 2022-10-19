@@ -34,8 +34,8 @@ namespace Graphics
 
         #if !RTXGI_DDGI_RESOURCE_MANAGEMENT
             /**
-            * Create resources used by a DDGIVolume.
-            */
+             * Create the resources used by a DDGIVolume.
+             */
             bool CreateDDGIVolumeResources(
                 Globals& d3d,
                 GlobalResources& d3dResources,
@@ -48,7 +48,9 @@ namespace Graphics
                 log << "\tCreating resources for DDGIVolume: \"" << volumeDesc.name << "\"...";
                 std::flush(log);
 
-                // Create the volume's textures
+                UINT arraySize = 0;
+
+                // Create the texture arrays
                 {
                     UINT width = 0;
                     UINT height = 0;
@@ -56,11 +58,11 @@ namespace Graphics
 
                     // Probe ray data texture
                     {
-                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::RayData, width, height);
+                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::RayData, width, height, arraySize);
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::RayData, volumeDesc.probeRayDataFormat);
 
-                        TextureDesc desc = { width, height, 1, format, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
-                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeRayData), "create DDGIVolume ray data texture!", log);
+                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeRayData), "create DDGIVolume ray data texture array!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Ray Data";
                         volumeResources.unmanaged.probeRayData->SetName(name.c_str());
@@ -69,11 +71,11 @@ namespace Graphics
 
                     // Probe irradiance texture
                     {
-                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Irradiance, width, height);
+                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Irradiance, width, height, arraySize);
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Irradiance, volumeDesc.probeIrradianceFormat);
 
-                        TextureDesc desc = { width, height, 1, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET };
-                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeIrradiance), "create DDGIVolume probe irradiance texture!", log);
+                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET };
+                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeIrradiance), "create DDGIVolume probe irradiance texture array!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Irradiance";
                         volumeResources.unmanaged.probeIrradiance->SetName(name.c_str());
@@ -82,11 +84,11 @@ namespace Graphics
 
                     // Probe distance texture
                     {
-                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Distance, width, height);
+                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Distance, width, height, arraySize);
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Distance, volumeDesc.probeDistanceFormat);
 
-                        TextureDesc desc = { width, height, 1, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET };
-                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeDistance), "create DDGIVolume probe distance texture!", log);
+                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET };
+                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeDistance), "create DDGIVolume probe distance texture array!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Distance";
                         volumeResources.unmanaged.probeDistance->SetName(name.c_str());
@@ -95,12 +97,12 @@ namespace Graphics
 
                     // Probe data texture
                     {
-                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Data, width, height);
-                        if (width <= 0) return false;
+                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Data, width, height, arraySize);
+                        if (width <= 0 || height <= 0) return false;
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, volumeDesc.probeDataFormat);
 
-                        TextureDesc desc = { width, height, 1, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
-                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeData), "create DDGIVolume probe data texture!", log);
+                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeData), "create DDGIVolume probe data texture array!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Data";
                         volumeResources.unmanaged.probeData->SetName(name.c_str());
@@ -108,93 +110,100 @@ namespace Graphics
                     }
                 }
 
-                // Create the volume's resource descriptors
+                // Create the resource descriptors
                 {
-                    D3D12_CPU_DESCRIPTOR_HANDLE srvHandle, uavHandle, rtvHandle;
-                    srvHandle = uavHandle = volumeResources.descriptorHeapDesc.heap->GetCPUDescriptorHandleForHeapStart();
-                    rtvHandle = resources.rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+                    D3D12_CPU_DESCRIPTOR_HANDLE srvHandle, uavHandle;
+                    D3D12_CPU_DESCRIPTOR_HANDLE heapStart = volumeResources.descriptorHeap.resources->GetCPUDescriptorHandleForHeapStart();
+                    D3D12_CPU_DESCRIPTOR_HANDLE rtvHeapStart = resources.rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 
                     UINT rtvDescSize = d3d.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
-                    // Move to the start index of the volume's UAVs and SRVs on the descriptor heap
-                    uavHandle.ptr += (volumeResources.descriptorHeapDesc.uavOffset * d3dResources.srvDescHeapEntrySize);
-                    srvHandle.ptr += (volumeResources.descriptorHeapDesc.srvOffset * d3dResources.srvDescHeapEntrySize);
+                    // Describe resource views (RTVs are used for clearing the texture arrays)
+                    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+                    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+                    rtvDesc.Texture2DArray.ArraySize = arraySize;
 
                     D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-                    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+                    uavDesc.Texture2DArray.ArraySize = arraySize;
 
                     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-                    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-                    srvDesc.Texture2D.MipLevels = 1;
+                    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+                    srvDesc.Texture2DArray.ArraySize = arraySize;
+                    srvDesc.Texture2DArray.MipLevels = 1;
                     srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-                    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-                    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+                    // Get the volume's descriptor heap info
+                    const DDGIVolumeDescriptorHeapDesc& heapDesc = volumeResources.descriptorHeap;
 
-                    // Probe ray data texture descriptors
+                    // Get the volume's resource indices (on the descriptor heap)
+                    const DDGIVolumeResourceIndices& resourceIndices = heapDesc.resourceIndices;
+
+                    // Ray Data texture descriptors
                     {
+                        uavHandle.ptr = heapStart.ptr + (resourceIndices.rayDataUAVIndex * heapDesc.entrySize);
+                        srvHandle.ptr = heapStart.ptr + (resourceIndices.rayDataSRVIndex * heapDesc.entrySize);
+
                         srvDesc.Format = uavDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::RayData, volumeDesc.probeRayDataFormat);
                         d3d.device->CreateUnorderedAccessView(volumeResources.unmanaged.probeRayData, nullptr, &uavDesc, uavHandle);
                         d3d.device->CreateShaderResourceView(volumeResources.unmanaged.probeRayData, &srvDesc, srvHandle);
                     }
 
-                    uavHandle.ptr += d3dResources.srvDescHeapEntrySize;
-                    srvHandle.ptr += d3dResources.srvDescHeapEntrySize;
-
-                    // Probe irradiance texture descriptors
+                    // Probe Irradiance texture array descriptors
                     {
+                        uavHandle.ptr = heapStart.ptr + (resourceIndices.probeIrradianceUAVIndex * heapDesc.entrySize);
+                        srvHandle.ptr = heapStart.ptr + (resourceIndices.probeIrradianceSRVIndex * heapDesc.entrySize);
+                        volumeResources.unmanaged.probeIrradianceRTV.ptr = rtvHeapStart.ptr + (volumeDesc.index * GetDDGIVolumeNumRTVDescriptors() * rtvDescSize);
+
                         srvDesc.Format = uavDesc.Format = rtvDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Irradiance, volumeDesc.probeIrradianceFormat);
                         d3d.device->CreateUnorderedAccessView(volumeResources.unmanaged.probeIrradiance, nullptr, &uavDesc, uavHandle);
                         d3d.device->CreateShaderResourceView(volumeResources.unmanaged.probeIrradiance, &srvDesc, srvHandle);
-
-                        volumeResources.unmanaged.probeIrradianceRTV.ptr = rtvHandle.ptr + (volumeDesc.index * GetDDGIVolumeNumRTVDescriptors() * rtvDescSize);
                         d3d.device->CreateRenderTargetView(volumeResources.unmanaged.probeIrradiance, &rtvDesc, volumeResources.unmanaged.probeIrradianceRTV);
                     }
 
-                    uavHandle.ptr += d3dResources.srvDescHeapEntrySize;
-                    srvHandle.ptr += d3dResources.srvDescHeapEntrySize;
-                    rtvHandle.ptr += d3d.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-                    // Probe distance texture descriptors
+                    // Probe Distance texture array descriptors
                     {
+                        uavHandle.ptr = heapStart.ptr + (resourceIndices.probeDistanceUAVIndex * heapDesc.entrySize);
+                        srvHandle.ptr = heapStart.ptr + (resourceIndices.probeDistanceSRVIndex * heapDesc.entrySize);
+                        volumeResources.unmanaged.probeDistanceRTV.ptr = rtvHeapStart.ptr + ((volumeDesc.index * GetDDGIVolumeNumRTVDescriptors() + 1) * rtvDescSize);
+
                         srvDesc.Format = uavDesc.Format = rtvDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Distance, volumeDesc.probeDistanceFormat);
                         d3d.device->CreateUnorderedAccessView(volumeResources.unmanaged.probeDistance, nullptr, &uavDesc, uavHandle);
                         d3d.device->CreateShaderResourceView(volumeResources.unmanaged.probeDistance, &srvDesc, srvHandle);
-
-                        volumeResources.unmanaged.probeDistanceRTV.ptr = volumeResources.unmanaged.probeIrradianceRTV.ptr + rtvDescSize;
                         d3d.device->CreateRenderTargetView(volumeResources.unmanaged.probeDistance, &rtvDesc, volumeResources.unmanaged.probeDistanceRTV);
                     }
 
-                    uavHandle.ptr += d3dResources.srvDescHeapEntrySize;
-                    srvHandle.ptr += d3dResources.srvDescHeapEntrySize;
-
-                    // Probe data texture descriptors
+                    // Probe Data texture array descriptors
                     {
+                        uavHandle.ptr = heapStart.ptr + (resourceIndices.probeDataUAVIndex * heapDesc.entrySize);
+                        srvHandle.ptr = heapStart.ptr + (resourceIndices.probeDataSRVIndex * heapDesc.entrySize);
+
                         srvDesc.Format = uavDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, volumeDesc.probeDataFormat);
                         d3d.device->CreateUnorderedAccessView(volumeResources.unmanaged.probeData, nullptr, &uavDesc, uavHandle);
                         d3d.device->CreateShaderResourceView(volumeResources.unmanaged.probeData, &srvDesc, srvHandle);
                     }
                 }
 
-            #if !RTXGI_DDGI_BINDLESS_RESOURCES
-                // Create the volume's root signature (if not using bindless with a global root signature)
+                // Set or create the root signature
                 {
-                    ID3DBlob* signature = nullptr;
-                    if (!GetDDGIVolumeRootSignatureDesc(volumeResources.descriptorHeapDesc.constsOffset, volumeResources.descriptorHeapDesc.uavOffset, signature)) return false;
+            #if RTXGI_DDGI_BINDLESS_RESOURCES
+                // Pass a pointer to the global root signature
+                volumeResources.unmanaged.rootSignature = d3dResources.rootSignature;
+            #else
+                // Create the volume's root signature (when not using bindless and the global root signature)
+                ID3DBlob* signature = nullptr;
+                if (!GetDDGIVolumeRootSignatureDesc(volumeResources.descriptorHeap, signature)) return false;
 
-                    D3DCHECK(d3d.device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&volumeResources.unmanaged.rootSignature)));
-                    SAFE_RELEASE(signature);
+                D3DCHECK(d3d.device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&volumeResources.unmanaged.rootSignature)));
+                SAFE_RELEASE(signature);
                 #ifdef GFX_NAME_OBJECTS
                     std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Root Signature ";
                     volumeResources.unmanaged.rootSignature->SetName(name.c_str());
                 #endif
-                }
-            #else
-                // Pass a pointer to the global root signature (bindless)
-                volumeResources.unmanaged.rootSignature = d3dResources.rootSignature;
             #endif
+                }
 
-                // Create the volume's pipeline state objects
+                // Create the pipeline state objects
                 {
                     D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
                     desc.pRootSignature = volumeResources.unmanaged.rootSignature;
@@ -221,54 +230,6 @@ namespace Graphics
                     #ifdef GFX_NAME_OBJECTS
                         std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Distance Blending PSO";
                         volumeResources.unmanaged.probeBlendingDistancePSO->SetName(name.c_str());
-                    #endif
-                        shaderIndex++;
-                    }
-
-                    // Border Row Update (Irradiance) PSO
-                    {
-                        desc.CS.BytecodeLength = shaders[shaderIndex].bytecode->GetBufferSize();
-                        desc.CS.pShaderBytecode = shaders[shaderIndex].bytecode->GetBufferPointer();
-                        D3DCHECK(d3d.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&volumeResources.unmanaged.probeBorderRowUpdateIrradiancePSO)));
-                    #ifdef GFX_NAME_OBJECTS
-                        std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Border Row Update (Irradiance) PSO";
-                        volumeResources.unmanaged.probeBorderRowUpdateIrradiancePSO->SetName(name.c_str());
-                    #endif
-                        shaderIndex++;
-                    }
-
-                    // Border Column Update (Irradiance) PSO
-                    {
-                        desc.CS.BytecodeLength = shaders[shaderIndex].bytecode->GetBufferSize();
-                        desc.CS.pShaderBytecode = shaders[shaderIndex].bytecode->GetBufferPointer();
-                        D3DCHECK(d3d.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&volumeResources.unmanaged.probeBorderColumnUpdateIrradiancePSO)));
-                    #ifdef GFX_NAME_OBJECTS
-                        std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Border Column Update (Irradiance) PSO";
-                        volumeResources.unmanaged.probeBorderColumnUpdateIrradiancePSO->SetName(name.c_str());
-                    #endif
-                        shaderIndex++;
-                    }
-
-                    // Border Row Update (Distance) PSO
-                    {
-                        desc.CS.BytecodeLength = shaders[shaderIndex].bytecode->GetBufferSize();
-                        desc.CS.pShaderBytecode = shaders[shaderIndex].bytecode->GetBufferPointer();
-                        D3DCHECK(d3d.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&volumeResources.unmanaged.probeBorderRowUpdateDistancePSO)));
-                    #ifdef GFX_NAME_OBJECTS
-                        std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Border Row Update (Distance) PSO";
-                        volumeResources.unmanaged.probeBorderRowUpdateDistancePSO->SetName(name.c_str());
-                    #endif
-                        shaderIndex++;
-                    }
-
-                    // Border Column Update (Distance) PSO
-                    {
-                        desc.CS.BytecodeLength = shaders[shaderIndex].bytecode->GetBufferSize();
-                        desc.CS.pShaderBytecode = shaders[shaderIndex].bytecode->GetBufferPointer();
-                        D3DCHECK(d3d.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&volumeResources.unmanaged.probeBorderColumnUpdateDistancePSO)));
-                    #ifdef GFX_NAME_OBJECTS
-                        std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Border Column Update (Distance) PSO";
-                        volumeResources.unmanaged.probeBorderColumnUpdateDistancePSO->SetName(name.c_str());
                     #endif
                         shaderIndex++;
                     }
@@ -347,10 +308,6 @@ namespace Graphics
                 // Release PSOs
                 if (volume->GetProbeBlendingIrradiancePSO()) volume->GetProbeBlendingIrradiancePSO()->Release();
                 if (volume->GetProbeBlendingDistancePSO()) volume->GetProbeBlendingDistancePSO()->Release();
-                if (volume->GetProbeBorderRowUpdateIrradiancePSO()) volume->GetProbeBorderRowUpdateIrradiancePSO()->Release();
-                if (volume->GetProbeBorderColumnUpdateIrradiancePSO()) volume->GetProbeBorderColumnUpdateIrradiancePSO()->Release();
-                if (volume->GetProbeBorderRowUpdateDistancePSO()) volume->GetProbeBorderRowUpdateDistancePSO()->Release();
-                if (volume->GetProbeBorderColumnUpdateDistancePSO()) volume->GetProbeBorderColumnUpdateDistancePSO()->Release();
                 if (volume->GetProbeRelocationPSO()) volume->GetProbeRelocationPSO()->Release();
                 if (volume->GetProbeRelocationResetPSO()) volume->GetProbeRelocationResetPSO()->Release();
                 if (volume->GetProbeClassificationPSO()) volume->GetProbeClassificationPSO()->Release();
@@ -359,7 +316,7 @@ namespace Graphics
                 // Clear pointers
                 volume->Destroy();
             }
-        #endif
+        #endif // !RTXGI_DDGI_RESOURCE_MANAGEMENT
 
             //----------------------------------------------------------------------------------------------------------
             // DDGIVolume Creation Helper Functions
@@ -370,7 +327,7 @@ namespace Graphics
              */
             void GetDDGIVolumeDesc(const Configs::DDGIVolume& config, DDGIVolumeDesc& volumeDesc)
             {
-                volumeDesc.name = config.name;
+                volumeDesc.name = config.name.c_str();
                 volumeDesc.index = config.index;
                 volumeDesc.rngSeed = config.rngSeed;
                 volumeDesc.origin = { config.origin.x, config.origin.y, config.origin.z };
@@ -379,7 +336,9 @@ namespace Graphics
                 volumeDesc.probeCounts = { config.probeCounts.x, config.probeCounts.y, config.probeCounts.z, };
                 volumeDesc.probeNumRays = config.probeNumRays;
                 volumeDesc.probeNumIrradianceTexels = config.probeNumIrradianceTexels;
+                volumeDesc.probeNumIrradianceInteriorTexels = (config.probeNumIrradianceTexels - 2);
                 volumeDesc.probeNumDistanceTexels = config.probeNumDistanceTexels;
+                volumeDesc.probeNumDistanceInteriorTexels = (config.probeNumDistanceTexels - 2);
                 volumeDesc.probeHysteresis = config.probeHysteresis;
                 volumeDesc.probeNormalBias = config.probeNormalBias;
                 volumeDesc.probeViewBias = config.probeViewBias;
@@ -388,6 +347,7 @@ namespace Graphics
                 volumeDesc.probeBrightnessThreshold = config.probeBrightnessThreshold;
 
                 volumeDesc.showProbes = config.showProbes;
+                volumeDesc.probeVisType = config.probeVisType;
 
                 volumeDesc.probeRayDataFormat = config.textureFormats.rayDataFormat;
                 volumeDesc.probeIrradianceFormat = config.textureFormats.irradianceFormat;
@@ -399,14 +359,8 @@ namespace Graphics
 
                 volumeDesc.probeClassificationEnabled = config.probeClassificationEnabled;
 
-                if (config.infiniteScrollingEnabled)
-                {
-                    volumeDesc.movementType = EDDGIVolumeMovementType::Scrolling;
-                }
-                else
-                {
-                    volumeDesc.movementType = EDDGIVolumeMovementType::Default;
-                }
+                if (config.infiniteScrollingEnabled) volumeDesc.movementType = EDDGIVolumeMovementType::Scrolling;
+                else volumeDesc.movementType = EDDGIVolumeMovementType::Default;
             }
 
             /**
@@ -429,30 +383,58 @@ namespace Graphics
                 msg = "failed to compile shaders for DDGIVolume[" + std::to_string(volumeDesc.index) + "] (\"" + volumeDesc.name + "\")!\n";
                 CHECK(Graphics::DDGI::CompileDDGIVolumeShaders(d3d, volumeDesc, volumeShaders, false, log), msg.c_str(), log);
 
-                // Descriptor heap pointer
-                volumeResources.descriptorHeapDesc.heap = d3dResources.srvDescHeap;
+                // Set the descriptor heap pointer and entry size
+                DDGIVolumeDescriptorHeapDesc& descHeap = volumeResources.descriptorHeap;
+                descHeap.resources = d3dResources.srvDescHeap;
+            #if RTXGI_DDGI_BINDLESS_RESOURCES
+                descHeap.samplers = d3dResources.samplerDescHeap;
+            #endif
+                descHeap.entrySize = d3dResources.srvDescHeapEntrySize;
 
-                // Set the offset of the DDGIVolume constants structured buffer on the descriptor heap
-                volumeResources.descriptorHeapDesc.constsOffset = DescriptorHeapOffsets::STB_DDGI_VOLUMES;
+                // Set the volume's resource indices on the descriptor heap
+                descHeap.constantsIndex = DescriptorHeapOffsets::STB_DDGI_VOLUME_CONSTS;
+                descHeap.resourceIndicesIndex = DescriptorHeapOffsets::STB_DDGI_VOLUME_RESOURCE_INDICES;
+                descHeap.resourceIndices.rayDataUAVIndex = DescriptorHeapOffsets::UAV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors());
+                descHeap.resourceIndices.rayDataSRVIndex = DescriptorHeapOffsets::SRV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors());
+                descHeap.resourceIndices.probeIrradianceUAVIndex = DescriptorHeapOffsets::UAV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 1;
+                descHeap.resourceIndices.probeIrradianceSRVIndex = DescriptorHeapOffsets::SRV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 1;
+                descHeap.resourceIndices.probeDistanceUAVIndex = DescriptorHeapOffsets::UAV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 2;
+                descHeap.resourceIndices.probeDistanceSRVIndex = DescriptorHeapOffsets::SRV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 2;
+                descHeap.resourceIndices.probeDataUAVIndex = DescriptorHeapOffsets::UAV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
+                descHeap.resourceIndices.probeDataSRVIndex = DescriptorHeapOffsets::SRV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
 
-                // Set the offset of the start of volume UAVs and SRVs on the descriptor heap
-                volumeResources.descriptorHeapDesc.uavOffset = DescriptorHeapOffsets::UAV_DDGI_VOLUME;
-                volumeResources.descriptorHeapDesc.srvOffset = DescriptorHeapOffsets::SRV_DDGI_VOLUME;
+                // Set the volume constants structured buffer pointers and size
+                volumeResources.constantsBuffer = resources.volumeConstantsSTB;
+                volumeResources.constantsBufferUpload = resources.volumeConstantsSTBUpload;
+                volumeResources.constantsBufferSizeInBytes = resources.volumeConstantsSTBSizeInBytes;
 
-                // Increment the offsets to *this* volume's UAV and SRV locations on the descriptor heap
-                volumeResources.descriptorHeapDesc.uavOffset += volumeDesc.index * GetDDGIVolumeNumUAVDescriptors();
-                volumeResources.descriptorHeapDesc.srvOffset += volumeDesc.index * GetDDGIVolumeNumUAVDescriptors();
+                // The Test Harness *always* accesses resources bindlessly when ray tracing, see RayTraceVolume().
+                // We store the bindless resource indices with the DDGIVolume so we can use the UploadDDGIVolumeResourceIndices() helper
+                // function to transfer the bindless indices to the GPU. SDK shaders ignore these values when not in bindless mode.
+            #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                volumeResources.bindless.type = EBindlessType::RESOURCE_ARRAYS;
+            #elif RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_DESCRIPTOR_HEAP
+                volumeResources.bindless.type = EBindlessType::DESCRIPTOR_HEAP;
+            #endif
 
-                // Indices of the volume's UAV and SRV locations in bindless resource arrays
-                // This value is set here since the Test Harness *always* access resources bindlessly when ray tracing. See RayTraceVolume().
-                // When the SDK shaders are not in bindless mode, they ignore these values.
-                volumeResources.descriptorBindlessDesc.uavOffset = (DescriptorHeapOffsets::UAV_DDGI_VOLUME - DescriptorHeapOffsets::UAV_START);
-                volumeResources.descriptorBindlessDesc.srvOffset = (DescriptorHeapOffsets::SRV_DDGI_VOLUME - DescriptorHeapOffsets::SRV_TEXTURE2D_START);
+                // Regardless of what the host application chooses for resource binding, all SDK shaders can operate in either bound or bindless modes
+                volumeResources.bindless.enabled = (bool)RTXGI_DDGI_BINDLESS_RESOURCES;
 
-                // Constants structured buffer pointers and size
-                volumeResources.constantsBuffer = resources.constantsSTB;
-                volumeResources.constantsBufferUpload = resources.constantsSTBUpload;
-                volumeResources.constantsBufferSizeInBytes = resources.constantsSTBSizeInBytes;
+                // Set the resource indices structured buffer pointers and size
+                volumeResources.bindless.resourceIndicesBuffer = resources.volumeResourceIndicesSTB;
+                volumeResources.bindless.resourceIndicesBufferUpload = resources.volumeResourceIndicesSTBUpload;
+                volumeResources.bindless.resourceIndicesBufferSizeInBytes = resources.volumeResourceIndicesSTBSizeInBytes;
+
+                // Set the resource array indices of volume resources
+                DDGIVolumeResourceIndices& resourceIndices = volumeResources.bindless.resourceIndices;
+                resourceIndices.rayDataUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors());
+                resourceIndices.rayDataSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors());
+                resourceIndices.probeIrradianceUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 1;
+                resourceIndices.probeIrradianceSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 1;
+                resourceIndices.probeDistanceUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 2;
+                resourceIndices.probeDistanceSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 2;
+                resourceIndices.probeDataUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
+                resourceIndices.probeDataSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
 
             #if RTXGI_DDGI_RESOURCE_MANAGEMENT
                 // Enable "Managed Mode", the RTXGI SDK creates graphics objects
@@ -462,35 +444,32 @@ namespace Graphics
                 volumeResources.managed.device = d3d.device;
 
                 // Pass compiled shader bytecode
-                assert(volumeShaders.size() >= 6);
+                assert(volumeShaders.size() >= 2);
                 volumeResources.managed.probeBlendingIrradianceCS = { volumeShaders[0].bytecode->GetBufferPointer(), volumeShaders[0].bytecode->GetBufferSize() };
                 volumeResources.managed.probeBlendingDistanceCS = { volumeShaders[1].bytecode->GetBufferPointer(), volumeShaders[1].bytecode->GetBufferSize() };
-                volumeResources.managed.probeBorderRowUpdateIrradianceCS = { volumeShaders[2].bytecode->GetBufferPointer(), volumeShaders[2].bytecode->GetBufferSize() };
-                volumeResources.managed.probeBorderColumnUpdateIrradianceCS = { volumeShaders[3].bytecode->GetBufferPointer(), volumeShaders[3].bytecode->GetBufferSize() };
-                volumeResources.managed.probeBorderRowUpdateDistanceCS = { volumeShaders[4].bytecode->GetBufferPointer(), volumeShaders[4].bytecode->GetBufferSize() };
-                volumeResources.managed.probeBorderColumnUpdateDistanceCS = { volumeShaders[5].bytecode->GetBufferPointer(), volumeShaders[5].bytecode->GetBufferSize() };
 
-                assert(volumeShaders.size() >= 8);
-                volumeResources.managed.probeRelocation.updateCS = { volumeShaders[6].bytecode->GetBufferPointer(), volumeShaders[6].bytecode->GetBufferSize() };
-                volumeResources.managed.probeRelocation.resetCS = { volumeShaders[7].bytecode->GetBufferPointer(), volumeShaders[7].bytecode->GetBufferSize() };
+                assert(volumeShaders.size() >= 4);
+                volumeResources.managed.probeRelocation.updateCS = { volumeShaders[2].bytecode->GetBufferPointer(), volumeShaders[2].bytecode->GetBufferSize() };
+                volumeResources.managed.probeRelocation.resetCS = { volumeShaders[3].bytecode->GetBufferPointer(), volumeShaders[3].bytecode->GetBufferSize() };
 
-                assert(volumeShaders.size() == 10);
-                volumeResources.managed.probeClassification.updateCS = { volumeShaders[8].bytecode->GetBufferPointer(), volumeShaders[8].bytecode->GetBufferSize() };
-                volumeResources.managed.probeClassification.resetCS = { volumeShaders[9].bytecode->GetBufferPointer(), volumeShaders[9].bytecode->GetBufferSize() };
+                assert(volumeShaders.size() == 6);
+                volumeResources.managed.probeClassification.updateCS = { volumeShaders[4].bytecode->GetBufferPointer(), volumeShaders[4].bytecode->GetBufferSize() };
+                volumeResources.managed.probeClassification.resetCS = { volumeShaders[5].bytecode->GetBufferPointer(), volumeShaders[5].bytecode->GetBufferSize() };
             #else
                 // Enable "Unmanaged Mode", the application creates graphics objects
                 volumeResources.unmanaged.enabled = true;
 
                 #if RTXGI_DDGI_BINDLESS_RESOURCES
-                    // Root parameter slot locations in the global root signature
+                    // Root parameter slot locations in the application's root signature
                     // See Direct3D12.cpp::CreateGlobalRootSignature()
-                    volumeResources.unmanaged.rootParamSlotRootConstants = 3;
-                    volumeResources.unmanaged.rootParamSlotDescriptorTable = 1;
+                    volumeResources.unmanaged.rootParamSlotRootConstants = 1;
+                    volumeResources.unmanaged.rootParamSlotSamplerDescriptorTable = 2;
+                    volumeResources.unmanaged.rootParamSlotResourceDescriptorTable = 3;
                 #else
                     // Root parameter slot locations in the RTXGI DDGIVolume root signature
                     // See DDGIVolume_D3D12.cpp::GetDDGIVolumeRootSignatureDesc()
                     volumeResources.unmanaged.rootParamSlotRootConstants = 0;
-                    volumeResources.unmanaged.rootParamSlotDescriptorTable = 1;
+                    volumeResources.unmanaged.rootParamSlotResourceDescriptorTable = 1;
                 #endif
 
                 // Create the volume's resources
@@ -541,11 +520,10 @@ namespace Graphics
 
                 // Create a new DDGIVolume
                 DDGIVolume* volume = new DDGIVolume();
-
                 ERTXGIStatus status = volume->Create(volumeDesc, volumeResources);
                 if (status != ERTXGIStatus::OK)
                 {
-                    log << "\nError: failed to create the DDGIVolume!\n";
+                    log << "\nError: failed to create the DDGIVolume!";
                     std::flush(log);
                     return false;
                 }
@@ -585,25 +563,62 @@ namespace Graphics
             }
 
             /**
+             * Creates the DDGIVolume resource indices structured buffer.
+             */
+            bool CreateDDGIVolumeResourceIndicesBuffer(Globals& d3d, GlobalResources& d3dResources, Resources& resources, UINT volumeCount, std::ofstream& log)
+            {
+                resources.volumeResourceIndicesSTBSizeInBytes = sizeof(DDGIVolumeResourceIndices) * volumeCount;
+                if (resources.volumeResourceIndicesSTBSizeInBytes == 0) return true; // scenes with no DDGIVolumes are valid
+
+                // Create the DDGIVolume resource indices upload buffer resource (double buffered)
+                BufferDesc desc = { 2 * resources.volumeResourceIndicesSTBSizeInBytes, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
+                CHECK(CreateBuffer(d3d, desc, &resources.volumeResourceIndicesSTBUpload), "create DDGIVolume resource indices upload structured buffer!\n", log);
+            #ifdef GFX_NAME_OBJECTS
+                resources.volumeResourceIndicesSTBUpload->SetName(L"DDGIVolume Resource Indices Upload Structured Buffer");
+            #endif
+
+                // Create the DDGIVolume resource indices device buffer resource
+                desc = { resources.volumeResourceIndicesSTBSizeInBytes, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
+                CHECK(CreateBuffer(d3d, desc, &resources.volumeResourceIndicesSTB), "create DDGIVolume resource indices structured buffer!\n", log);
+            #ifdef GFX_NAME_OBJECTS
+                resources.volumeResourceIndicesSTB->SetName(L"DDGIVolume Resource Indices Structured Buffer");
+            #endif
+
+                // Add the resource indices structured buffer SRV to the descriptor heap
+                D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+                srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+                srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                srvDesc.Buffer.NumElements = volumeCount;
+                srvDesc.Buffer.StructureByteStride = sizeof(DDGIVolumeResourceIndices);
+                srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+                D3D12_CPU_DESCRIPTOR_HANDLE handle;
+                handle.ptr = d3dResources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::STB_DDGI_VOLUME_RESOURCE_INDICES * d3dResources.srvDescHeapEntrySize);
+                d3d.device->CreateShaderResourceView(resources.volumeResourceIndicesSTB, &srvDesc, handle);
+
+                return true;
+            }
+
+            /**
              * Creates the DDGIVolume constants structured buffer.
              */
             bool CreateDDGIVolumeConstantsBuffer(Globals& d3d, GlobalResources& d3dResources, Resources& resources, UINT volumeCount, std::ofstream& log)
             {
-                resources.constantsSTBSizeInBytes = sizeof(DDGIVolumeDescGPUPacked) * volumeCount;
-                if (resources.constantsSTBSizeInBytes == 0) return true; // scenes with no DDGIVolumes are valid
+                resources.volumeConstantsSTBSizeInBytes = sizeof(DDGIVolumeDescGPUPacked) * volumeCount;
+                if (resources.volumeConstantsSTBSizeInBytes == 0) return true; // scenes with no DDGIVolumes are valid
 
                 // Create the DDGIVolume constants upload buffer resource (double buffered)
-                BufferDesc desc = { 2 * resources.constantsSTBSizeInBytes, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
-                CHECK(CreateBuffer(d3d, desc, &resources.constantsSTBUpload), "create DDGIVolume constants upload structured buffer!\n", log);
+                BufferDesc desc = { 2 * resources.volumeConstantsSTBSizeInBytes, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
+                CHECK(CreateBuffer(d3d, desc, &resources.volumeConstantsSTBUpload), "create DDGIVolume constants upload structured buffer!\n", log);
             #ifdef GFX_NAME_OBJECTS
-                resources.constantsSTBUpload->SetName(L"DDGIVolume Constants Upload Structured Buffer");
+                resources.volumeConstantsSTBUpload->SetName(L"DDGIVolume Constants Upload Structured Buffer");
             #endif
 
                 // Create the DDGIVolume constants device buffer resource
-                desc = { resources.constantsSTBSizeInBytes, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
-                CHECK(CreateBuffer(d3d, desc, &resources.constantsSTB), "create DDGIVolume constants structured buffer!\n", log);
+                desc = { resources.volumeConstantsSTBSizeInBytes, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
+                CHECK(CreateBuffer(d3d, desc, &resources.volumeConstantsSTB), "create DDGIVolume constants structured buffer!\n", log);
             #ifdef GFX_NAME_OBJECTS
-                resources.constantsSTB->SetName(L"DDGIVolume Constants Structured Buffer");
+                resources.volumeConstantsSTB->SetName(L"DDGIVolume Constants Structured Buffer");
             #endif
 
             #if !RTXGI_DDGI_RESOURCE_MANAGEMENT
@@ -616,8 +631,8 @@ namespace Graphics
                 srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
                 D3D12_CPU_DESCRIPTOR_HANDLE handle;
-                handle.ptr = d3dResources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::STB_DDGI_VOLUMES * d3dResources.srvDescHeapEntrySize);
-                d3d.device->CreateShaderResourceView(resources.constantsSTB, &srvDesc, handle);
+                handle.ptr = d3dResources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::STB_DDGI_VOLUME_CONSTS * d3dResources.srvDescHeapEntrySize);
+                d3d.device->CreateShaderResourceView(resources.volumeConstantsSTB, &srvDesc, handle);
             #endif
 
                 return true;
@@ -632,7 +647,7 @@ namespace Graphics
                 SAFE_RELEASE(resources.output);
 
                 // Create the output (R16G16B16A16_FLOAT) texture resource
-                TextureDesc desc = { static_cast<uint32_t>(d3d.width), static_cast<uint32_t>(d3d.height), 1, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+                TextureDesc desc = { static_cast<uint32_t>(d3d.width), static_cast<uint32_t>(d3d.height), 1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
                 CHECK(CreateTexture(d3d, desc, &resources.output), "create DDGI output texture resource!\n", log);
             #ifdef GFX_NAME_OBJECTS
                 resources.output->SetName(L"DDGI Output");
@@ -663,9 +678,10 @@ namespace Graphics
                     resources.rtShaders.rgs.filepath = root + L"shaders/ddgi/ProbeTraceRGS.hlsl";
                     resources.rtShaders.rgs.entryPoint = L"RayGen";
                     resources.rtShaders.rgs.exportName = L"DDGIProbeTraceRGS";
-
+                    Shaders::AddDefine(resources.rtShaders.rgs, L"CONSTS_REGISTER", L"b0");   // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                    Shaders::AddDefine(resources.rtShaders.rgs, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                    Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-
                     CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.rgs, true), "compile DDGI probe tracing ray generation shader!\n", log);
                 }
 
@@ -674,6 +690,7 @@ namespace Graphics
                     resources.rtShaders.miss.filepath = root + L"shaders/Miss.hlsl";
                     resources.rtShaders.miss.entryPoint = L"Miss";
                     resources.rtShaders.miss.exportName = L"DDGIProbeTraceMiss";
+                    Shaders::AddDefine(resources.rtShaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                     CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.miss, true), "compile DDGI probe tracing miss shader!\n", log);
                 }
 
@@ -688,12 +705,14 @@ namespace Graphics
                     group.chs.filepath = root + L"shaders/CHS.hlsl";
                     group.chs.entryPoint = L"CHS_GI";
                     group.chs.exportName = L"DDGIProbeTraceCHS";
+                    Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                     CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs, true), "compile DDGI probe tracing closest hit shader!\n", log);
 
                     // Load and compile the AHS
                     group.ahs.filepath = root + L"shaders/AHS.hlsl";
                     group.ahs.entryPoint = L"AHS_GI";
                     group.ahs.exportName = L"DDGIProbeTraceAHS";
+                    Shaders::AddDefine(group.ahs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                     CHECK(Shaders::Compile(d3d.shaderCompiler, group.ahs, true), "compile DDGI probe tracing any hit shader!\n", log);
 
                     // Set the payload size
@@ -705,13 +724,15 @@ namespace Graphics
                     std::wstring shaderPath = root + L"shaders/IndirectCS.hlsl";
                     resources.indirectCS.filepath = shaderPath.c_str();
                     resources.indirectCS.entryPoint = L"CS";
-                    resources.indirectCS.targetProfile = L"cs_6_0";
+                    resources.indirectCS.targetProfile = L"cs_6_6";
 
+                    Shaders::AddDefine(resources.indirectCS, L"CONSTS_REGISTER", L"b0");   // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                    Shaders::AddDefine(resources.indirectCS, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                    Shaders::AddDefine(resources.indirectCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                     Shaders::AddDefine(resources.indirectCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
                     Shaders::AddDefine(resources.indirectCS, L"RTXGI_DDGI_NUM_VOLUMES", std::to_wstring(numVolumes));
                     Shaders::AddDefine(resources.indirectCS, L"THGP_DIM_X", L"8");
                     Shaders::AddDefine(resources.indirectCS, L"THGP_DIM_Y", L"4");
-
                     CHECK(Shaders::Compile(d3d.shaderCompiler, resources.indirectCS, true), "compile indirect lighting compute shader!\n", log);
                 }
 
@@ -788,7 +809,7 @@ namespace Graphics
             #endif
 
                 // Create the shader table buffer resource
-                desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+                desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
                 CHECK(CreateBuffer(d3d, desc, &resources.shaderTable), "create DDGI shader table!", log);
             #ifdef GFX_NAME_OBJECTS
                 resources.shaderTable->SetName(L"DDGI Shader Table");
@@ -850,28 +871,30 @@ namespace Graphics
             void RayTraceVolumes(Globals& d3d, GlobalResources& d3dResources, Resources& resources)
             {
             #ifdef GFX_PERF_MARKERS
-                PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "Ray Trace Volumes");
+                PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "Ray Trace DDGIVolumes");
             #endif
 
                 // Set the descriptor heaps
                 ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
                 d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-                // Set the global root signature
+                // Set the root signature
                 d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
 
-                // Set the root parameters
-                d3d.cmdList->SetComputeRootDescriptorTable(0, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                d3d.cmdList->SetComputeRootDescriptorTable(1, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
-
-                // Update the global root constants
+                // Update the root constants
                 UINT offset = 0;
                 GlobalConstants consts = d3dResources.constants;
-                d3d.cmdList->SetComputeRoot32BitConstants(2, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
                 offset += AppConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetComputeRoot32BitConstants(2, PathTraceConsts::GetNum32BitValues(), consts.pt.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, PathTraceConsts::GetNum32BitValues(), consts.pt.GetData(), offset);
                 offset += PathTraceConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetComputeRoot32BitConstants(2, LightingConsts::GetNum32BitValues(), consts.lights.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, LightingConsts::GetNum32BitValues(), consts.lights.GetData(), offset);
+
+                // Set the root parameter descriptor tables
+            #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+            #endif
 
                 // Set the RTPSO
                 d3d.cmdList->SetPipelineState1(resources.rtpso);
@@ -889,31 +912,24 @@ namespace Graphics
                 desc.HitGroupTable.SizeInBytes = resources.shaderTableHitGroupTableSize;
                 desc.HitGroupTable.StrideInBytes = resources.shaderTableRecordSize;
 
-                // Constants
-                DDGIConstants ddgi = {};
-
                 // Barriers
                 std::vector<D3D12_RESOURCE_BARRIER> barriers;
                 D3D12_RESOURCE_BARRIER barrier = {};
                 barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
 
-                UINT volumeIndex;
-                for(volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.selectedVolumes.size()); volumeIndex++)
+                // Trace probe rays for each volume
+                for(UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.selectedVolumes.size()); volumeIndex++)
                 {
+                    // Get the volume
                     const DDGIVolume* volume = resources.selectedVolumes[volumeIndex];
 
-                    // Update the DDGI root constants
-                    ddgi.volumeIndex = volume->GetIndex();
-                    ddgi.uavOffset = volume->GetDescriptorBindlessUAVOffset();
-                    ddgi.srvOffset = volume->GetDescriptorBindlessSRVOffset();
+                    // Update the root constants
+                    d3d.cmdList->SetComputeRoot32BitConstants(1, DDGIRootConstants::GetNum32BitValues(), volume->GetRootConstants().GetData(), 0);
 
-                    d3d.cmdList->SetComputeRoot32BitConstants(3, DDGIConstants::GetNum32BitValues(), ddgi.GetData(), 0);
+                    // Get the ray dispatch dimensions
+                    volume->GetRayDispatchDimensions(desc.Width, desc.Height, desc.Depth);
 
-                    // Trace probe rays
-                    desc.Width = volume->GetNumRaysPerProbe();
-                    desc.Height = volume->GetNumProbes();
-                    desc.Depth = 1;
-
+                    // Dispatch the rays
                     d3d.cmdList->DispatchRays(&desc);
 
                     // Barrier(s)
@@ -923,6 +939,44 @@ namespace Graphics
 
                 // Wait for the ray traces to complete
                 d3d.cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+
+            #ifdef GFX_PERF_MARKERS
+                PIXEndEvent(d3d.cmdList);
+            #endif
+            }
+
+            void GatherIndirectLighting(Globals& d3d, GlobalResources& d3dResources, Resources& resources)
+            {
+            #ifdef GFX_PERF_MARKERS
+                PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "Indirect Lighting");
+            #endif
+
+                // Set the descriptor heaps
+                ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
+                d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
+                // Set the root signature
+                d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
+
+                // Set the root parameter descriptor tables
+            #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+            #endif
+
+                // Set the PSO
+                d3d.cmdList->SetPipelineState(resources.indirectPSO);
+
+                // Dispatch threads
+                UINT groupsX = DivRoundUp(d3d.width, 8);
+                UINT groupsY = DivRoundUp(d3d.height, 4);
+                d3d.cmdList->Dispatch(groupsX, groupsY, 1);
+
+                // Wait for the compute pass to finish
+                D3D12_RESOURCE_BARRIER barrier = {};
+                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                barrier.UAV.pResource = resources.output;
+                d3d.cmdList->ResourceBarrier(1, &barrier);
 
             #ifdef GFX_PERF_MARKERS
                 PIXEndEvent(d3d.cmdList);
@@ -940,9 +994,9 @@ namespace Graphics
             {
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
-                assert(RTXGI_VERSION::minor == 2);
-                assert(RTXGI_VERSION::revision == 13);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.2.13") == 0);
+                assert(RTXGI_VERSION::minor == 3);
+                assert(RTXGI_VERSION::revision == 0);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.3.0") == 0);
 
                 UINT numVolumes = static_cast<UINT>(config.ddgi.volumes.size());
 
@@ -951,6 +1005,9 @@ namespace Graphics
                 if (!CreatePSOs(d3d, d3dResources, resources, log)) return false;
                 if (!CreateShaderTable(d3d, d3dResources, resources, log)) return false;
                 if (!UpdateShaderTable(d3d, d3dResources, resources, log)) return false;
+
+                // Create the DDGIVolume resource indices structured buffer
+                if (!CreateDDGIVolumeResourceIndicesBuffer(d3d, d3dResources, resources, numVolumes, log)) return false;
 
                 // Create the DDGIVolume constants structured buffer
                 if (!CreateDDGIVolumeConstantsBuffer(d3d, d3dResources, resources, numVolumes, log)) return false;
@@ -963,14 +1020,18 @@ namespace Graphics
                 {
                     Configs::DDGIVolume volumeConfig = config.ddgi.volumes[volumeIndex];
                     if (!CreateDDGIVolume(d3d, d3dResources, resources, volumeConfig, log)) return false;
+
+                    // Clear the volume's probes at initialization
+                    DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes[volumeIndex]);
+                    volume->ClearProbes(d3d.cmdList);
                 }
 
                 // Setup performance stats
                 perf.AddStat("DDGI", resources.cpuStat, resources.gpuStat);
-                resources.classifyStat = perf.AddGPUStat("  Classify");
                 resources.rtStat = perf.AddGPUStat("  Probe Trace");
                 resources.blendStat = perf.AddGPUStat("  Blend");
                 resources.relocateStat = perf.AddGPUStat("  Relocate");
+                resources.classifyStat = perf.AddGPUStat("  Classify");
                 resources.lightingStat = perf.AddGPUStat("  Lighting");
 
                 return true;
@@ -1066,74 +1127,41 @@ namespace Graphics
                 PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "RTXGI: DDGI");
             #endif
                 CPU_TIMESTAMP_BEGIN(resources.cpuStat);
-                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetQueryBeginIndex());
+                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
                 if (resources.enabled)
                 {
                     UINT numVolumes = static_cast<UINT>(resources.selectedVolumes.size());
 
-                    // Upload volume constants
+                    // Upload volume resource indices and constants
+                    rtxgi::d3d12::UploadDDGIVolumeResourceIndices(d3d.cmdList, d3d.frameIndex, numVolumes, resources.selectedVolumes.data());
                     rtxgi::d3d12::UploadDDGIVolumeConstants(d3d.cmdList, d3d.frameIndex, numVolumes, resources.selectedVolumes.data());
 
-                    // Trace rays from probes to sample the environment
-                    GPU_TIMESTAMP_BEGIN(resources.rtStat->GetQueryBeginIndex());
+                    // Trace rays from DDGI probes to sample the environment
+                    GPU_TIMESTAMP_BEGIN(resources.rtStat->GetGPUQueryBeginIndex());
                     RayTraceVolumes(d3d, d3dResources, resources);
-                    GPU_TIMESTAMP_END(resources.rtStat->GetQueryEndIndex());
+                    GPU_TIMESTAMP_END(resources.rtStat->GetGPUQueryEndIndex());
 
                     // Update volume probes
-                    GPU_TIMESTAMP_BEGIN(resources.blendStat->GetQueryBeginIndex());
+                    GPU_TIMESTAMP_BEGIN(resources.blendStat->GetGPUQueryBeginIndex());
                     rtxgi::d3d12::UpdateDDGIVolumeProbes(d3d.cmdList, numVolumes, resources.selectedVolumes.data());
-                    GPU_TIMESTAMP_END(resources.blendStat->GetQueryEndIndex());
+                    GPU_TIMESTAMP_END(resources.blendStat->GetGPUQueryEndIndex());
 
                     // Relocate probes if the feature is enabled
-                    GPU_TIMESTAMP_BEGIN(resources.relocateStat->GetQueryBeginIndex());
+                    GPU_TIMESTAMP_BEGIN(resources.relocateStat->GetGPUQueryBeginIndex());
                     rtxgi::d3d12::RelocateDDGIVolumeProbes(d3d.cmdList, numVolumes, resources.selectedVolumes.data());
-                    GPU_TIMESTAMP_END(resources.relocateStat->GetQueryEndIndex());
+                    GPU_TIMESTAMP_END(resources.relocateStat->GetGPUQueryEndIndex());
 
                     // Classify probes if the feature is enabled
-                    GPU_TIMESTAMP_BEGIN(resources.classifyStat->GetQueryBeginIndex());
+                    GPU_TIMESTAMP_BEGIN(resources.classifyStat->GetGPUQueryBeginIndex());
                     rtxgi::d3d12::ClassifyDDGIVolumeProbes(d3d.cmdList, numVolumes, resources.selectedVolumes.data());
-                    GPU_TIMESTAMP_END(resources.classifyStat->GetQueryEndIndex());
+                    GPU_TIMESTAMP_END(resources.classifyStat->GetGPUQueryEndIndex());
 
-                    // Render the indirect lighting to screen-space
-                    {
-                    #ifdef GFX_PERF_MARKERS
-                        PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "Indirect Lighting");
-                    #endif
-                        GPU_TIMESTAMP_BEGIN(resources.lightingStat->GetQueryBeginIndex());
-
-                        // Set the descriptor heaps
-                        ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
-                        d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-
-                        // Set the global root signature
-                        d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
-
-                        // Set the root parameters
-                        d3d.cmdList->SetComputeRootDescriptorTable(0, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                        d3d.cmdList->SetComputeRootDescriptorTable(1, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
-
-                        // Set the PSO and dispatch threads
-                        d3d.cmdList->SetPipelineState(resources.indirectPSO);
-
-                        UINT groupsX = DivRoundUp(d3d.width, 8);
-                        UINT groupsY = DivRoundUp(d3d.height, 4);
-                        d3d.cmdList->Dispatch(groupsX, groupsY, 1);
-
-                        // Wait for the compute pass to finish
-                        D3D12_RESOURCE_BARRIER barrier = {};
-                        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-                        barrier.UAV.pResource = resources.output;
-                        d3d.cmdList->ResourceBarrier(1, &barrier);
-
-                        GPU_TIMESTAMP_END(resources.lightingStat->GetQueryEndIndex());
-
-                    #ifdef GFX_PERF_MARKERS
-                        PIXEndEvent(d3d.cmdList);
-                    #endif
-                    }
-
+                    // Gather indirect lighting in screen-space
+                    GPU_TIMESTAMP_BEGIN(resources.lightingStat->GetGPUQueryBeginIndex());
+                    GatherIndirectLighting(d3d, d3dResources, resources);
+                    GPU_TIMESTAMP_END(resources.lightingStat->GetGPUQueryEndIndex());
                 }
-                GPU_TIMESTAMP_END(resources.gpuStat->GetQueryEndIndex());
+                GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
                 CPU_TIMESTAMP_ENDANDRESOLVE(resources.cpuStat);
 
             #ifdef GFX_PERF_MARKERS
@@ -1167,8 +1195,10 @@ namespace Graphics
                 resources.shaderTableHitGroupTableStartAddress = 0;
 
                 SAFE_RELEASE(resources.rtvDescriptorHeap);
-                SAFE_RELEASE(resources.constantsSTB);
-                SAFE_RELEASE(resources.constantsSTBUpload);
+                SAFE_RELEASE(resources.volumeResourceIndicesSTB);
+                SAFE_RELEASE(resources.volumeResourceIndicesSTBUpload);
+                SAFE_RELEASE(resources.volumeConstantsSTB);
+                SAFE_RELEASE(resources.volumeConstantsSTBUpload);
 
                 // Release volumes
                 for (size_t volumeIndex = 0; volumeIndex < resources.volumes.size(); volumeIndex++)
@@ -1184,25 +1214,30 @@ namespace Graphics
 
             /**
              * Write the DDGI Volume texture resources to disk.
+             * Note: not storing ray data or probe distance (for now) since WIC doesn't auto-convert 2 channel texture formats
              */
-            bool WriteVolumesToDisk(Globals& globals, GlobalResources& gfxResources, Resources& resources, std::string directory)
+            bool WriteVolumesToDisk(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::string directory)
             {
                 CoInitialize(NULL);
                 bool success = true;
-                for (rtxgi::DDGIVolumeBase* volumeBase : resources.volumes)
+                for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.volumes.size()); volumeIndex++)
                 {
-                    std::string baseName = directory + "/" + volumeBase->GetName();
-                    std::string filename = baseName + "-irradiance.png";
+                    // Get the volume
+                    const DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes[volumeIndex]);
 
-                    rtxgi::d3d12::DDGIVolume* volume = static_cast<DDGIVolume*>(volumeBase);
-                    success &= WriteResourceToDisk(globals, filename, volume->GetProbeIrradiance(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                    // Start constructing the filename
+                    std::string baseName = directory + "/DDGIVolume[" + volume->GetName() + "]";
 
-                    // not capturing distances because WIC doesn't like two-channel textures
-                    //filename = baseName + "-distance.png";
-                    //success &= WriteResourceToDisk(globals, filename, volume->GetProbeDistance(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                    // Write probe irradiance
+                    std::string filename = baseName + "-Irradiance";
+                    success &= WriteResourceToDisk(d3d, filename, volume->GetProbeIrradiance(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
-                    filename = baseName + "-data.png";
-                    success &= WriteResourceToDisk(globals, filename, volume->GetProbeData(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                    // Write probe data
+                    if(volume->GetProbeRelocationEnabled() || volume->GetProbeClassificationEnabled())
+                    {
+                        filename = baseName + "-Probe-Data";
+                        success &= WriteResourceToDisk(d3d, filename, volume->GetProbeData(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                    }
                 }
                 return success;
             }
@@ -1244,9 +1279,9 @@ namespace Graphics
             Graphics::D3D12::DDGI::Cleanup(resources);
         }
 
-        bool WriteVolumesToDisk(Globals& globals, GlobalResources& gfxResources, Resources& resources, std::string directory)
+        bool WriteVolumesToDisk(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::string directory)
         {
-            return Graphics::D3D12::DDGI::WriteVolumesToDisk(globals, gfxResources, resources, directory);
+            return Graphics::D3D12::DDGI::WriteVolumesToDisk(d3d, d3dResources, resources, directory);
         }
 
     } // namespace Graphics::DDGI

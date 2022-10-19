@@ -12,6 +12,7 @@
 
 #include "Common.h"
 
+#include <rtxgi/ddgi/DDGIVolume.h>
 #include <fstream>
 
 using namespace DirectX;
@@ -23,10 +24,10 @@ namespace Configs
 
     struct DDGIVolumeTextures
     {
-        uint32_t rayDataFormat = 0;
-        uint32_t irradianceFormat = 0;
-        uint32_t distanceFormat = 0;
-        uint32_t dataFormat = 0;
+        rtxgi::EDDGIVolumeTextureFormat rayDataFormat;
+        rtxgi::EDDGIVolumeTextureFormat irradianceFormat;
+        rtxgi::EDDGIVolumeTextureFormat distanceFormat;
+        rtxgi::EDDGIVolumeTextureFormat dataFormat;
     };
 
     struct DDGIVolume
@@ -66,13 +67,13 @@ namespace Configs
         // Visualization
         uint32_t           probeType = 0;
         float              probeRadius = 1.f;
-        float              probeAlpha = 1.f;
         float              probeDistanceDivisor = 1.f;
         float              probeRayDataScale = 1.f;
         float              probeIrradianceScale = 1.f;
         float              probeDistanceScale = 1.f;
-        float              probeRelocationOffsetScale = 1.f;
-        float              probeClassificationStateScale = 1.f;
+        float              probeDataScale = 1.f;
+
+        rtxgi::EDDGIVolumeProbeVisType probeVisType = rtxgi::EDDGIVolumeProbeVisType::Default;
     };
 
     struct DDGI
@@ -197,6 +198,9 @@ namespace Configs
         bool        fullscreen = false;
         bool        showUI = true;
         bool        showPerf = false;
+        bool        benchmarkRunning = false;
+
+        uint32_t    benchmarkProgress = 0;
 
         std::string filepath = "";
         std::string root = "";

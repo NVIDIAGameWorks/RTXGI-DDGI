@@ -8,11 +8,10 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#include "Descriptors.hlsl"
-#include "../../include/RayTracing.hlsl"
+#include "../../../include/graphics/Types.h"
 
 [shader("closesthit")]
-void CHS(inout ProbesPayload payload, BuiltInTriangleIntersectionAttributes attrib)
+void CHS(inout ProbeVisualizationPayload payload, BuiltInTriangleIntersectionAttributes attrib)
 {
     payload.hitT = RayTCurrent();
     payload.instanceIndex = (int)InstanceIndex();

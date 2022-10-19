@@ -82,7 +82,14 @@ namespace Graphics
                 return true;
             }
 
-            void Update(Graphics::Globals& vk, Resources& resources, Configs::Config& config, Scenes::Scene& scene, std::vector<DDGIVolumeBase*>& volumes, const Instrumentation::Performance& perf)
+            void Update(
+                Graphics::Globals& vk,
+                Resources& resources,
+                Configs::Config& config,
+                Inputs::Input& input,
+                Scenes::Scene& scene,
+                std::vector<DDGIVolumeBase*>& volumes,
+                const Instrumentation::Performance& perf)
             {
                 CPU_TIMESTAMP_BEGIN(resources.cpuStat);
 
@@ -93,7 +100,7 @@ namespace Graphics
                     ImGui_ImplGlfw_NewFrame();
                     ImGui::NewFrame();
 
-                    Graphics::UI::CreateDebugWindow(vk, config, scene, volumes);
+                    Graphics::UI::CreateDebugWindow(vk, config, input, scene, volumes);
                     Graphics::UI::CreatePerfWindow(vk, config, perf);
                 }
 
@@ -124,7 +131,7 @@ namespace Graphics
                     renderPassBeginInfo.clearValueCount = 1;
 
                     // Start the render pass
-                    GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetQueryBeginIndex());
+                    GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
                     vkCmdBeginRenderPass(vk.cmdBuffer[vk.frameIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
                     ImGui::Render();
@@ -132,7 +139,7 @@ namespace Graphics
 
                     // End the render pass
                     vkCmdEndRenderPass(vk.cmdBuffer[vk.frameIndex]);
-                    GPU_TIMESTAMP_END(resources.gpuStat->GetQueryEndIndex());
+                    GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
                 #ifdef GFX_PERF_MARKERS
                     vkCmdEndDebugUtilsLabelEXT(vk.cmdBuffer[vk.frameIndex]);
@@ -163,9 +170,9 @@ namespace Graphics
             return Graphics::Vulkan::UI::Initialize(vk, vkResources, resources, perf, log);
         }
 
-        void Update(Globals& vk, Resources& resources, Configs::Config& config, Scenes::Scene& scene, std::vector<DDGIVolumeBase*>& volumes, const Instrumentation::Performance& perf)
+        void Update(Globals& vk, Resources& resources, Configs::Config& config, Inputs::Input& input, Scenes::Scene& scene, std::vector<DDGIVolumeBase*>& volumes, const Instrumentation::Performance& perf)
         {
-            return Graphics::Vulkan::UI::Update(vk, resources, config, scene, volumes, perf);
+            return Graphics::Vulkan::UI::Update(vk, resources, config, input, scene, volumes, perf);
         }
 
         void Execute(Globals& vk, GlobalResources& vkResources, Resources& resources, const Configs::Config& config)

@@ -75,8 +75,8 @@ Payload UnpackPayload(PackedPayload input)
  */
 uint3 LoadIndices(uint meshIndex, uint primitiveIndex)
 {
-    uint address = (primitiveIndex * 3) * 4;                // 3 indices per primitive, 4 bytes for each index
-    return RawBuffer[1 + (meshIndex * 2)].Load3(address);   // Mesh index buffer pointers at index 1 and alternate with vertex buffer pointers
+    uint address = (primitiveIndex * 3) * 4;         // 3 indices per primitive, 4 bytes for each index
+    return GetIndexBuffer(meshIndex).Load3(address); // Mesh index buffers start at index 3 and alternate with vertex buffer pointers
 }
 
 /**
@@ -95,19 +95,19 @@ void LoadVertices(uint meshIndex, uint primitiveIndex, out Vertex vertices[3])
         address = (indices[i] * 12) * 4;    // Vertices contain 12 floats / 48 bytes
 
         // Load the position
-        vertices[i].position = asfloat(RawBuffer[1 + (meshIndex * 2) + 1].Load3(address));
+        vertices[i].position = asfloat(GetVertexBuffer(meshIndex).Load3(address));
         address += 12;
 
         // Load the normal
-        vertices[i].normal = asfloat(RawBuffer[1 + (meshIndex * 2) + 1].Load3(address));
+        vertices[i].normal = asfloat(GetVertexBuffer(meshIndex).Load3(address));
         address += 12;
 
         // Load the tangent
-        vertices[i].tangent = asfloat(RawBuffer[1 + (meshIndex * 2) + 1].Load4(address));
+        vertices[i].tangent = asfloat(GetVertexBuffer(meshIndex).Load4(address));
         address += 16;
 
         // Load the texture coordinates
-        vertices[i].uv0 = asfloat(RawBuffer[1 + (meshIndex * 2) + 1].Load2(address));
+        vertices[i].uv0 = asfloat(GetVertexBuffer(meshIndex).Load2(address));
     }
 }
 
@@ -127,11 +127,11 @@ void LoadVerticesPosUV0(uint meshIndex, uint primitiveIndex, out Vertex vertices
         address = (indices[i] * 12) * 4;    // Vertices contain 12 floats / 48 bytes
 
         // Load the position
-        vertices[i].position = asfloat(RawBuffer[1 + (meshIndex * 2) + 1].Load3(address));
+        vertices[i].position = asfloat(GetVertexBuffer(meshIndex).Load3(address));
         address += 40; // skip normal and tangent
 
         // Load the texture coordinates
-        vertices[i].uv0 = asfloat(RawBuffer[1 + (meshIndex * 2) + 1].Load2(address));
+        vertices[i].uv0 = asfloat(GetVertexBuffer(meshIndex).Load2(address));
     }
 }
 
@@ -150,8 +150,7 @@ float2 LoadAndInterpolateUV0(uint meshIndex, uint primitiveIndex, float3 barycen
     {
         address = (indices[i] * 12) * 4;    // 12 floats (3: pos, 3: normals, 4:tangent, 2:uv0)
         address += 40;                      // 40 bytes (10 * 4): skip position, normal, and tangent
-        //uv0 += asfloat(GetVertexBuffer(meshIndex).Load2(address)) * barycentrics[i];      // crashes DXC HLSL->SPIRV, see:  https://github.com/microsoft/DirectXShaderCompiler/issues/3313
-        uv0 += asfloat(RawBuffer[1 + (meshIndex * 2) + 1].Load2(address)) * barycentrics[i];
+        uv0 += asfloat(GetVertexBuffer(meshIndex).Load2(address)) * barycentrics[i];
     }
 
     return uv0;
@@ -289,13 +288,15 @@ void InterpolateTexCoordDifferentials(float2 dBarydx, float2 dBarydy, Vertex ver
 /**
  * Get the texture coordinate differentials using ray differentials.
  */
+//void ComputeUV0Differentials(Vertex vertices[3], ConstantBuffer<Camera> camera, float3 rayDirection, float hitT, out float2 dUVdx, out float2 dUVdy)
 void ComputeUV0Differentials(Vertex vertices[3], float3 rayDirection, float hitT, out float2 dUVdx, out float2 dUVdy)
 {
     // Initialize a ray differential
     RayDiff rd = (RayDiff)0;
 
     // Get ray direction differentials
-    ComputeRayDirectionDifferentials(rayDirection, Camera.right, Camera.up, Camera.resolution, rd.dDdx, rd.dDdy);
+    //ComputeRayDirectionDifferentials(rayDirection, camera.right, camera.up, camera.resolution, rd.dDdx, rd.dDdy);
+    ComputeRayDirectionDifferentials(rayDirection, GetCamera().right, GetCamera().up, GetCamera().resolution, rd.dDdx, rd.dDdy);
 
     // Get the triangle edges and face normal
     float3 edge01, edge02, faceNormal;

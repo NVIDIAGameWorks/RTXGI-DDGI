@@ -4,4 +4,7 @@
         <package name="dxc" version="1.6.2106-${platform}" platforms="linux-x86_64" />
         <package name="dxc" version="1.6.2106_glibc2.27_linux-aarch64" platforms="linux-aarch64" />
     </dependency>
+	<dependency name="d3d-agility-sdk" linkPath="../d3d" >
+		<package name="agility-sdk" version="1.606.3" />
+	</dependency>
 </project>

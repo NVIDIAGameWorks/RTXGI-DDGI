@@ -32,12 +32,14 @@ namespace Graphics
                 resources.shaders.rgs.filepath = root + L"shaders/GBufferRGS.hlsl";
                 resources.shaders.rgs.entryPoint = L"RayGen";
                 resources.shaders.rgs.exportName = L"GBufferRGS";
+                Shaders::AddDefine(resources.shaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.rgs, true), "compile GBuffer ray generation shader!\n", log);
 
                 // Load and compile the miss shader
                 resources.shaders.miss.filepath = root + L"shaders/Miss.hlsl";
                 resources.shaders.miss.entryPoint = L"Miss";
                 resources.shaders.miss.exportName = L"GBufferMiss";
+                Shaders::AddDefine(resources.shaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.miss, true), "compile GBuffer miss shader!\n", log);
 
                 // Add the hit group
@@ -50,12 +52,14 @@ namespace Graphics
                 group.chs.filepath = root + L"shaders/CHS.hlsl";
                 group.chs.entryPoint = L"CHS_PRIMARY";
                 group.chs.exportName = L"GBufferCHS";
+                Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs, true), "compile GBuffer closest hit shader!\n", log);
 
                 // Load and compile the AHS
                 group.ahs.filepath = root + L"shaders/AHS.hlsl";
                 group.ahs.entryPoint = L"AHS_PRIMARY";
                 group.ahs.exportName = L"GBufferAHS";
+                Shaders::AddDefine(group.ahs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, group.ahs, true), "compile GBuffer any hit shader!\n", log);
 
                 // Set the payload size
@@ -123,7 +127,7 @@ namespace Graphics
             #endif
 
                 // Create the shader table buffer resource
-                desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT , D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+                desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT , D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
                 CHECK(CreateBuffer(d3d, desc, &resources.shaderTable), "create GBuffer shader table!", log);
             #ifdef GFX_NAME_OBJECTS
                 resources.shaderTable->SetName(L"GBuffer Shader Table");
@@ -244,21 +248,23 @@ namespace Graphics
                 ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
                 d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-                // Set the global root signature
+                // Set the root signature
                 d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
-
-                // Set the root parameters
-                d3d.cmdList->SetComputeRootDescriptorTable(0, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                d3d.cmdList->SetComputeRootDescriptorTable(1, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
 
                 // Update the root constants
                 UINT offset = 0;
                 GlobalConstants consts = d3dResources.constants;
-                d3d.cmdList->SetComputeRoot32BitConstants(2, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
                 offset += AppConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetComputeRoot32BitConstants(2, PathTraceConsts::GetNum32BitValues(), consts.pt.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, PathTraceConsts::GetNum32BitValues(), consts.pt.GetData(), offset);
                 offset += PathTraceConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetComputeRoot32BitConstants(2, LightingConsts::GetNum32BitValues(), consts.lights.GetData(), offset);
+                d3d.cmdList->SetComputeRoot32BitConstants(0, LightingConsts::GetNum32BitValues(), consts.lights.GetData(), offset);
+
+                // Set the root parameter descriptor tables
+            #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+            #endif
 
                 // Dispatch rays
                 D3D12_DISPATCH_RAYS_DESC desc = {};
@@ -281,9 +287,9 @@ namespace Graphics
                 d3d.cmdList->SetPipelineState1(resources.rtpso);
 
                 // Dispatch rays
-                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetQueryBeginIndex());
+                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
                 d3d.cmdList->DispatchRays(&desc);
-                GPU_TIMESTAMP_END(resources.gpuStat->GetQueryEndIndex());
+                GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
                 D3D12_RESOURCE_BARRIER barriers[4] = {};
                 barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
@@ -325,10 +331,10 @@ namespace Graphics
             bool WriteGBufferToDisk(Globals& d3d, GlobalResources& d3dResources, std::string directory)
             {
                 CoInitialize(NULL);
-                bool success = WriteResourceToDisk(d3d, directory + "/GBufferA.png", d3dResources.rt.GBufferA, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                success &= WriteResourceToDisk(d3d, directory + "/GBufferB.png", d3dResources.rt.GBufferB, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                success &= WriteResourceToDisk(d3d, directory + "/GBufferC.png", d3dResources.rt.GBufferC, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                success &= WriteResourceToDisk(d3d, directory + "/GBufferD.png", d3dResources.rt.GBufferD, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                bool success = WriteResourceToDisk(d3d, directory + "/R-GBufferA", d3dResources.rt.GBufferA, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                success &= WriteResourceToDisk(d3d, directory + "/R-GBufferB", d3dResources.rt.GBufferB, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                success &= WriteResourceToDisk(d3d, directory + "/R-GBufferC", d3dResources.rt.GBufferC, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                success &= WriteResourceToDisk(d3d, directory + "/R-GBufferD", d3dResources.rt.GBufferD, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 return success;
             }
 

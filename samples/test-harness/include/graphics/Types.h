@@ -73,7 +73,7 @@ namespace Graphics
                                        // 44
     };
 
-    struct ProbesPayload
+    struct ProbeVisualizationPayload
     {
         float  hitT;
         float3 worldPosition;
@@ -141,15 +141,15 @@ namespace Graphics
 
     struct AppConsts
     {
-        uint   frameNumber;    // updated every frame, used for rng
+        uint   frameNumber;    // updated every frame, used for random number generation
         float3 skyRadiance;
 
     #ifndef HLSL
         uint32_t data[4] = {};
         static uint32_t GetNum32BitValues() { return 4; }
-        static uint32_t GetSizeInBytes() { return 16; }
+        static uint32_t GetSizeInBytes() { return GetNum32BitValues() * 4; }
         static uint32_t GetAlignedNum32BitValues() { return 4; }
-        static uint32_t GetAlignedSizeInBytes() { return 16; }
+        static uint32_t GetAlignedSizeInBytes() { return GetAlignedNum32BitValues() * 4; }
         uint32_t* GetData()
         {
             data[0] = frameNumber;
@@ -171,9 +171,9 @@ namespace Graphics
     #ifndef HLSL
         uint32_t data[4];
         static uint32_t GetNum32BitValues() { return 4; }
-        static uint32_t GetSizeInBytes() { return 16; }
+        static uint32_t GetSizeInBytes() { return GetNum32BitValues() * 4; }
         static uint32_t GetAlignedNum32BitValues() { return 4; }
-        static uint32_t GetAlignedSizeInBytes() { return 16; }
+        static uint32_t GetAlignedSizeInBytes() { return GetAlignedNum32BitValues() * 4; }
         uint32_t* GetData()
         {
             data[0] = *(uint32_t*)&rayNormalBias;
@@ -201,9 +201,9 @@ namespace Graphics
     #ifndef HLSL
         uint32_t data[3] = {};
         static uint32_t GetNum32BitValues() { return 3; }
-        static uint32_t GetSizeInBytes() { return 12; }
+        static uint32_t GetSizeInBytes() { return GetNum32BitValues() * 4; }
         static uint32_t GetAlignedNum32BitValues() { return 4; }
-        static uint32_t GetAlignedSizeInBytes() { return 16; }
+        static uint32_t GetAlignedSizeInBytes() { return GetAlignedNum32BitValues() * 4; }
         uint32_t* GetData()
         {
             data[0] = hasDirectionalLight;
@@ -235,9 +235,9 @@ namespace Graphics
     #ifndef HLSL
         uint32_t data[14] = {};
         static uint32_t GetNum32BitValues() { return 14; }
-        static uint32_t GetSizeInBytes() { return 56; }
+        static uint32_t GetSizeInBytes() { return GetNum32BitValues() * 4; }
         static uint32_t GetAlignedNum32BitValues() { return 16; }
-        static uint32_t GetAlignedSizeInBytes() { return 64; }
+        static uint32_t GetAlignedSizeInBytes() { return GetAlignedNum32BitValues() * 4; }
         uint32_t* GetData()
         {
             data[0]  = *(uint32_t*)&rayLength;
@@ -269,9 +269,9 @@ namespace Graphics
     #ifndef HLSL
         uint32_t data[2];
         static uint32_t GetNum32BitValues() { return 4; }
-        static uint32_t GetSizeInBytes() { return 16; }
+        static uint32_t GetSizeInBytes() { return GetNum32BitValues() * 4; }
         static uint32_t GetAlignedNum32BitValues() { return 4; }
-        static uint32_t GetAlignedSizeInBytes() { return 16; }
+        static uint32_t GetAlignedSizeInBytes() { return GetAlignedNum32BitValues() * 4; }
         uint32_t* GetData()
         {
             data[0] = useFlags;
@@ -291,9 +291,9 @@ namespace Graphics
     #ifndef HLSL
         uint32_t data[2];
         static uint32_t GetNum32BitValues() { return 2; }
-        static uint32_t GetSizeInBytes() { return 8; }
+        static uint32_t GetSizeInBytes() { return GetNum32BitValues() * 4; }
         static uint32_t GetAlignedNum32BitValues() { return 4; }
-        static uint32_t GetAlignedSizeInBytes() { return 16; }
+        static uint32_t GetAlignedSizeInBytes() { return GetAlignedNum32BitValues() * 4; }
         uint32_t* GetData()
         {
             data[0] = useFlags;
@@ -305,16 +305,53 @@ namespace Graphics
     #endif
     };
 
+    struct DDGIVisConsts
+    {
+        // Probe Visualization
+        uint  instanceOffset;   // Offset of the current volume's sphere instances in the acceleration structure's TLAS instances
+        uint  probeType;        // 0: irradiance | 1: distance
+        float probeRadius;      // world-space value
+        float distanceDivisor;  // divisor that normalizes the displayed distance values
+
+        // Probe Textures Visualization
+        float rayDataTextureScale;
+        float irradianceTextureScale;
+        float distanceTextureScale;
+        float probeDataTextureScale;
+
+    #ifndef HLSL
+        uint32_t data[8];
+        static uint32_t GetNum32BitValues() { return 8; }
+        static uint32_t GetSizeInBytes() { return GetNum32BitValues() * 4; }
+        static uint32_t GetAlignedNum32BitValues() { return 8; }
+        static uint32_t GetAlignedSizeInBytes() { return GetAlignedNum32BitValues() * 4; }
+        uint32_t* GetData()
+        {
+            data[0] = instanceOffset;
+            data[1] = probeType;
+            data[2] = *(uint32_t*)&probeRadius;
+            data[3] = *(uint32_t*)&distanceDivisor;
+            data[4] = *(uint32_t*)&rayDataTextureScale;
+            data[5] = *(uint32_t*)&irradianceTextureScale;
+            data[6] = *(uint32_t*)&distanceTextureScale;
+            data[7] = *(uint32_t*)&probeDataTextureScale;
+
+            return data;
+        }
+    #endif
+    };
+
     struct GlobalConstants             // Added directly to the Root Signature (D3D12) or VkPipelineLayout Push Constants (Vulkan)
     {
     #ifndef HLSL
-        AppConsts         app;         //  4 32-bit values, 16 bytes
-        PathTraceConsts   pt;          //  4 32-bit values, 16 bytes
-        LightingConsts    lights;      //  4 32-bit values, 16 bytes
-        RTAOConsts        rtao;        // 16 32-bit values, 64 bytes
-        CompositeConsts   composite;   //  4 32-bit values, 16 bytes
-        PostProcessConsts post;        //  4 32-bit values, 16 bytes
-                                       // 36 32-bit values, 144 bytes
+        AppConsts         app;         //  4 32-bit values,  16 bytes
+        PathTraceConsts   pt;          //  4 32-bit values,  16 bytes
+        LightingConsts    lights;      //  4 32-bit values,  16 bytes
+        RTAOConsts        rtao;        // 16 32-bit values,  64 bytes
+        CompositeConsts   composite;   //  4 32-bit values,  16 bytes
+        PostProcessConsts post;        //  4 32-bit values,  16 bytes
+        DDGIVisConsts     ddgivis;     //  8 32-bit values,  32 bytes
+                                       // 44 32-bit values, 176 bytes
 
         static uint32_t GetNum32BitValues()
         {
@@ -323,7 +360,8 @@ namespace Graphics
                 LightingConsts::GetNum32BitValues() +
                 RTAOConsts::GetNum32BitValues() +
                 CompositeConsts::GetNum32BitValues() +
-                PostProcessConsts::GetNum32BitValues());
+                PostProcessConsts::GetNum32BitValues() +
+                DDGIVisConsts::GetNum32BitValues());
         }
 
         static uint32_t GetSizeInBytes()
@@ -333,7 +371,8 @@ namespace Graphics
                 LightingConsts::GetSizeInBytes() +
                 RTAOConsts::GetSizeInBytes() +
                 CompositeConsts::GetSizeInBytes() +
-                PostProcessConsts::GetSizeInBytes());
+                PostProcessConsts::GetSizeInBytes() +
+                DDGIVisConsts::GetSizeInBytes());
         }
 
         static uint32_t GetAlignedNum32BitValues()
@@ -343,7 +382,8 @@ namespace Graphics
                 LightingConsts::GetAlignedNum32BitValues() +
                 RTAOConsts::GetAlignedNum32BitValues() +
                 CompositeConsts::GetAlignedNum32BitValues() +
-                PostProcessConsts::GetAlignedNum32BitValues());
+                PostProcessConsts::GetAlignedNum32BitValues() +
+                DDGIVisConsts::GetAlignedNum32BitValues());
         }
 
         static uint32_t GetAlignedSizeInBytes()
@@ -353,7 +393,8 @@ namespace Graphics
                 LightingConsts::GetAlignedSizeInBytes() +
                 RTAOConsts::GetAlignedSizeInBytes() +
                 CompositeConsts::GetAlignedSizeInBytes() +
-                PostProcessConsts::GetAlignedSizeInBytes());
+                PostProcessConsts::GetAlignedSizeInBytes() +
+                DDGIVisConsts::GetAlignedSizeInBytes());
         }
     #else
         // Note: although nested structs can be used in D3D12 root constants, they *may not* be used in Vulkan push constants.
@@ -403,75 +444,22 @@ namespace Graphics
         float  post_exposure;
         uint2  post_pad;
 
-    #if SPIRV
-        // DDGI Constants
-        uint   ddgi_volumeIndex;
-        uint   ddgi_uavOffset;
-        uint   ddgi_srvOffset;
-        uint   ddgi_pad;
-    #endif
-    #endif // HLSL
-    };
-
-    struct DDGIVisConstants
-    {
-    #ifndef HLSL
-        uint volumeIndex;
-        uint instanceOffset;
-
-        // Probe Vis
-        uint  probeType;   // 0: irradiance, 1: distance
-        float probeRadius;
-        float probeAlpha;
-        float distanceDivisor;
-
-        // Textures Vis
-        float rayDataTextureScale;
-        float irradianceTextureScale;
-        float distanceTextureScale;
-        float relocationOffsetTextureScale;
-        float classificationStateTextureScale;
-
-        uint32_t data[11];
-        static uint32_t GetNum32BitValues() { return 11; }
-        static uint32_t GetSizeInBytes() { return 44; }
-        static uint32_t GetAlignedNum32BitValues() { return 12; }
-        static uint32_t GetAlignedSizeInBytes() { return 48; }
-        uint32_t* GetData()
-        {
-            data[0]  = volumeIndex;
-            data[1]  = instanceOffset;
-            data[2]  = probeType;
-            data[3]  = *(uint32_t*)&probeRadius;
-            data[4]  = *(uint32_t*)&probeAlpha;
-            data[5]  = *(uint32_t*)&distanceDivisor;
-            data[6]  = *(uint32_t*)&rayDataTextureScale;
-            data[7]  = *(uint32_t*)&irradianceTextureScale;
-            data[8]  = *(uint32_t*)&distanceTextureScale;
-            data[9]  = *(uint32_t*)&relocationOffsetTextureScale;
-            data[10] = *(uint32_t*)&classificationStateTextureScale;
-          //data[11] = 0 // empty, alignment padding
-            return data;
-        }
-    #else
-        // Note: although nested structs can be used in D3D12 root constants, they *may not* be used in Vulkan push constants.
-        // Due to this constraint, we declare GPU-side global constants and provide accessor functions (in Descriptors.hlsl)
-        // to distinguish these as global values.
-
-        // DDGI Vis Constants
-        uint   ddgivis_volumeIndex;
+        // DDGI Visualization Constants
         uint   ddgivis_instanceOffset;
         uint   ddgivis_probeType;
         float  ddgivis_probeRadius;
-        float  ddgivis_probeAlpha;
         float  ddgivis_distanceDivisor;
         float  ddgivis_rayDataTextureScale;
         float  ddgivis_irradianceTextureScale;
         float  ddgivis_distanceTextureScale;
-        float  ddgivis_relocationOffsetTextureScale;
-        float  ddgivis_classificationStateTextureScale;
-        float  ddgivis_pad;
+        float  ddgivis_probeDataTextureScale;
+
+    #ifdef __spirv__
+        // DDGIRootConstants
+        uint   ddgi_volumeIndex;
+        uint3  ddgi_pad;
     #endif
+    #endif // HLSL
     };
 
 #ifndef HLSL

@@ -14,9 +14,6 @@
 #include "rtxgi/Defines.h"
 #include "rtxgi/Math.h"
 
-#include <random>
-#include <string>
-
 // --- Resource Allocation Mode -------------------------------------------------------------------
 
 // Define RTXGI_DDGI_RESOURCE_MANAGEMENT to specify the resource management mode.
@@ -29,7 +26,7 @@
 
 namespace rtxgi
 {
-    #include "DDGIConstants.h"
+    #include "DDGIRootConstants.h"
     #include "DDGIVolumeDescGPU.h"
 
     enum class EDDGIVolumeTextureType
@@ -41,6 +38,16 @@ namespace rtxgi
         Count
     };
 
+    enum class EDDGIVolumeTextureFormat
+    {
+        U32   = 0,  // 32-bits per texel unsigned normalized integer format. 4 channels, 10-bits per RGB and 2 bits for alpha. Used with Irradiance.
+        F16x2 = 1,  // 32-bits per texel half precision float format. 2 channels, 16-bits per channel. Used with Distance.
+        F16x4 = 2,  // 64-bits per texel half precision float format. 4 channels, 16-bits per channel. Used with Irradiance, Distance, and Data.
+        F32x2 = 3,  // 64-bits per texel float format. 2 channels, 32-bits per channel. Used with RayData and Distance.
+        F32x4 = 4,  // 128-bits per texel float format. 4 channels, 32-bits per channel. Used with RayData, Irradiance, and Data.
+        Count = 5
+    };
+
     enum class EDDGIVolumeMovementType
     {
         Default = 0,
@@ -48,37 +55,46 @@ namespace rtxgi
         Count
     };
 
+    enum class EDDGIVolumeProbeVisType
+    {
+        Default = 0,
+        Hide_Inactive,
+        Count
+    };
+
     extern bool bInsertPerfMarkers;
-    void SetInsertPerfMarkers(bool value);
+    RTXGI_API void SetInsertPerfMarkers(bool value);
 
     /**
-     * Get the number of resource descriptors required.
+     * Get the number of descriptors required for various descriptor heap types.
      */
-    int GetDDGIVolumeNumRTVDescriptors();
-    int GetDDGIVolumeNumSRVDescriptors();
-    int GetDDGIVolumeNumUAVDescriptors();
+    RTXGI_API int GetDDGIVolumeNumRTVDescriptors();
+    RTXGI_API int GetDDGIVolumeNumTex2DArrayDescriptors();
+    RTXGI_API int GetDDGIVolumeNumResourceDescriptors();
 
     /**
      * Describes properties of a DDGIVolume.
      */
     struct DDGIVolumeDesc
     {
-        std::string     name;                                   // Name of the volume.
-        uint32_t        index = 0;                              // Index of the volume in the constants structured buffer.
+        const char*     name;                                   // Name of the volume
+        uint32_t        index = 0;                              // Index of the volume in the constants structured buffer
         uint32_t        rngSeed = 0;                            // A seed for the random number generator (optional). A non-zero value manually initializes the seed used for rotation generation. Leave as zero to use the default (based on system time).
 
-        bool            showProbes = false;                     // A flag for toggling probe visualizations for this volume.
-        bool            insertPerfMarkers = false;              // A flag for toggling volume-specific perf markers in the graphics command list (for debugging and tools).
+        bool            showProbes = false;                     // A flag for toggling probe visualizations for this volume
+        bool            insertPerfMarkers = false;              // A flag for toggling volume-specific perf markers in the graphics command list (for debugging and tools)
 
-        float3          origin = {};                            // World-space origin of the volume.
-        float3          eulerAngles = {};                       // Euler rotation angles XYZ (in radians).
-        float3          probeSpacing = {};                      // World-space distance between probes on each axis of the grid.
+        float3          origin = {};                            // World-space origin of the volume
+        float3          eulerAngles = {};                       // Euler rotation angles XYZ (in radians)
+        float3          probeSpacing = {};                      // World-space distance between probes on each axis of the grid
 
-        int3            probeCounts = { -1, -1, -1 };           // Number of probes on each axis.
+        int3            probeCounts = { -1, -1, -1 };           // Number of probes on each axis
 
-        int             probeNumRays = 144;                     // Number of rays cast per probe per frame. When using RTXGI_DDGI_BLEND_SHARED_MEMORY, make this a multiple of the irradiance/distance probe texel resolution for best behavior.
-        int             probeNumIrradianceTexels = -1;          // Number of texels used in one dimension of the irradiance texture, not including the 1-pixel border on each side.
-        int             probeNumDistanceTexels = -1;            // Number of texels used in one dimension of the distance texture, not including the 1-pixel border on each side.
+        int             probeNumRays = 256;                     // Number of rays cast per probe per frame. When using RTXGI_DDGI_BLEND_SHARED_MEMORY, make this a multiple of the irradiance/distance probe texel resolution for best behavior.
+        int             probeNumIrradianceTexels = -1;          // Number of texels used in one dimension of the irradiance texture, *including* the 1-pixel border
+        int             probeNumIrradianceInteriorTexels = -1;  // Number of texels used in one dimension of the irradiance texture, *excluding* the 1-pixel border
+        int             probeNumDistanceTexels = -1;            // Number of texels used in one dimension of the distance texture, *including* the 1-pixel border
+        int             probeNumDistanceInteriorTexels = -1;    // Number of texels used in one dimension of the distance texture, *excluding* the 1-pixel border
 
         // Controls the influence of new rays when updating each probe. A value close to 1 will
         // very slowly change the probe textures, improving stability but reducing accuracy when objects
@@ -86,18 +102,17 @@ namespace rtxgi
         // but will exhibit flickering.
         float           probeHysteresis = 0.97f;
 
-        // Maximum world-space distance a probe ray may travel.
+        // Maximum world-space distance a probe ray may travel
         float           probeMaxRayDistance = 1e27f;
 
-        // Exponent for depth testing. A high value will rapidly react to depth discontinuities,
-        // but risks causing banding.
+        // Exponent for depth testing. A high value will rapidly react to depth discontinuities, but risks causing banding
         float           probeDistanceExponent = 50.f;
 
         // Irradiance blending happens in post-tonemap space.
         float           probeIrradianceEncodingGamma = 5.f;
 
-        // A threshold ratio used during probe radiance blending that determines if a large lighting change has happened.
-        // If the max color component difference is larger than this threshold, the hysteresis will be reduced.
+        // A threshold ratio used during probe radiance blending that determines if a large lighting change has happened
+        // If the max color component difference is larger than this threshold, the hysteresis will be reduced
         float           probeIrradianceThreshold = 0.25f;
 
         // A threshold value used during probe radiance blending that determines the maximum allowed difference in brightness
@@ -111,34 +126,35 @@ namespace rtxgi
         // Probe relocation and probe classification assume probes with more than this ratio of backface hits are inside of geometry
         float           probeFixedRayBackfaceThreshold = 0.25f;
 
-        // Bias values for indirect lighting.
+        // Bias values for indirect lighting
         float           probeViewBias = 0.1f;                   // A small offset along the camera view ray applied to the shaded surface point to avoid numerical instabilities when determining visibility
         float           probeNormalBias = 0.1f;                 // A small offset along the surface normal applied to the shaded surface point to avoid numerical instabilities when determining visibility
 
-        // Format type for probe texture atlases.
-        uint32_t        probeRayDataFormat = 0;                 // Texel format index for the ray data texture, used with GetDDGIVolumeTextureFormat()
-        uint32_t        probeIrradianceFormat = 0;              // Texel format index for the irradiance texture, used with GetDDGIVolumeTextureFormat()
-        uint32_t        probeDistanceFormat = 0;                // Texel format index for the distance texture, used with GetDDGIVolumeTextureFormat()
-        uint32_t        probeDataFormat = 0;                    // Texel format index for the probe data texture, used with GetDDGIVolumeTextureFormat()
+        // Format type for probe texture atlases
+        EDDGIVolumeTextureFormat probeRayDataFormat;            // Texel format for the ray data texture, used with GetDDGIVolumeTextureFormat()
+        EDDGIVolumeTextureFormat probeIrradianceFormat;         // Texel format for the irradiance texture, used with GetDDGIVolumeTextureFormat()
+        EDDGIVolumeTextureFormat probeDistanceFormat;           // Texel format for the distance texture, used with GetDDGIVolumeTextureFormat()
+        EDDGIVolumeTextureFormat probeDataFormat;               // Texel format for the probe data texture, used with GetDDGIVolumeTextureFormat()
 
-        // Using shared memory for scroll tests in probe blending can be a performance win on some hardware by reducing the compute workload.
+        // Using shared memory for scroll tests in probe blending can be a performance win on some hardware by reducing the compute workload
         bool            probeBlendingUseScrollSharedMemory = false;
 
-        // Probe relocation moves probes to more useful positions.
+        // Probe relocation moves probes to more useful positions
         bool            probeRelocationEnabled = false;
         bool            probeRelocationNeedsReset = false;
 
-        // Probe relocation will maintain a minimum world-space distance from front facing surfaces.
+        // Probe relocation will maintain a minimum world-space distance from front facing surfaces
         float           probeMinFrontfaceDistance = 1.f;
 
-        // Probe classification marks probes with states to reduce the ray tracing and blending workloads.
+        // Probe classification marks probes with states to reduce the ray tracing and blending workloads
         bool            probeClassificationEnabled = false;
         bool            probeClassificationNeedsReset = false;
 
-        // The type of movement the volume supports:
-        // 0: Default movement
-        // 1: Infinite scrolling movement
+        // The type of movement the volume supports
         EDDGIVolumeMovementType movementType = EDDGIVolumeMovementType::Default;
+
+        // The type of visualization that should be used for this volume
+        EDDGIVolumeProbeVisType probeVisType = EDDGIVolumeProbeVisType::Default;
 
     #if RTXGI_DDGI_RESOURCE_MANAGEMENT
         bool ShouldAllocateProbes(const DDGIVolumeDesc& desc)
@@ -175,24 +191,27 @@ namespace rtxgi
     /**
      * Validate a shader bytecode blob.
      */
-    bool ValidateShaderBytecode(const ShaderBytecode& bytecode);
+    RTXGI_API bool ValidateShaderBytecode(const ShaderBytecode& bytecode);
 
     /**
-     * Get the number of probes on the X and Y dimensions of the irradiance and distance textures.
+     * Get the number of probes on each axis of the volume for use when specifying textures.
+     * The returned Z dimension represents the up axis regardless of coordinate system.
      */
-    void GetDDGIVolumeProbeCounts(const DDGIVolumeDesc& desc, uint32_t& probeCountX, uint32_t& probeCountY);
+    RTXGI_API void GetDDGIVolumeProbeCounts(const DDGIVolumeDesc& desc, uint32_t& probeCountX, uint32_t& probeCountY, uint32_t& probeCountZ);
 
     /**
-     * Get the dimensions of the given texture type.
+     * Get the dimensions (in texels) of the specified texture type.
      */
-    void GetDDGIVolumeTextureDimensions(const DDGIVolumeDesc& desc, EDDGIVolumeTextureType type, uint32_t& width, uint32_t& height);
+    RTXGI_API void GetDDGIVolumeTextureDimensions(const DDGIVolumeDesc& desc, EDDGIVolumeTextureType type, uint32_t& width, uint32_t& height, uint32_t& arraySize);
 
-    /*
-     * DDGIVolume abstract base class. Instantiate API-specific class.
+    /**
+     * DDGIVolume abstract base class. Instantiate the API-specific subclass.
      */
-    class DDGIVolumeBase
+    class RTXGI_API DDGIVolumeBase
     {
     public:
+
+        // Update the volume's rotation matrices and scrolling
         virtual void Update();
 
         // Random numbers
@@ -204,16 +223,17 @@ namespace rtxgi
         virtual void OnLargeObjectChange() {}
         virtual void OnSmallLightChange() {}
 
-        /**
-         * Releases resources owned by the volume.
-         */
+        // Releases resources owned by the volume
         virtual void Destroy() = 0;
+
+        // Packed constant data validation
+        void ValidatePackedData(const DDGIVolumeDescGPUPacked packed) const;
 
         //------------------------------------------------------------------------
         // Setters
         //------------------------------------------------------------------------
 
-        void SetName(std::string name) { m_desc.name = name; }
+        void SetName(const char* name) { m_desc.name = name; }
 
         void SetIndex(uint32_t index) { m_desc.index = index; }
 
@@ -222,6 +242,8 @@ namespace rtxgi
         void SetInsertPerfMarkers(bool value) { m_desc.insertPerfMarkers = value; }
 
         void SetMovementType(EDDGIVolumeMovementType value);
+
+        void SetProbeVisType(EDDGIVolumeProbeVisType value) { m_desc.probeVisType = value; }
 
         void SetOrigin(const float3& value) { m_desc.origin = value; }
 
@@ -267,13 +289,15 @@ namespace rtxgi
         // Getters
         //------------------------------------------------------------------------
 
+        virtual uint32_t GetGPUMemoryUsedInBytes() const;
+
         DDGIVolumeDesc GetDesc() const { return m_desc; }
 
         DDGIVolumeDescGPU GetDescGPU() const;
 
         DDGIVolumeDescGPUPacked GetDescGPUPacked() const;
 
-        std::string GetName() const { return m_desc.name; }
+        const char* GetName() const { return m_desc.name; }
 
         uint32_t GetIndex() const { return m_desc.index; }
 
@@ -283,7 +307,11 @@ namespace rtxgi
 
         bool GetInsertPerfMarkers() const { return m_desc.insertPerfMarkers; }
 
+        uint32_t GetTexture2DArraySize() const;
+
         EDDGIVolumeMovementType GetMovementType() const { return m_desc.movementType; }
+
+        EDDGIVolumeProbeVisType GetProbeVisType() const { return m_desc.probeVisType; }
 
         float3 GetScrollAnchor() const { return m_probeScrollAnchor; }
 
@@ -296,6 +324,8 @@ namespace rtxgi
         int GetNumProbes() const { return (m_desc.probeCounts.x * m_desc.probeCounts.y * m_desc.probeCounts.z); }
 
         int GetNumRaysPerProbe() const { return m_desc.probeNumRays; }
+
+        void GetRayDispatchDimensions(uint32_t& width, uint32_t& height, uint32_t& depth) const;
 
         float GetProbeHysteresis() const { return m_desc.probeHysteresis; }
 
@@ -346,7 +376,6 @@ namespace rtxgi
     protected:
 
         DDGIVolumeDesc m_desc;                                                 // Properties of the volume
-        std::mt19937   m_rng;                                                  // Mersenne twister pseudo-random generator of 32-bit numbers with state size of 19937 bits
 
         float4         m_rotationQuaternion = { 0.f, 0.f, 0.f, 1.f };          // Quaternion defining the orientation of the volume (constructed from m_rotationMatrix)
         float3x3       m_rotationMatrix = {                                    // Matrix defining the orientation of the volume

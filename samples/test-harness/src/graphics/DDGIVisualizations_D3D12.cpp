@@ -25,102 +25,10 @@ namespace Graphics
         {
             namespace Visualizations
             {
-                namespace DescriptorHeapOffsets
-                {
-                    const int CBV_CAMERA = 0;                               //   0:  1 CBV for the camera constant buffer
-                    const int STB_DDGI_VOLUMES = CBV_CAMERA + 1;            //   1:  1 SRV for the DDGIVolume constants structured buffer
-                    const int STB_INSTANCES = STB_DDGI_VOLUMES + 1;         //   2:  1 UAV for the TLAS instance descriptors structured buffer
-                    const int UAV_GBUFFERA = STB_INSTANCES + 1;             //   3:  1 UAV for the GBufferA RWTexture
-                    const int UAV_GBUFFERB = UAV_GBUFFERA + 1;              //   4:  1 UAV for the GBufferB RWTexture
-                    const int SRV_INDICES = UAV_GBUFFERB + 1;               //   5:  1 SRV for Probe Sphere Mesh Index Buffers
-                    const int SRV_VERTICES = SRV_INDICES + 1;               //   6:  1 SRV for Probe Sphere Mesh Vertex Buffers
-                    const int SRV_TEX2D_START = SRV_VERTICES + 1;           //   7:  16 SRV for DDGIVolume Textures, 4 SRV per DDGIVolume (Ray Data, Irradiance, Distance, Probe Data)
-                };
 
                 //----------------------------------------------------------------------------------------------------------
                 // Private Functions
                 //----------------------------------------------------------------------------------------------------------
-
-                void UpdateDescriptorHeap(Globals& d3d, GlobalResources& d3dResources, Resources& resources)
-                {
-                    // Add the camera CBV to the descriptor heap
-                    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
-                    cbvDesc.SizeInBytes = ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, Scenes::Camera::GetGPUDataSize());
-                    cbvDesc.BufferLocation = d3dResources.cameraCB->GetGPUVirtualAddress();
-
-                    D3D12_CPU_DESCRIPTOR_HANDLE handle;
-                    handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::CBV_CAMERA * resources.srvDescHeapEntrySize);
-                    d3d.device->CreateConstantBufferView(&cbvDesc, handle);
-
-                    // Add the constants structured buffer SRV to the descriptor heap
-                    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-                    srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-                    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-                    srvDesc.Buffer.NumElements = static_cast<UINT>(resources.volumes->size());
-                    srvDesc.Buffer.StructureByteStride = sizeof(DDGIVolumeDescGPUPacked);
-                    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-
-                    handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::STB_DDGI_VOLUMES * resources.srvDescHeapEntrySize);
-                    d3d.device->CreateShaderResourceView(resources.constantsSTB, &srvDesc, handle);
-
-                    // GBufferA (R8G8B8A8_UNORM) texture resource
-                    TextureDesc desc = { static_cast<UINT>(d3d.width), static_cast<UINT>(d3d.height), 1, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
-
-                    // Add the GBufferA UAV to the descriptor heap
-                    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-                    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-                    uavDesc.Format = desc.format;
-
-                    handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::UAV_GBUFFERA * resources.srvDescHeapEntrySize);
-                    d3d.device->CreateUnorderedAccessView(d3dResources.rt.GBufferA, nullptr, &uavDesc, handle);
-
-                    // GBufferB (R32G32B32A32_FLOAT) texture resource
-                    desc.format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-
-                    // Add the GBufferB UAV to the descriptor heap
-                    uavDesc.Format = desc.format;
-                    handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::UAV_GBUFFERB * resources.srvDescHeapEntrySize);
-                    d3d.device->CreateUnorderedAccessView(d3dResources.rt.GBufferB, nullptr, &uavDesc, handle);
-
-                    // Add the DDGIVolume SRVs to the descriptor heap
-                    srvDesc = {};
-                    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-                    srvDesc.Texture2D.MipLevels = 1;
-                    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-
-                    int heapSlot = DescriptorHeapOffsets::SRV_TEX2D_START;
-                    for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.volumes->size()); volumeIndex++)
-                    {
-                        // Get the volume
-                        DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
-
-                        // Ray Data
-                        srvDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::RayData, volume->GetRayDataFormat());
-                        handle.ptr = resources.srvDescHeapStart.ptr + (heapSlot * resources.srvDescHeapEntrySize);
-                        d3d.device->CreateShaderResourceView(volume->GetProbeRayData(), &srvDesc, handle);
-                        heapSlot++;
-
-                        // Irradiance
-                        srvDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Irradiance, volume->GetIrradianceFormat());
-                        handle.ptr = resources.srvDescHeapStart.ptr + (heapSlot * resources.srvDescHeapEntrySize);
-                        d3d.device->CreateShaderResourceView(volume->GetProbeIrradiance(), &srvDesc, handle);
-                        heapSlot++;
-
-                        // Distance
-                        srvDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Distance, volume->GetDistanceFormat());
-                        handle.ptr = resources.srvDescHeapStart.ptr + (heapSlot * resources.srvDescHeapEntrySize);
-                        d3d.device->CreateShaderResourceView(volume->GetProbeDistance(), &srvDesc, handle);
-                        heapSlot++;
-
-                        // Probe Data
-                        srvDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, volume->GetProbeDataFormat());
-                        handle.ptr = resources.srvDescHeapStart.ptr + (heapSlot * resources.srvDescHeapEntrySize);
-                        d3d.device->CreateShaderResourceView(volume->GetProbeData(), &srvDesc, handle);
-
-                        heapSlot++;
-                    }
-
-                }
 
                 bool UpdateShaderTable(Globals& d3d, GlobalResources& d3dResources, Resources& resources)
                 {
@@ -134,14 +42,22 @@ namespace Graphics
                     // Write shader table records for each shader permutation
                     D3D12_GPU_VIRTUAL_ADDRESS address = resources.shaderTable->GetGPUVirtualAddress();
 
-                    // Entry 0: Ray Generation Shader and descriptor heap pointer
+                    // Entry 0: Ray Generation Shader (default) and descriptor heap pointer
                     memcpy(pData, resources.rtpsoInfo->GetShaderIdentifier(resources.rtShaders.rgs.exportName.c_str()), shaderIdSize);
                     *reinterpret_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(pData + shaderIdSize) = d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart();
                     resources.shaderTableRGSStartAddress = address;
 
                     address += resources.shaderTableRecordSize;
 
-                    // Entry 1: Miss Shader
+                    // Entry 1: Ray Generation Shader (alternate) and descriptor heap pointer
+                    pData += resources.shaderTableRecordSize;
+                    memcpy(pData, resources.rtpsoInfo2->GetShaderIdentifier(resources.rtShaders2.rgs.exportName.c_str()), shaderIdSize);
+                    *reinterpret_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(pData + shaderIdSize) = d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart();
+                    resources.shaderTableRGS2StartAddress = address;
+
+                    address += resources.shaderTableRecordSize;
+
+                    // Entry 2: Miss Shader
                     pData += resources.shaderTableRecordSize;
                     memcpy(pData, resources.rtpsoInfo->GetShaderIdentifier(resources.rtShaders.miss.exportName.c_str()), shaderIdSize);
                     resources.shaderTableMissTableStartAddress = address;
@@ -149,7 +65,7 @@ namespace Graphics
 
                     address += resources.shaderTableMissTableSize;
 
-                    // Entries 2+: Hit Groups and descriptor heap pointers
+                    // Entries 3+: Hit Groups and descriptor heap pointers
                     for (UINT hitGroupIndex = 0; hitGroupIndex < static_cast<UINT>(resources.rtShaders.hitGroups.size()); hitGroupIndex++)
                     {
                         pData += resources.shaderTableRecordSize;
@@ -189,7 +105,7 @@ namespace Graphics
                     for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.volumes->size()); volumeIndex++)
                     {
                         // Get the volume
-                        DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
+                        const DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
 
                         // Skip this volume if its "Show Probes" flag is disabled
                         if (!volume->GetShowProbes()) continue;
@@ -199,9 +115,13 @@ namespace Graphics
                         {
                             // Describe the probe instance
                             D3D12_RAYTRACING_INSTANCE_DESC desc = {};
-                            desc.InstanceID = instanceOffset;                  // instance offset in first 16 bits
+                            desc.InstanceID = instanceOffset;                   // instance offset in first 16 bits
                             desc.InstanceID |= (UINT8)volume->GetIndex() << 16; // volume index in last 8 bits
-                            desc.InstanceMask = 0xFF;
+
+                            // Set the instance mask based on the visualization type
+                            if(volume->GetProbeVisType() == EDDGIVolumeProbeVisType::Default) desc.InstanceMask = 0x01;
+                            else if(volume->GetProbeVisType() == EDDGIVolumeProbeVisType::Hide_Inactive) desc.InstanceMask = 0x02;
+
                             desc.AccelerationStructure = resources.blas.as->GetGPUVirtualAddress();
                         #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
                             desc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE;
@@ -244,9 +164,9 @@ namespace Graphics
                     return true;
                 }
 
-                bool UpdateTLAS(Globals& d3d, Resources& resources, const Configs::Config& config)
+                bool UpdateTLAS(Globals& d3d, GlobalResources& d3dResources, Resources& resources, const Configs::Config& config)
                 {
-                #ifdef RTXGI_GFX_PERF_MARKERS
+                #ifdef GFX_PERF_MARKERS
                     PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "Update DDGI Visualizations TLAS");
                 #endif
 
@@ -268,12 +188,17 @@ namespace Graphics
                     d3d.cmdList->ResourceBarrier(1, &barrier);
 
                     // Set the descriptor heap
-                    ID3D12DescriptorHeap* ppHeaps[] = { resources.srvDescHeap };
+                    ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
                     d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-                    // Set the root signature and descriptor table
-                    d3d.cmdList->SetComputeRootSignature(resources.rootSignature);
-                    d3d.cmdList->SetComputeRootDescriptorTable(1, resources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                    // Set the root signature
+                    d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
+
+                    // Set the root parameter descriptor tables
+                #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                    d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                    d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                #endif
 
                     // Set the compute PSO
                     d3d.cmdList->SetPipelineState(resources.updateTlasPSO);
@@ -281,22 +206,29 @@ namespace Graphics
                     UINT instanceOffset = 0;
                     for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.volumes->size()); volumeIndex++)
                     {
-                        DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
+                        // Get the volume
+                        const DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
 
                         // Skip this volume if the "Show Probes" flag is disabled
                         if (!volume->GetShowProbes()) continue;
 
                         // Update constants
-                        resources.constants.volumeIndex = volume->GetIndex();
-                        resources.constants.instanceOffset = instanceOffset;
-                        resources.constants.probeRadius = config.ddgi.volumes[volumeIndex].probeRadius;
+                        d3dResources.constants.ddgivis.instanceOffset = instanceOffset;
+                        d3dResources.constants.ddgivis.probeRadius = config.ddgi.volumes[volumeIndex].probeRadius;
 
-                        // Set root constants
-                        d3d.cmdList->SetComputeRoot32BitConstants(3, resources.constants.GetNum32BitValues(), resources.constants.GetData(), 0);
-                        
+                        // Update the vis root constants
+                        UINT offset = GlobalConstants::GetAlignedNum32BitValues() - DDGIVisConsts::GetAlignedNum32BitValues();
+                        d3d.cmdList->SetComputeRoot32BitConstants(0, DDGIVisConsts::GetNum32BitValues(), d3dResources.constants.ddgivis.GetData(), offset);
+
+                        // Update the DDGIRootConstants
+                        DDGIRootConstants ddgiConsts = { volumeIndex, DescriptorHeapOffsets::STB_DDGI_VOLUME_CONSTS, DescriptorHeapOffsets::STB_DDGI_VOLUME_RESOURCE_INDICES };
+                        d3d.cmdList->SetComputeRoot32BitConstants(1, DDGIRootConstants::GetNum32BitValues(), ddgiConsts.GetData(), 0);
+
                         // Dispatch the compute shader
+                        float groupSize = 32.f;
                         UINT numProbes = static_cast<UINT>(volume->GetNumProbes());
-                        d3d.cmdList->Dispatch(numProbes, 1, 1);
+                        UINT numGroups = (UINT)ceil((float)numProbes / groupSize);
+                        d3d.cmdList->Dispatch(numGroups, 1, 1);
 
                         // Increment the instance offset
                         instanceOffset += resources.volumes->at(volumeIndex)->GetNumProbes();
@@ -354,147 +286,36 @@ namespace Graphics
 
                 // --- Create -----------------------------------------------------------------------------------------
 
-                bool CreateRootSignature(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::ofstream& log)
-                {
-                    D3D12_DESCRIPTOR_RANGE ranges[5];
-                    UINT rangeIndex = 0;
-
-                    // Samplers
-                    D3D12_DESCRIPTOR_RANGE samplerRange;
-                    samplerRange.BaseShaderRegister = 0;
-                    samplerRange.NumDescriptors = UINT_MAX;
-                    samplerRange.RegisterSpace = 0;
-                    samplerRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
-                    samplerRange.OffsetInDescriptorsFromTableStart = 0;
-
-                    // Sampler Descriptor Table
-                    D3D12_ROOT_PARAMETER param0 = {};
-                    param0.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-                    param0.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-                    param0.DescriptorTable.NumDescriptorRanges = 1;
-                    param0.DescriptorTable.pDescriptorRanges = &samplerRange;
-
-                    // Cameras Constant Buffer CBV (b1, space0)
-                    ranges[rangeIndex].BaseShaderRegister = 1;
-                    ranges[rangeIndex].NumDescriptors = 1;
-                    ranges[rangeIndex].RegisterSpace = 0;
-                    ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-                    ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::CBV_CAMERA;
-                    rangeIndex++;
-
-                    // DDGIVolume StructuredBuffer SRV (t1, space0)
-                    ranges[rangeIndex].BaseShaderRegister = 1;
-                    ranges[rangeIndex].NumDescriptors = 1;
-                    ranges[rangeIndex].RegisterSpace = 0;
-                    ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-                    ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_DDGI_VOLUMES;
-                    rangeIndex++;
-
-                    // TLAS Instances RWStructuredBuffer, GBufferA, GBufferB UAVs (u0-u2, space0)
-                    ranges[rangeIndex].BaseShaderRegister = 0;
-                    ranges[rangeIndex].NumDescriptors = 3;
-                    ranges[rangeIndex].RegisterSpace = 0;
-                    ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-                    ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::STB_INSTANCES;
-                    rangeIndex++;
-
-                    // Bindless ByteAddressBuffer SRVs (t2, space0)
-                    ranges[rangeIndex].BaseShaderRegister = 2;
-                    ranges[rangeIndex].NumDescriptors = UINT_MAX;
-                    ranges[rangeIndex].RegisterSpace = 0;
-                    ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-                    ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::SRV_INDICES;
-                    rangeIndex++;
-
-                    // Bindless Texture2D SRVs (t2, space1)
-                    ranges[rangeIndex].BaseShaderRegister = 2;
-                    ranges[rangeIndex].NumDescriptors = UINT_MAX;
-                    ranges[rangeIndex].RegisterSpace = 1;
-                    ranges[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-                    ranges[rangeIndex].OffsetInDescriptorsFromTableStart = DescriptorHeapOffsets::SRV_TEX2D_START;
-                    rangeIndex++;
-
-                    // Resource Descriptor Table
-                    D3D12_ROOT_PARAMETER param1 = {};
-                    param1.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-                    param1.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-                    param1.DescriptorTable.NumDescriptorRanges = _countof(ranges);
-                    param1.DescriptorTable.pDescriptorRanges = ranges;
-
-                    // RaytracingAccelerationStructure SRV (t0, space0)
-                    D3D12_ROOT_PARAMETER param2 = {};
-                    param2.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-                    param2.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-                    param2.Descriptor.ShaderRegister = 0;
-                    param2.Descriptor.RegisterSpace = 0;
-
-                    // Root Constants (b0, space0)
-                    D3D12_ROOT_PARAMETER param3 = {};
-                    param3.Constants.ShaderRegister = 0;
-                    param3.Constants.Num32BitValues = resources.constants.GetAlignedNum32BitValues();
-                    param3.Constants.RegisterSpace = 0;
-                    param3.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-
-                    D3D12_ROOT_PARAMETER rootParams[4] = { param0, param1, param2, param3 };
-
-                    D3D12_ROOT_SIGNATURE_DESC desc = {};
-                    desc.NumParameters = _countof(rootParams);
-                    desc.pParameters = rootParams;
-                    desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-                    // Create the root signature
-                    resources.rootSignature = CreateRootSignature(d3d, desc);
-                    if (!resources.rootSignature)
-                    {
-                        log << "Failed to create DDGI visualizations root signature!\n";
-                        return false;
-                    }
-                #ifdef GFX_NAME_OBJECTS
-                    resources.rootSignature->SetName(L"DDGI Visualizations Root Signature");
-                #endif
-                    return true;
-                }
-
-                bool CreateDescriptorHeap(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::ofstream& log)
-                {
-                    // See DescriptorHeapOffsets for the descriptor heap layout
-                    D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-                    heapDesc.NumDescriptors = DescriptorHeapOffsets::SRV_TEX2D_START + (static_cast<UINT>(resources.volumes->size()) * GetDDGIVolumeNumSRVDescriptors());
-                    heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-                    heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-
-                    // Create the descriptor heap
-                    D3DCHECK(d3d.device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&resources.srvDescHeap)));
-                #ifdef GFX_NAME_OBJECTS
-                    resources.srvDescHeap->SetName(L"DDGI Visualizations Descriptor Heap");
-                #endif
-
-                    resources.srvDescHeapStart = resources.srvDescHeap->GetCPUDescriptorHandleForHeapStart();
-                    resources.srvDescHeapEntrySize = d3d.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-                    UpdateDescriptorHeap(d3d, d3dResources, resources);
-
-                    return true;
-                }
-
-                bool LoadAndCompileShaders(Globals& d3d, Resources& resources, std::ofstream& log)
+                bool LoadAndCompileShaders(Globals& d3d, Resources& resources, Configs::Config& config, std::ofstream& log)
                 {
                     // Release existing shaders
                     resources.rtShaders.Release();
+                    resources.rtShaders2.rgs.Release();
                     resources.textureVisCS.Release();
                     resources.updateTlasCS.Release();
 
                     std::wstring root = std::wstring(d3d.shaderCompiler.root.begin(), d3d.shaderCompiler.root.end());
 
-                    // Load and compile the ray generation shader
+                    // Load and compile the ray generation shaders
                     {
                         resources.rtShaders.rgs.filepath = root + L"shaders/ddgi/visualizations/ProbesRGS.hlsl";
                         resources.rtShaders.rgs.entryPoint = L"RayGen";
                         resources.rtShaders.rgs.exportName = L"DDGIVisProbesRGS";
-
+                        Shaders::AddDefine(resources.rtShaders.rgs, L"CONSTS_REGISTER", L"b0");   // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                        Shaders::AddDefine(resources.rtShaders.rgs, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                        Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                         Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-
                         CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.rgs, true), "compile DDGI Visualizations ray generation shader!\n", log);
+
+                        // Load and compile alternate RGS
+                        resources.rtShaders2.rgs.filepath = root + L"shaders/ddgi/visualizations/ProbesRGS.hlsl";
+                        resources.rtShaders2.rgs.entryPoint = L"RayGenHideInactive";
+                        resources.rtShaders2.rgs.exportName = L"DDGIVisProbesRGS";
+                        Shaders::AddDefine(resources.rtShaders2.rgs, L"CONSTS_REGISTER", L"b0");   // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                        Shaders::AddDefine(resources.rtShaders2.rgs, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                        Shaders::AddDefine(resources.rtShaders2.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
+                        Shaders::AddDefine(resources.rtShaders2.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
+                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders2.rgs, true), "compile DDGI Visualizations ray generation shader!\n", log);
                     }
 
                     // Load and compile the miss shader
@@ -504,7 +325,11 @@ namespace Graphics
                         resources.rtShaders.miss.exportName = L"DDGIVisProbesMiss";
 
                         // Load and compile
+                        Shaders::AddDefine(resources.rtShaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                         CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.miss, true), "compile DDGI Visualizations miss shader!\n", log);
+
+                        // Copy to the alternate RT pipeline
+                        resources.rtShaders2.miss = resources.rtShaders.miss;
                     }
 
                     // Add the hit group
@@ -520,22 +345,28 @@ namespace Graphics
                         group.chs.exportName = L"DDGIVisProbesCHS";
 
                         // Load and compile
+                        Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                         CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs, true), "compile DDGI Visualizations closest hit shader!\n", log);
 
                         // Set the payload size
-                        resources.rtShaders.payloadSizeInBytes = sizeof(ProbesPayload);
+                        resources.rtShaders.payloadSizeInBytes = sizeof(ProbeVisualizationPayload);
+
+                        // Copy to the alternate RT pipeline
+                        resources.rtShaders2.hitGroups = resources.rtShaders.hitGroups;
+                        resources.rtShaders2.payloadSizeInBytes = resources.rtShaders.payloadSizeInBytes;
                     }
 
                     // Load and compile the volume texture shader
                     {
                         resources.textureVisCS.filepath = root + L"shaders/ddgi/visualizations/VolumeTexturesCS.hlsl";
                         resources.textureVisCS.entryPoint = L"CS";
-                        resources.textureVisCS.targetProfile = L"cs_6_0";
-
+                        resources.textureVisCS.targetProfile = L"cs_6_6";
+                        Shaders::AddDefine(resources.textureVisCS, L"CONSTS_REGISTER", L"b0");   // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                        Shaders::AddDefine(resources.textureVisCS, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                        Shaders::AddDefine(resources.textureVisCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                         Shaders::AddDefine(resources.textureVisCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
                         Shaders::AddDefine(resources.textureVisCS, L"THGP_DIM_X", L"8");
                         Shaders::AddDefine(resources.textureVisCS, L"THGP_DIM_Y", L"4");
-
                         CHECK(Shaders::Compile(d3d.shaderCompiler, resources.textureVisCS, true), "compile DDGI Visualizations volume textures compute shader!\n", log);
                     }
 
@@ -543,10 +374,11 @@ namespace Graphics
                     {
                         resources.updateTlasCS.filepath = root + L"shaders/ddgi/visualizations/ProbesUpdateCS.hlsl";
                         resources.updateTlasCS.entryPoint = L"CS";
-                        resources.updateTlasCS.targetProfile = L"cs_6_0";
-
+                        resources.updateTlasCS.targetProfile = L"cs_6_6";
+                        Shaders::AddDefine(resources.updateTlasCS, L"CONSTS_REGISTER", L"b0");   // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                        Shaders::AddDefine(resources.updateTlasCS, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
+                        Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-
                         CHECK(Shaders::Compile(d3d.shaderCompiler, resources.updateTlasCS, true), "compile DDGI Visualizations probes update compute shader!\n", log);
                     }
 
@@ -557,27 +389,42 @@ namespace Graphics
                 {
                     // Release existing PSOs
                     SAFE_RELEASE(resources.rtpso);
+                    SAFE_RELEASE(resources.rtpso2);
                     SAFE_RELEASE(resources.rtpsoInfo);
+                    SAFE_RELEASE(resources.rtpsoInfo2);
                     SAFE_RELEASE(resources.texturesVisPSO);
                     SAFE_RELEASE(resources.updateTlasPSO);
 
-                    // Create the probe visualization RTPSO
+                    // Create the probe visualization RTPSO (default)
                     CHECK(CreateRayTracingPSO(
                         d3d.device,
-                        resources.rootSignature,
+                        d3dResources.rootSignature,
                         resources.rtShaders,
                         &resources.rtpso,
                         &resources.rtpsoInfo),
                         "create DDGI Probe Visualization RTPSO!\n", log);
 
                 #ifdef GFX_NAME_OBJECTS
-                    resources.rtpso->SetName(L"DDGI Probe Visualization RTPSO");
+                    resources.rtpso->SetName(L"DDGI Probe Visualization RTPSO (Default)");
+                #endif
+
+                    // Create the probe visualization RTPSO (alternate)
+                    CHECK(CreateRayTracingPSO(
+                        d3d.device,
+                        d3dResources.rootSignature,
+                        resources.rtShaders2,
+                        &resources.rtpso2,
+                        &resources.rtpsoInfo2),
+                        "create DDGI Probe Visualization RTPSO!\n", log);
+
+                #ifdef GFX_NAME_OBJECTS
+                    resources.rtpso2->SetName(L"DDGI Probe Visualization RTPSO (Alternate)");
                 #endif
 
                     // Create the volume texture visualization PSO
                     CHECK(CreateComputePSO(
                         d3d.device,
-                        resources.rootSignature,
+                        d3dResources.rootSignature,
                         resources.textureVisCS,
                         &resources.texturesVisPSO),
                         "create DDGI Volume Texture Visualization PSO!\n", log);
@@ -589,7 +436,7 @@ namespace Graphics
                     // Create the probe update compute PSO
                     CHECK(CreateComputePSO(
                         d3d.device,
-                        resources.rootSignature,
+                        d3dResources.rootSignature,
                         resources.updateTlasCS,
                         &resources.updateTlasPSO),
                         "create DDGI Visualization Probe Update Compute PSO!\n", log);
@@ -604,9 +451,10 @@ namespace Graphics
                 bool CreateShaderTable(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::ofstream& log)
                 {
                     // The Shader Table layout is as follows:
-                    //    Entry 0:  Probe Vis Ray Generation Shader
-                    //    Entry 1:  Probe Vis Miss Shader
-                    //    Entry 2+: Probe Vis HitGroups
+                    //    Entry 0:  Probe Vis Ray Generation Shader (default)
+                    //    Entry 1:  Probe Vis Ray Generation Shader (alternate)
+                    //    Entry 2:  Probe Vis Miss Shader
+                    //    Entry 3+: Probe Vis HitGroups
                     // All shader records in the Shader Table must have the same size, so shader record size will be based on the largest required entry.
                     // The entries must be aligned up to D3D12_RAYTRACING_SHADER_BINDING_TABLE_RECORD_BYTE_ALIGNMENT.
                     // The CHS requires the largest entry:
@@ -628,7 +476,7 @@ namespace Graphics
                     resources.shaderTableRecordSize = ALIGN(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, resources.shaderTableRecordSize);
 
                     // Find the shader table size
-                    resources.shaderTableSize = (2 + static_cast<uint32_t>(resources.rtShaders.hitGroups.size())) * resources.shaderTableRecordSize;
+                    resources.shaderTableSize = (3 + static_cast<uint32_t>(resources.rtShaders.hitGroups.size())) * resources.shaderTableRecordSize;
                     resources.shaderTableSize = ALIGN(D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, resources.shaderTableSize);
 
                     // Create the shader table upload buffer resource
@@ -639,7 +487,7 @@ namespace Graphics
                 #endif
 
                     // Create the shader table buffer resource
-                    desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+                    desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
                     CHECK(CreateBuffer(d3d, desc, &resources.shaderTable), "create DDGI Visualizations shader table!", log);
                 #ifdef GFX_NAME_OBJECTS
                     resources.shaderTable->SetName(L"DDGI Visualizations Shader Table");
@@ -673,13 +521,13 @@ namespace Graphics
                     srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
                     D3D12_CPU_DESCRIPTOR_HANDLE handle;
-                    handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_INDICES * resources.srvDescHeapEntrySize);
+                    handle.ptr = d3dResources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_SPHERE_INDICES * d3dResources.srvDescHeapEntrySize);
                     d3d.device->CreateShaderResourceView(resources.probeIB, &srvDesc, handle);
 
                     // Add the vertex buffer SRV to the descriptor heap
                     srvDesc.Buffer.NumElements = resources.probeVBView.SizeInBytes / sizeof(UINT);
 
-                    handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_VERTICES * resources.srvDescHeapEntrySize);
+                    handle.ptr = d3dResources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_SPHERE_VERTICES * d3dResources.srvDescHeapEntrySize);
                     d3d.device->CreateShaderResourceView(resources.probeVB, &srvDesc, handle);
 
                     return true;
@@ -721,7 +569,7 @@ namespace Graphics
                         asPreBuildInfo.ScratchDataSizeInBytes,
                         D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT,
                         EHeapType::DEFAULT,
-                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                        D3D12_RESOURCE_STATE_COMMON,
                         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                     };
                     if (!CreateBuffer(d3d, blasScratchDesc, &resources.blas.scratch)) return false;
@@ -761,7 +609,7 @@ namespace Graphics
                     return true;
                 }
 
-                bool CreateInstances(Globals& d3d, Resources& resources)
+                bool CreateInstances(Globals& d3d, GlobalResources& d3dResources, Resources& resources)
                 {
                     // Release the existing TLAS
                     resources.tlas.Release();
@@ -769,7 +617,7 @@ namespace Graphics
                     // Get the maximum number of probe instances from all volumes
                     for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.volumes->size()); volumeIndex++)
                     {
-                        DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
+                        const DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes->at(volumeIndex));
                         resources.maxProbeInstances += volume->GetNumProbes();
                     }
 
@@ -785,7 +633,7 @@ namespace Graphics
                 #endif
 
                     // Create the TLAS instance device buffer resource
-                    desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+                    desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
                     if (!CreateBuffer(d3d, desc, &resources.tlas.instances)) return false;
                 #ifdef GFX_NAME_OBJECTS
                     resources.tlas.instances->SetName(L"TLAS Instance Descriptors Buffer");
@@ -799,15 +647,15 @@ namespace Graphics
                     uavDesc.Buffer.StructureByteStride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
 
                     D3D12_CPU_DESCRIPTOR_HANDLE handle;
-                    handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::STB_INSTANCES * resources.srvDescHeapEntrySize);
+                    handle.ptr = d3dResources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::UAV_STB_TLAS_INSTANCES * d3dResources.srvDescHeapEntrySize);
                     d3d.device->CreateUnorderedAccessView(resources.tlas.instances, nullptr, &uavDesc, handle);
 
                     return true;
                 }
 
-                bool CreateTLAS(Globals& d3d, Resources& resources)
+                bool CreateTLAS(Globals& d3d, GlobalResources& d3dResources, Resources& resources)
                 {
-                    if (!CreateInstances(d3d, resources)) return false;
+                    if (!CreateInstances(d3d, d3dResources, resources)) return false;
 
                     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 
@@ -830,7 +678,7 @@ namespace Graphics
                         asPreBuildInfo.ScratchDataSizeInBytes,
                         D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT,
                         EHeapType::DEFAULT,
-                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                        D3D12_RESOURCE_STATE_COMMON,
                         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
                     };
                     if (!CreateBuffer(d3d, desc, &resources.tlas.scratch)) return false;
@@ -846,6 +694,16 @@ namespace Graphics
                     resources.tlas.as->SetName(L"TLAS: DDGI Probe Visualization");
                 #endif
 
+                    // Add the TLAS SRV to the descriptor heap
+                    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+                    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+                    srvDesc.RaytracingAccelerationStructure.Location = resources.tlas.as->GetGPUVirtualAddress();
+                    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+                    D3D12_CPU_DESCRIPTOR_HANDLE handle;
+                    handle.ptr = d3dResources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_DDGI_PROBE_VIS_TLAS * d3dResources.srvDescHeapEntrySize);
+                    d3d.device->CreateShaderResourceView(nullptr, &srvDesc, handle);
+
                     return true;
                 }
 
@@ -856,19 +714,24 @@ namespace Graphics
                 /**
                  * Create resources used by the DDGI passes.
                  */
-                bool Initialize(Globals& d3d, GlobalResources& d3dResources, DDGI::Resources& ddgiResources, Resources& resources, Instrumentation::Performance& perf, std::ofstream& log)
+                bool Initialize(
+                    Globals& d3d,
+                    GlobalResources& d3dResources,
+                    DDGI::Resources& ddgiResources,
+                    Resources& resources,
+                    Instrumentation::Performance& perf,
+                    Configs::Config& config,
+                    std::ofstream& log)
                 {
                     resources.volumes = &ddgiResources.volumes;
-                    resources.constantsSTB = ddgiResources.constantsSTB;
+                    resources.volumeConstantsSTB = ddgiResources.volumeConstantsSTB;
 
-                    if (!CreateRootSignature(d3d, d3dResources, resources, log)) return false;
-                    if (!CreateDescriptorHeap(d3d, d3dResources, resources, log)) return false;
-                    if (!LoadAndCompileShaders(d3d, resources, log)) return false;
+                    if (!LoadAndCompileShaders(d3d, resources, config, log)) return false;
                     if (!CreatePSOs(d3d, d3dResources, resources, log)) return false;
                     if (!CreateShaderTable(d3d, d3dResources, resources, log)) return false;
                     if (!CreateGeometry(d3d, d3dResources, resources, log)) return false;
                     if (!CreateBLAS(d3d, resources)) return false;
-                    if (!CreateTLAS(d3d, resources)) return false;
+                    if (!CreateTLAS(d3d, d3dResources, resources)) return false;
 
                     if (!UpdateShaderTable(d3d, d3dResources, resources)) return false;
 
@@ -882,15 +745,14 @@ namespace Graphics
                 /**
                  * Reload and compile shaders, recreate PSOs, and recreate the shader table.
                  */
-                bool Reload(Globals& d3d, GlobalResources& d3dResources, DDGI::Resources& ddgiResources, Resources& resources, std::ofstream& log)
+                bool Reload(Globals& d3d, GlobalResources& d3dResources, DDGI::Resources& ddgiResources, Resources& resources, Configs::Config& config, std::ofstream& log)
                 {
                     resources.volumes = &ddgiResources.volumes;
-                    resources.constantsSTB = ddgiResources.constantsSTB;
+                    resources.volumeConstantsSTB = ddgiResources.volumeConstantsSTB;
 
                     log << "Reloading DDGI Visualization shaders...";
 
-                    UpdateDescriptorHeap(d3d, d3dResources, resources);
-                    if (!LoadAndCompileShaders(d3d, resources, log)) return false;
+                    if (!LoadAndCompileShaders(d3d, resources, config, log)) return false;
                     if (!CreatePSOs(d3d, d3dResources, resources, log)) return false;
                     if (!UpdateShaderTable(d3d, d3dResources, resources)) return false;
 
@@ -924,31 +786,31 @@ namespace Graphics
                     resources.enabled = config.ddgi.enabled;
                     if (resources.enabled)
                     {
+                        // Get the currently selected volume
                         Configs::DDGIVolume volume = config.ddgi.volumes[config.ddgi.selectedVolume];
+
+                        // Set the selected volume's index
+                        resources.selectedVolume = config.ddgi.selectedVolume;
 
                         if (resources.flags & VIS_FLAG_SHOW_PROBES)
                         {
-                            // Update constants
-                            resources.constants.probeType = volume.probeType;
-                            resources.constants.probeRadius = volume.probeRadius;
-                            resources.constants.probeAlpha = volume.probeAlpha;
-                            resources.constants.distanceDivisor = volume.probeDistanceDivisor;
+                            // Update probe visualization constants
+                            d3dResources.constants.ddgivis.probeType = volume.probeType;
+                            d3dResources.constants.ddgivis.probeRadius = volume.probeRadius;
+                            d3dResources.constants.ddgivis.distanceDivisor = volume.probeDistanceDivisor;
 
                             // Update the TLAS instances and rebuild
-                            UpdateTLAS(d3d, resources, config);
+                            UpdateTLAS(d3d, d3dResources, resources, config);
                         }
 
                         if (resources.flags & VIS_FLAG_SHOW_TEXTURES)
                         {
-                            // Update constants
-                            resources.constants.volumeIndex = config.ddgi.selectedVolume;
-                            resources.constants.distanceDivisor = volume.probeDistanceDivisor;
-
-                            resources.constants.rayDataTextureScale = volume.probeRayDataScale;
-                            resources.constants.irradianceTextureScale = volume.probeIrradianceScale;
-                            resources.constants.distanceTextureScale = volume.probeDistanceScale;
-                            resources.constants.relocationOffsetTextureScale = volume.probeRelocationOffsetScale;
-                            resources.constants.classificationStateTextureScale = volume.probeClassificationStateScale;
+                            // Update texture visualization constants
+                            d3dResources.constants.ddgivis.distanceDivisor = volume.probeDistanceDivisor;
+                            d3dResources.constants.ddgivis.rayDataTextureScale = volume.probeRayDataScale;
+                            d3dResources.constants.ddgivis.irradianceTextureScale = volume.probeIrradianceScale;
+                            d3dResources.constants.ddgivis.distanceTextureScale = volume.probeDistanceScale;
+                            d3dResources.constants.ddgivis.probeDataTextureScale = volume.probeDataScale;
                         }
                     }
                     CPU_TIMESTAMP_END(resources.cpuStat);
@@ -972,56 +834,94 @@ namespace Graphics
                             #endif
 
                                 // Set the descriptor heaps
-                                ID3D12DescriptorHeap* ppHeaps[] = { resources.srvDescHeap, d3dResources.samplerDescHeap };
+                                ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
                                 d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                                 // Set the root signature
-                                d3d.cmdList->SetComputeRootSignature(resources.rootSignature);
+                                d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
 
-                                // Set the descriptor tables
-                                d3d.cmdList->SetComputeRootDescriptorTable(0, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                                d3d.cmdList->SetComputeRootDescriptorTable(1, resources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                                // Update the vis root constants
+                                GlobalConstants consts = d3dResources.constants;
+                                UINT offset = GlobalConstants::GetAlignedNum32BitValues() - DDGIVisConsts::GetAlignedNum32BitValues();
+                                d3d.cmdList->SetComputeRoot32BitConstants(0, DDGIVisConsts::GetNum32BitValues(), consts.ddgivis.GetData(), offset);
 
-                                // Set the TLAS SRV
-                                d3d.cmdList->SetComputeRootShaderResourceView(2, resources.tlas.as->GetGPUVirtualAddress());
+                                // Set the root parameter descriptor tables
+                            #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                                d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                                d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                            #endif
 
-                                // Update the root constants
-                                DDGIVisConstants consts = resources.constants;
-                                d3d.cmdList->SetComputeRoot32BitConstants(3, consts.GetNum32BitValues(), consts.GetData(), 0);
+                                // Describe the shaders and dispatch (EDDGIVolumeProbeVisType::Default)
+                                {
+                                    D3D12_DISPATCH_RAYS_DESC desc = {};
+                                    desc.RayGenerationShaderRecord.StartAddress = resources.shaderTableRGSStartAddress;
+                                    desc.RayGenerationShaderRecord.SizeInBytes = resources.shaderTableRecordSize;
 
-                                // Dispatch rays
-                                D3D12_DISPATCH_RAYS_DESC desc = {};
-                                desc.RayGenerationShaderRecord.StartAddress = resources.shaderTableRGSStartAddress;
-                                desc.RayGenerationShaderRecord.SizeInBytes = resources.shaderTableRecordSize;
+                                    desc.MissShaderTable.StartAddress = resources.shaderTableMissTableStartAddress;
+                                    desc.MissShaderTable.SizeInBytes = resources.shaderTableMissTableSize;
+                                    desc.MissShaderTable.StrideInBytes = resources.shaderTableRecordSize;
 
-                                desc.MissShaderTable.StartAddress = resources.shaderTableMissTableStartAddress;
-                                desc.MissShaderTable.SizeInBytes = resources.shaderTableMissTableSize;
-                                desc.MissShaderTable.StrideInBytes = resources.shaderTableRecordSize;
+                                    desc.HitGroupTable.StartAddress = resources.shaderTableHitGroupTableStartAddress;
+                                    desc.HitGroupTable.SizeInBytes = resources.shaderTableHitGroupTableSize;
+                                    desc.HitGroupTable.StrideInBytes = resources.shaderTableRecordSize;
 
-                                desc.HitGroupTable.StartAddress = resources.shaderTableHitGroupTableStartAddress;
-                                desc.HitGroupTable.SizeInBytes = resources.shaderTableHitGroupTableSize;
-                                desc.HitGroupTable.StrideInBytes = resources.shaderTableRecordSize;
+                                    desc.Width = d3d.width;
+                                    desc.Height = d3d.height;
+                                    desc.Depth = 1;
 
-                                desc.Width = d3d.width;
-                                desc.Height = d3d.height;
-                                desc.Depth = 1;
+                                    // Set the PSO
+                                    d3d.cmdList->SetPipelineState1(resources.rtpso);
 
-                                // Set the PSO
-                                d3d.cmdList->SetPipelineState1(resources.rtpso);
+                                    // Dispatch rays
+                                    GPU_TIMESTAMP_BEGIN(resources.gpuProbeStat->GetGPUQueryBeginIndex());
+                                    d3d.cmdList->DispatchRays(&desc);
+                                    GPU_TIMESTAMP_END(resources.gpuProbeStat->GetGPUQueryEndIndex());
 
-                                // Dispatch rays
-                                GPU_TIMESTAMP_BEGIN(resources.gpuProbeStat->GetQueryBeginIndex());
-                                d3d.cmdList->DispatchRays(&desc);
-                                GPU_TIMESTAMP_END(resources.gpuProbeStat->GetQueryEndIndex());
+                                    D3D12_RESOURCE_BARRIER barriers[2] = {};
+                                    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                                    barriers[0].UAV.pResource = d3dResources.rt.GBufferA;
+                                    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                                    barriers[1].UAV.pResource = d3dResources.rt.GBufferB;
 
-                                D3D12_RESOURCE_BARRIER barriers[2] = {};
-                                barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-                                barriers[0].UAV.pResource = d3dResources.rt.GBufferA;
-                                barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-                                barriers[1].UAV.pResource = d3dResources.rt.GBufferB;
+                                    // Wait for the ray trace to complete
+                                    d3d.cmdList->ResourceBarrier(2, barriers);
+                                }
 
-                                // Wait for the ray trace to complete
-                                d3d.cmdList->ResourceBarrier(2, barriers);
+                                // Describe the shaders and dispatch (EDDGIVolumeProbeVisType::Hide_Inactive)
+                                {
+                                    D3D12_DISPATCH_RAYS_DESC desc = {};
+                                    desc.RayGenerationShaderRecord.StartAddress = resources.shaderTableRGS2StartAddress;
+                                    desc.RayGenerationShaderRecord.SizeInBytes = resources.shaderTableRecordSize;
+
+                                    desc.MissShaderTable.StartAddress = resources.shaderTableMissTableStartAddress;
+                                    desc.MissShaderTable.SizeInBytes = resources.shaderTableMissTableSize;
+                                    desc.MissShaderTable.StrideInBytes = resources.shaderTableRecordSize;
+
+                                    desc.HitGroupTable.StartAddress = resources.shaderTableHitGroupTableStartAddress;
+                                    desc.HitGroupTable.SizeInBytes = resources.shaderTableHitGroupTableSize;
+                                    desc.HitGroupTable.StrideInBytes = resources.shaderTableRecordSize;
+
+                                    desc.Width = d3d.width;
+                                    desc.Height = d3d.height;
+                                    desc.Depth = 1;
+
+                                    // Set the PSO
+                                    d3d.cmdList->SetPipelineState1(resources.rtpso2);
+
+                                    // Dispatch rays
+                                    GPU_TIMESTAMP_BEGIN(resources.gpuProbeStat->GetGPUQueryBeginIndex());
+                                    d3d.cmdList->DispatchRays(&desc);
+                                    GPU_TIMESTAMP_END(resources.gpuProbeStat->GetGPUQueryEndIndex());
+
+                                    D3D12_RESOURCE_BARRIER barriers[2] = {};
+                                    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                                    barriers[0].UAV.pResource = d3dResources.rt.GBufferA;
+                                    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                                    barriers[1].UAV.pResource = d3dResources.rt.GBufferB;
+
+                                    // Wait for the ray trace to complete
+                                    d3d.cmdList->ResourceBarrier(2, barriers);
+                                }
 
                             #ifdef GFX_PERF_MARKERS
                                 PIXEndEvent(d3d.cmdList);
@@ -1037,19 +937,26 @@ namespace Graphics
                         #endif
 
                             // Set the descriptor heaps
-                            ID3D12DescriptorHeap* ppHeaps[] = { resources.srvDescHeap, d3dResources.samplerDescHeap };
+                            ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
                             d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                             // Set the root signature
-                            d3d.cmdList->SetComputeRootSignature(resources.rootSignature);
+                            d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
 
-                            // Set the descriptor tables
-                            d3d.cmdList->SetComputeRootDescriptorTable(0, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                            d3d.cmdList->SetComputeRootDescriptorTable(1, resources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                            // Update the vis root constants
+                            GlobalConstants consts = d3dResources.constants;
+                            UINT offset = GlobalConstants::GetAlignedNum32BitValues() - DDGIVisConsts::GetAlignedNum32BitValues();
+                            d3d.cmdList->SetComputeRoot32BitConstants(0, DDGIVisConsts::GetNum32BitValues(), consts.ddgivis.GetData(), offset);
 
-                            // Update the root constants
-                            DDGIVisConstants consts = resources.constants;
-                            d3d.cmdList->SetComputeRoot32BitConstants(3, consts.GetNum32BitValues(), consts.GetData(), 0);
+                            // Update the DDGIRootConstants
+                            DDGIRootConstants ddgiConsts = { resources.selectedVolume, DescriptorHeapOffsets::STB_DDGI_VOLUME_CONSTS, DescriptorHeapOffsets::STB_DDGI_VOLUME_RESOURCE_INDICES };
+                            d3d.cmdList->SetComputeRoot32BitConstants(1, DDGIRootConstants::GetNum32BitValues(), ddgiConsts.GetData(), 0);
+
+                            // Set the root parameter descriptor tables
+                        #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                            d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                            d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                        #endif
 
                             // Set the PSO
                             d3d.cmdList->SetPipelineState(resources.texturesVisPSO);
@@ -1058,9 +965,9 @@ namespace Graphics
                             UINT groupsX = DivRoundUp(d3d.width, 8);
                             UINT groupsY = DivRoundUp(d3d.height, 4);
 
-                            GPU_TIMESTAMP_BEGIN(resources.gpuTextureStat->GetQueryBeginIndex());
+                            GPU_TIMESTAMP_BEGIN(resources.gpuTextureStat->GetGPUQueryBeginIndex());
                             d3d.cmdList->Dispatch(groupsX, groupsY, 1);
-                            GPU_TIMESTAMP_END(resources.gpuTextureStat->GetQueryEndIndex());
+                            GPU_TIMESTAMP_END(resources.gpuTextureStat->GetGPUQueryEndIndex());
 
                             // Wait for the compute pass to finish
                             D3D12_RESOURCE_BARRIER barrier = {};
@@ -1094,17 +1001,17 @@ namespace Graphics
                     SAFE_RELEASE(resources.shaderTableUpload);
 
                     resources.rtShaders.Release();
+                    resources.rtShaders2.rgs.Release();
                     SAFE_RELEASE(resources.rtpso);
+                    SAFE_RELEASE(resources.rtpso2);
                     SAFE_RELEASE(resources.rtpsoInfo);
+                    SAFE_RELEASE(resources.rtpsoInfo2);
 
                     resources.textureVisCS.Release();
                     SAFE_RELEASE(resources.texturesVisPSO);
 
                     resources.updateTlasCS.Release();
                     SAFE_RELEASE(resources.updateTlasPSO);
-
-                    SAFE_RELEASE(resources.rootSignature);
-                    SAFE_RELEASE(resources.srvDescHeap);
 
                     resources.shaderTableSize = 0;
                     resources.shaderTableRecordSize = 0;
@@ -1121,14 +1028,14 @@ namespace Graphics
     namespace DDGI::Visualizations
     {
 
-        bool Initialize(Globals& d3d, GlobalResources& d3dResources, DDGI::Resources& ddgiResources, Resources& resources, Instrumentation::Performance& perf, std::ofstream& log)
+        bool Initialize(Globals& d3d, GlobalResources& d3dResources, DDGI::Resources& ddgiResources, Resources& resources, Instrumentation::Performance& perf, Configs::Config& config, std::ofstream& log)
         {
-            return Graphics::D3D12::DDGI::Visualizations::Initialize(d3d, d3dResources, ddgiResources, resources, perf, log);
+            return Graphics::D3D12::DDGI::Visualizations::Initialize(d3d, d3dResources, ddgiResources, resources, perf, config, log);
         }
 
-        bool Reload(Globals& d3d, GlobalResources& d3dResources, DDGI::Resources& ddgiResources, Resources& resources, std::ofstream& log)
+        bool Reload(Globals& d3d, GlobalResources& d3dResources, DDGI::Resources& ddgiResources, Resources& resources, Configs::Config& config, std::ofstream& log)
         {
-            return Graphics::D3D12::DDGI::Visualizations::Reload(d3d, d3dResources, ddgiResources, resources, log);
+            return Graphics::D3D12::DDGI::Visualizations::Reload(d3d, d3dResources, ddgiResources, resources, config, log);
         }
 
         bool Resize(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::ofstream& log)

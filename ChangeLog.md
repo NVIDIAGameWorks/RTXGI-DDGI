@@ -1,5 +1,59 @@
 # RTXGI SDK Change Log
 
+## 1.3.0
+
+### SDK
+- **Dynamic Library**
+  - Adds support for building and using the SDK as a dynamic library (`*.dll`, `*.so`)
+  - Removes the use of std in SDK headers
+- **DDGIVolume Probe Counts** 
+  - Changes all GPU-side texture resources to ```Texture2DArrays``` (D3D12 and Vulkan)
+  - Increases the *theoretical* maximum number of probes per volume to ~33.5 million (128x2048x128)
+  - Increases the *practical* maximum probes per volume increases to 2,097,152 probes (with the default texel format settings)
+    - This is a 2x increase over the previous maximum of 1024x32x32 (1,048,576 probes) and is limited by API restrictions: a single D3D12/Vulkan resource cannot be larger than 4GB
+    - More importantly, this change enables a more flexible and (at times) less wasteful memory layout since monolithic 2D texture atlases are no longer used for ```DDGIVolume``` probe resources
+- **Bindless Resources**
+  - Adds support for [Shader Model 6.6 Dynamic Resources](https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_DynamicResources.html) (aka Descriptor Heap bindless) in D3D12
+  - Reworks how bindless resource indices are specified for both Resource Array and Descriptor Heap style bindless implementations (D3D12 and Vulkan)
+- **Probe Border Updates, Probe Blending, and GPU Utilization**
+  - Moves probe border update work into the probe blending passes
+    - *This removes the need for separate border update compute passes*, simplifying SDK use while also providing a small performance benefit
+  - Adjusts probe blending thread group sizes to increase GPU utilization and enable **probe ray counts in factors of 64** to be stored in shared memory (no more ```unusual``` ray counts like 144, 288, etc).
+- **Vulkan Push Constants**
+  - Updates the Vulkan push constants implementation to be more flexible and customizable so you can tailor them to your application's setup
+- **Other Improvements and Fixes**
+  - Represents probe counts with 10 bits (instead of 8) in ```DDGIVolumeDescGPUPacked```
+  - Adds ```GetRayDispatchDimensions()``` to make probe ray tracing dispatches easier to setup
+  - Adds ```GetGPUMemoryUsedInBytes()``` to make ```DDGIVolume``` memory tracking easier
+  - Adds ```ValidatePackedData()``` to ensure correct functionality of the ```PackDDGIVolumeDescGPU()``` and ```UnpackDDGIVolumeDescGPU()``` functions, executes in Debug configurations as part of ```UploadDDGIVolumeConstants()```.
+  - Moves shader define validation code to separate files to make the main SDK shader code more friendly and readable
+  - Adds fix for ```EulerAnglesToRotationMatrixYXZ()``` not producing correct ```DDGIVolume``` rotations across all coordinate systems
+  - Adds ```ConvertEulerAngles()``` convenience function to convert euler angles to alternate coordinate systems
+
+### Test Harness
+
+- **Improvements**
+  - Adds support for RTXGI SDK ```v1.3.0``` features
+  - Reorganizes the (D3D12) global root signature / (Vulkan) pipeline layout to bindlessly index texture array resources
+  - Eliminates the visualization-specific descriptor heap - all descriptors are now part of the global descriptor heap
+  - Uses the D3D12 Agility SDK v1.606.3 to access Shader Model 6.6+ features
+  - Reworks shader compilation code to use latest DXC interfaces, explicitly links DXC
+  - Adds support for storing ```DDGIVolume``` texture array data to disk (for debug / regression)
+  - Sets the `COORDINATE_SYSTEM` define through CMake, based on the SDK's `RTXGI_COORDINATE_SYSTEM` define. The Test Harness and RTXGI SDK can no longer have mismatching coordinate systems.
+  - Scene graph node transforms are now converted to the selected coordinate system
+  - Test Harness converts all config file positions, directions, and rotations to the selected coordinate system
+    - All scene config files updated to specify right hand, y-up positions, directions, and rotations.
+  - Scene Cache
+    - Coordinate system of the scene geometry is now stored in the cache file
+    - Cache files with mismatching coordinate system are rejected and the cache file is rebuilt
+    - Cache files are built for binary (.glb) GLTF files too now
+- **Bug Fixes**
+  - Adds several fixes for issues with Vulkan timestamps
+  - Adds fix to properly compute bounding boxes, taking mesh instance transforms into account for the chosen coordinate system
+  - Adds fix so probe visualization spheres are not inside out in left handed coordinate systems
+
+
+
 ## 1.2.13
 
 ### SDK

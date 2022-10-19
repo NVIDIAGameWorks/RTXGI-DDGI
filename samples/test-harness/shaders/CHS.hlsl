@@ -36,13 +36,13 @@ void CHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttr
     payload.shadingNormal = payload.normal;
 
     // Load the surface material
-    Material material = Materials[GetMaterialIndex(InstanceID())];
+    Material material = GetMaterial(GetMaterialIndex(InstanceID()));
     payload.albedo = material.albedo;
 
     // Albedo and Opacity
     if (material.albedoTexIdx > -1)
     {
-        float4 bco = Tex2D[material.albedoTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, 0);
+        float4 bco = GetTex2D(material.albedoTexIdx).SampleLevel(GetBilinearWrapSampler(), v.uv0, 0);
         payload.albedo = bco.rgb;
         payload.opacity = bco.a;
     }
@@ -53,7 +53,7 @@ void CHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttr
         float3 tangent = normalize(mul(ObjectToWorld3x4(), float4(v.tangent.xyz, 0.f)).xyz);
         float3 bitangent = cross(payload.normal, tangent) * v.tangent.w;
         float3x3 TBN = { tangent, bitangent, payload.normal };
-        payload.shadingNormal = Tex2D[material.normalTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, 0).xyz;
+        payload.shadingNormal = GetTex2D(material.normalTexIdx).SampleLevel(GetBilinearWrapSampler(), v.uv0, 0).xyz;
         payload.shadingNormal = (payload.shadingNormal * 2.f) - 1.f;    // Transform to [-1, 1]
         payload.shadingNormal = mul(payload.shadingNormal, TBN);        // Transform tangent-space normal to world-space
     }
@@ -61,7 +61,7 @@ void CHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttr
     // Roughness and Metallic
     if (material.roughnessMetallicTexIdx > -1)
     {
-        float2 rm = Tex2D[material.roughnessMetallicTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, 0).gb;
+        float2 rm = GetTex2D(material.roughnessMetallicTexIdx).SampleLevel(GetBilinearWrapSampler(), v.uv0, 0).gb;
         payload.roughness = rm.x;
         payload.metallic = rm.y;
     }
@@ -69,7 +69,7 @@ void CHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttr
     // Emissive
     if (material.emissiveTexIdx > -1)
     {
-        payload.albedo += Tex2D[material.emissiveTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, 0).rgb;
+        payload.albedo += GetTex2D(material.emissiveTexIdx).SampleLevel(GetBilinearWrapSampler(), v.uv0, 0).rgb;
     }
 
     // Pack the payload
@@ -101,17 +101,21 @@ void CHS_PRIMARY(inout PackedPayload packedPayload, BuiltInTriangleIntersectionA
     payload.shadingNormal = payload.normal;
 
     // Load the surface material
-    Material material = Materials[GetMaterialIndex(InstanceID())];
+    Material material = GetMaterial(GetMaterialIndex(InstanceID()));
     payload.albedo = material.albedo;
 
     // Compute texture coordinate differentials
     float2 dUVdx, dUVdy;
     ComputeUV0Differentials(vertices, WorldRayDirection(), RayTCurrent(), dUVdx, dUVdy);
 
+    // TODO-ACM: passing ConstantBuffer<T> to functions crashes DXC HLSL->SPIRV
+    //ConstantBuffer<Camera> camera = GetCamera();
+    //ComputeUV0Differentials(vertices, camera, WorldRayDirection(), RayTCurrent(), dUVdx, dUVdy);
+
     // Albedo and Opacity
     if (material.albedoTexIdx > -1)
     {
-        float4 bco = Tex2D[material.albedoTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy);
+        float4 bco = GetTex2D(material.albedoTexIdx).SampleGrad(GetAnisoWrapSampler(), v.uv0, dUVdx, dUVdy);
         payload.albedo = bco.rgb;
         payload.opacity = bco.a;
     }
@@ -123,7 +127,7 @@ void CHS_PRIMARY(inout PackedPayload packedPayload, BuiltInTriangleIntersectionA
         float3 bitangent = cross(payload.normal, tangent) * v.tangent.w;
         float3x3 TBN = { tangent, bitangent, payload.normal };
 
-        payload.shadingNormal = Tex2D[material.normalTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy).xyz;
+        payload.shadingNormal = GetTex2D(material.normalTexIdx).SampleGrad(GetAnisoWrapSampler(), v.uv0, dUVdx, dUVdy).xyz;
         payload.shadingNormal = (payload.shadingNormal * 2.f) - 1.f;    // Transform to [-1, 1]
         payload.shadingNormal = mul(payload.shadingNormal, TBN);        // Transform tangent-space normal to world-space
     }
@@ -131,7 +135,7 @@ void CHS_PRIMARY(inout PackedPayload packedPayload, BuiltInTriangleIntersectionA
     // Roughness and Metallic
     if (material.roughnessMetallicTexIdx > -1)
     {
-        float2 rm = Tex2D[material.roughnessMetallicTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy).gb;
+        float2 rm = GetTex2D(material.roughnessMetallicTexIdx).SampleGrad(GetAnisoWrapSampler(), v.uv0, dUVdx, dUVdy).gb;
         payload.roughness = rm.x;
         payload.metallic = rm.y;
     }
@@ -139,7 +143,7 @@ void CHS_PRIMARY(inout PackedPayload packedPayload, BuiltInTriangleIntersectionA
     // Emissive
     if (material.emissiveTexIdx > -1)
     {
-        payload.albedo += Tex2D[material.emissiveTexIdx].SampleGrad(AnisoWrapSampler, v.uv0, dUVdx, dUVdy).rgb;
+        payload.albedo += GetTex2D(material.emissiveTexIdx).SampleGrad(GetAnisoWrapSampler(), v.uv0, dUVdx, dUVdy).rgb;
     }
 
     // Pack the payload
@@ -171,7 +175,7 @@ void CHS_GI(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttrib
     payload.shadingNormal = payload.normal;
 
     // Load the surface material
-    Material material = Materials[GetMaterialIndex(InstanceID())];
+    Material material = GetMaterial(GetMaterialIndex(InstanceID()));
     payload.albedo = material.albedo;
 
     // Albedo and Opacity
@@ -179,10 +183,10 @@ void CHS_GI(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttrib
     {
         // Get the number of mip levels
         uint width, height, numLevels;
-        Tex2D[material.albedoTexIdx].GetDimensions(0, width, height, numLevels);
+        GetTex2D(material.albedoTexIdx).GetDimensions(0, width, height, numLevels);
 
         // Sample the albedo texture
-        float4 bco = Tex2D[material.albedoTexIdx].SampleLevel(BilinearWrapSampler, v.uv0, numLevels / 2.f);
+        float4 bco = GetTex2D(material.albedoTexIdx).SampleLevel(GetBilinearWrapSampler(), v.uv0, numLevels / 2.f);
         payload.albedo = bco.rgb;
         payload.opacity = bco.a;
     }
@@ -196,3 +200,4 @@ void CHS_VISIBILITY(inout PackedPayload packedPayload, BuiltInTriangleIntersecti
 {
     packedPayload.hitT = RayTCurrent();
 }
+

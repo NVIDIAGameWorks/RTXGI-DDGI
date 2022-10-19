@@ -31,13 +31,11 @@ namespace Graphics
             uint64_t availability;
         };
 
-        #define GPU_TIMESTAMP_BEGIN(x) \
-            vkCmdResetQueryPool(vk.cmdBuffer[vk.frameIndex], vkResources.timestampPool, x, 2); \
-            vkCmdWriteTimestamp(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, vkResources.timestampPool, x); \
-
+        #define GPU_TIMESTAMP_BEGIN(x) vkCmdWriteTimestamp(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, vkResources.timestampPool, x);
         #define GPU_TIMESTAMP_END(x) vkCmdWriteTimestamp(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, vkResources.timestampPool, x);
     #else
-        #define GPU_TIMESTAMP_BEGIN(x)
+        #define GPU_TIMESTAMP_BEGIN(x) 
+        #define GPU_TIMESTAMP_END(x) 
     #endif
 
         enum class EHeapType
@@ -57,6 +55,7 @@ namespace Graphics
         {
             uint32_t width = 0;
             uint32_t height = 0;
+            uint32_t arraySize = 1;
             uint32_t mips = 1;
             VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
             VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -397,7 +396,7 @@ namespace Graphics
 
         void BeginRenderPass(Globals& vk);
 
-        bool WriteResourceToDisk(Globals& vk, std::string file, VkImage image, uint32_t width, uint32_t height, VkFormat imageFormat, VkImageLayout originalLayout);
+        bool WriteResourceToDisk(Globals& vk, std::string file, VkImage image, uint32_t width, uint32_t height, uint32_t arraySize, VkFormat imageFormat, VkImageLayout originalLayout);
 
     #ifdef GFX_NAME_OBJECTS
         void SetObjectName(VkDevice device, uint64_t handle, const char* name, VkObjectType type);
@@ -407,61 +406,94 @@ namespace Graphics
         void AddPerfMarker(Globals& vk, uint8_t r, uint8_t g, uint8_t b, std::string name);
     #endif
 
-        namespace DescriptorLayoutBindings
-        {
-            const int SAMPLERS = 0;                                         // 0: Samplers bindless array
-            const int CB_CAMERA = SAMPLERS + 1;                             // 1: Camera constant buffer
-            const int STB_LIGHTS = CB_CAMERA + 1;                           // 2: Lights structured buffer
-            const int STB_MATERIALS = STB_LIGHTS + 1;                       // 3: Materials structured buffer
-            const int STB_INSTANCES = STB_MATERIALS + 1;                    // 4: TLAS instance descriptors structured buffer
-            const int STB_DDGI_VOLUMES = STB_INSTANCES + 1;                 // 5: DDGIVolumes structured buffer
-            const int UAV_START = STB_DDGI_VOLUMES + 1;                     // 6: RWTex2D UAV bindless array
-            const int BVH_START = UAV_START + 1;                            // 7: BVH SRV bindless array
-            const int SRV_START = BVH_START + 1;                            // 8: Tex2D SRV bindless array
-            const int RAW_SRV_START = SRV_START + 1;                        // 9: ByteAddressBuffer SRV bindless array
-        };
-
         namespace SamplerIndices
         {
-            const int BILINEAR_WRAP = 0;                                    // 0: bilinear filter, repeat
-            const int POINT_CLAMP = BILINEAR_WRAP + 1;                      // 1: point (nearest neighbor) filter, clamp
-            const int ANISO_WRAP = POINT_CLAMP + 1;                         // 2: anisotropic filter, repeat
-            const int COUNT = ANISO_WRAP + 1;
+            const int BILINEAR_WRAP = 0;                                            //  0: bilinear filter, repeat
+            const int POINT_CLAMP = BILINEAR_WRAP + 1;                              //  1: point (nearest neighbor) filter, clamp
+            const int ANISO_WRAP = POINT_CLAMP + 1;                                 //  2: anisotropic filter, repeat
         }
+
+        namespace DescriptorLayoutBindings
+        {
+            const int SAMPLERS = 0;                                                 //  0: Samplers (resource array)
+
+            const int CB_CAMERA = SAMPLERS + 1;                                     //  1: Camera constant buffer
+
+            // Structured Buffers
+            const int STB_LIGHTS = CB_CAMERA + 1;                                   //  2: Lights structured buffer
+            const int STB_MATERIALS = STB_LIGHTS + 1;                               //  3: Materials structured buffer
+            const int STB_TLAS_INSTANCES = STB_MATERIALS + 1;                       //  4: TLAS instance descriptors structured buffer
+            const int STB_DDGI_VOLUME_CONSTS = STB_TLAS_INSTANCES + 1;              //  5: DDGIVolume constants structured buffer
+            const int STB_DDGI_VOLUME_RESOURCE_INDICES = STB_DDGI_VOLUME_CONSTS + 1;//  6: DDGIVolume resource indices structured buffer
+
+            // Unordered Access Views
+            const int UAV_START = STB_DDGI_VOLUME_RESOURCE_INDICES + 1;             //  7: UAV Start
+            const int UAV_STB_TLAS_INSTANCES = UAV_START;                           //  7: Scene TLAS instance descriptors structured buffer UAV
+            const int UAV_TEX2D = UAV_STB_TLAS_INSTANCES + 1;                       //  8: RWTex2D UAVs (resource array)
+            const int UAV_TEX2DARRAY = UAV_TEX2D + 1;                               //  9: RWTex2DArray UAVs (resource array)
+
+            // Shader Resource Views
+            const int SRV_TLAS = UAV_TEX2DARRAY + 1;                                // 10: TLAS SRVs (resource array)
+            const int SRV_TEX2D = SRV_TLAS + 1;                                     // 11: Tex2D SRVs (resource array)
+            const int SRV_TEX2DARRAY = SRV_TEX2D + 1;                               // 12: Tex2DArray SRVs (resource array)
+            const int SRV_BYTEADDRESS = SRV_TEX2DARRAY + 1;                         // 13: ByteAddressBuffer SRVs (resource array)
+        };
 
         namespace RWTex2DIndices
         {
-            const int PT_OUTPUT = 0;                                        // 0: PT Output RWTexture
-            const int PT_ACCUMULATION = PT_OUTPUT + 1;                      // 1: PT Accumulation RWTexture
-            const int GBUFFERA = PT_ACCUMULATION + 1;                       // 2: GBufferA RWTexture
-            const int GBUFFERB = GBUFFERA + 1;                              // 3: GBufferB RWTexture
-            const int GBUFFERC = GBUFFERB + 1;                              // 4: GBufferC RWTexture
-            const int GBUFFERD = GBUFFERC + 1;                              // 5: GBufferD RWTexture
-            const int RTAO_OUTPUT = GBUFFERD + 1;                           // 6: RTAO Output RWTexture
-            const int RTAO_RAW = RTAO_OUTPUT   + 1;                         // 7: RTAO Raw RWTexture
-            const int DDGI_OUTPUT = RTAO_RAW + 1;                           // 8: DDGI Output RWTexture
-            const int DDGI_VOLUME = DDGI_OUTPUT + 1;                        // 9: DDGIVolume RWTexture2D, 24 total = 6 volumes x 4
+            const int PT_OUTPUT = 0;                                                //  0: PT Output RWTexture
+            const int PT_ACCUMULATION = PT_OUTPUT + 1;                              //  1: PT Accumulation RWTexture
+            const int GBUFFERA = PT_ACCUMULATION + 1;                               //  2: GBufferA RWTexture
+            const int GBUFFERB = GBUFFERA + 1;                                      //  3: GBufferB RWTexture
+            const int GBUFFERC = GBUFFERB + 1;                                      //  4: GBufferC RWTexture
+            const int GBUFFERD = GBUFFERC + 1;                                      //  5: GBufferD RWTexture
+            const int RTAO_OUTPUT = GBUFFERD + 1;                                   //  6: RTAO Output RWTexture
+            const int RTAO_RAW = RTAO_OUTPUT   + 1;                                 //  7: RTAO Raw RWTexture
+            const int DDGI_OUTPUT = RTAO_RAW + 1;                                   //  8: DDGI Output RWTexture
         }
 
-        namespace BVHIndices
+      //namespace RWTex2DArrayIndices
+      //{
+      //    const int DDGIVOLUME_0_RAYDATA = 0;
+      //    const int DDGIVOLUME_0_IRRADIANCE = 1;
+      //    const int DDGIVOLUME_0_DISTANCE = 2;
+      //    const int DDGIVOLUME_0_PROBEDATA = 3;
+      //    const int DDGIVOLUME_1_RAYDATA = 4;
+      //    const int DDGIVOLUME_1_IRRADIANCE = 5;
+      //    ...etc..
+      //}
+
+        namespace TLASIndices
         {
-            const int SCENE = 0;                                            // 0: Scene BVH
+            const int SCENE = 0;                                                    //  0: Scene BVH
+            const int DDGI_PROBE_VIS = SCENE + 1;                                   //  1: DDGI Probe Vis BVH
         }
 
         namespace Tex2DIndices
         {
-            const int BLUE_NOISE = 0;                                       //  0: Blue Noise Texture
-            const int IMGUI_FONTS = BLUE_NOISE + 1;                         //  1: ImGui Font Texture
-            const int DDGI_VOLUME = IMGUI_FONTS + 1;                        //  2: DDGIVolume Texture2D, 24 total = 6 volumes x 4
-            const int SCENE_TEXTURES = DDGI_VOLUME + (rtxgi::GetDDGIVolumeNumSRVDescriptors() * MAX_DDGIVOLUMES);
-                                                                            // 26: Material Textures (300 max)
+            const int BLUE_NOISE = 0;                                               //  0: Blue Noise Texture
+            const int IMGUI_FONTS = BLUE_NOISE + 1;                                 //  1: ImGui Font Texture
+            const int SCENE_TEXTURES = IMGUI_FONTS + 1;                             //  2: Material Textures (300 max)
         }
+
+        //namespace Tex2DArrayIndices
+        //{
+        //    const int DDGIVOLUME_0_RAYDATA = 0;
+        //    const int DDGIVOLUME_0_IRRADIANCE = 1;
+        //    const int DDGIVOLUME_0_DISTANCE = 2;
+        //    const int DDGIVOLUME_0_PROBEDATA = 3;
+        //    const int DDGIVOLUME_1_RAYDATA = 4;
+        //    const int DDGIVOLUME_1_IRRADIANCE = 5;
+        //    ...etc..
+        //}
 
         namespace ByteAddressIndices
         {
-            const int MATERIAL_INDICES = 0;                                 //  0: Mesh Primitive Material Indices
-            const int INDICES = MATERIAL_INDICES + 1;                       //  1: Mesh Primitive Index Buffers begin (interleaved with VB)
-            const int VERTICES = INDICES + 1;                               //  2: Mesh Primitive Vertex Buffers begin (interleaved with IB)
+            const int SPHERE_INDICES = 0;                                           //  0: DDGI Probe Vis Sphere Index Buffer
+            const int SPHERE_VERTICES = SPHERE_INDICES + 1;                         //  1: DDGI Probe Vis Sphere Vertex Buffer
+            const int MATERIAL_INDICES = SPHERE_VERTICES + 1;                       //  2: Mesh Primitive Material Indices
+            const int INDICES = MATERIAL_INDICES + 1;                               //  3: Mesh Primitive Index Buffers (interleaved with VB)
+            const int VERTICES = INDICES + 1;                                       //  4: Mesh Primitive Vertex Buffers (interleaved with IB)
         }
 
     }

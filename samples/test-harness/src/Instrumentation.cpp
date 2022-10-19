@@ -67,6 +67,26 @@ namespace Instrumentation
     // Public Functions
     //----------------------------------------------------------------------------------------------------------
 
+    uint32_t Stat::frameGPUQueryCount = 0;
+
+    int32_t Stat::GetGPUQueryBeginIndex()
+    {
+        gpuQueryStartIndex = (Stat::frameGPUQueryCount * 2);
+        Stat::frameGPUQueryCount++;
+        return gpuQueryStartIndex;
+    }
+
+    int32_t Stat::GetGPUQueryEndIndex()
+    {
+        gpuQueryEndIndex = gpuQueryStartIndex + 1;
+        return gpuQueryEndIndex;
+    }
+
+    void Stat::ResetGPUQueryIndices()
+    {
+        gpuQueryStartIndex = gpuQueryEndIndex = -1;
+    }
+
     void Begin(Stat* s)
     {
         s->elapsed = 0;

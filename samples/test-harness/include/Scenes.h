@@ -24,7 +24,7 @@ namespace Scenes
         int                           material = -1;
         bool                          opaque = true;
         bool                          doubleSided = false;
-        rtxgi::AABB                   boundingBox;
+        rtxgi::AABB                   boundingBox; // not instanced transformed
         std::vector<Graphics::Vertex> vertices;
         std::vector<uint32_t>         indices;
     };
@@ -32,7 +32,7 @@ namespace Scenes
     struct Mesh
     {
         std::string name = "";
-        rtxgi::AABB boundingBox;
+        rtxgi::AABB boundingBox; // not instance transformed
         std::vector<MeshPrimitive> primitives;
     };
 
@@ -40,6 +40,7 @@ namespace Scenes
     {
         std::string name = "";
         int meshIndex = -1;
+        rtxgi::AABB boundingBox; // instance transformed
         float transform[3][4] =
         {
             1.f, 0.f, 0.f, 0.f,

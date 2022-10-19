@@ -33,9 +33,15 @@ float LightFalloff(float distanceToLight)
 }
 
 /**
-* Computes the visibility factor for a given vector to a light.
-*/
-float LightVisibility(Payload payload, float3 lightVector, float tmax, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+ * Computes the visibility factor for a given vector to a light.
+ */
+float LightVisibility(
+    Payload payload,
+    float3 lightVector,
+    float tmax,
+    float normalBias,
+    float viewBias,
+    RaytracingAccelerationStructure bvh)
 {
     RayDesc ray;
     ray.Origin = payload.worldPosition + (payload.normal * normalBias); // TODO: not using viewBias!
@@ -60,16 +66,23 @@ float LightVisibility(Payload payload, float3 lightVector, float tmax, float nor
 }
 
 /**
-* Evaluate direct lighting and showing for the current surface and the spot light.
-*/
-float3 EvaluateSpotLight(Payload payload, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+ * Evaluate direct lighting and showing for the current surface and the spot light.
+ */
+float3 EvaluateSpotLight(
+    Payload payload,
+    float normalBias,
+    float viewBias,
+    RaytracingAccelerationStructure bvh,
+    StructuredBuffer<Light> lights)
 {
     float3 color = 0;
     for (uint lightIndex = 0; lightIndex < GetNumSpotLights(); lightIndex++)
     {
-        // Load the spot light
+        // Get the index of the light
         uint index = (HasDirectionalLight() + lightIndex);
-        Light spotLight = Lights[index];
+
+        // Load the spot light
+        Light spotLight = lights[index];
 
         float3 lightVector = (spotLight.position - payload.worldPosition);
         float  lightDistance = length(lightVector);
@@ -97,16 +110,23 @@ float3 EvaluateSpotLight(Payload payload, float normalBias, float viewBias, Rayt
 }
 
 /**
-* Evaluate direct lighting for the current surface and all influential point lights.
-*/
-float3 EvaluatePointLight(Payload payload, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+ * Evaluate direct lighting for the current surface and all influential point lights.
+ */
+float3 EvaluatePointLight(
+    Payload payload,
+    float normalBias,
+    float viewBias,
+    RaytracingAccelerationStructure bvh,
+    StructuredBuffer<Light> lights)
 {
     float3 color = 0;
     for (uint lightIndex = 0; lightIndex < GetNumPointLights(); lightIndex++)
     {
-        // Load the point light
+        // Get the index of the point light
         uint index = HasDirectionalLight() + GetNumSpotLights();
-        Light pointLight = Lights[index];
+
+        // Load the point light
+        Light pointLight = lights[index];
 
         float3 lightVector = (pointLight.position - payload.worldPosition);
         float  lightDistance = length(lightVector);
@@ -132,12 +152,17 @@ float3 EvaluatePointLight(Payload payload, float normalBias, float viewBias, Ray
 }
 
 /**
-* Evaluate direct lighting for the current surface and the directional light.
-*/
-float3 EvaluateDirectionalLight(Payload payload, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+ * Evaluate direct lighting for the current surface and the directional light.
+ */
+float3 EvaluateDirectionalLight(
+    Payload payload,
+    float normalBias,
+    float viewBias,
+    RaytracingAccelerationStructure bvh,
+    StructuredBuffer<Light> lights)
 {
     // Load the directional light data (directional light is always the first light)
-    Light directionalLight = Lights[0];
+    Light directionalLight = lights[0];
 
     float visibility = LightVisibility(payload, -directionalLight.direction, 1e27f, normalBias, viewBias, bvh);
 
@@ -152,26 +177,31 @@ float3 EvaluateDirectionalLight(Payload payload, float normalBias, float viewBia
 }
 
 /**
-* Computes the diffuse reflection of light off the given surface (direct lighting).
-*/
-float3 DirectDiffuseLighting(Payload payload, float normalBias, float viewBias, RaytracingAccelerationStructure bvh)
+ * Computes the diffuse reflection of light off the given surface (direct lighting).
+ */
+float3 DirectDiffuseLighting(
+    Payload payload,
+    float normalBias,
+    float viewBias,
+    RaytracingAccelerationStructure bvh,
+    StructuredBuffer<Light> lights)
 {
     float3 brdf = (payload.albedo / PI);
     float3 lighting = 0.f;
 
     if (HasDirectionalLight())
     {
-        lighting += EvaluateDirectionalLight(payload, normalBias, viewBias, bvh);
+        lighting += EvaluateDirectionalLight(payload, normalBias, viewBias, bvh, lights);
     }
 
     if (GetNumSpotLights() > 0)
     {
-        lighting += EvaluateSpotLight(payload, normalBias, viewBias, bvh);
+        lighting += EvaluateSpotLight(payload, normalBias, viewBias, bvh, lights);
     }
 
     if (GetNumPointLights() > 0)
     {
-        lighting += EvaluatePointLight(payload, normalBias, viewBias, bvh);
+        lighting += EvaluatePointLight(payload, normalBias, viewBias, bvh, lights);
     }
 
     return (brdf * lighting);

@@ -10,6 +10,8 @@
 
 #include "Configs.h"
 
+#include <rtxgi/ddgi/DDGIVolume.h>
+
 #include <sstream>
 #include <stdlib.h>
 #include <filesystem>
@@ -72,10 +74,60 @@ namespace Configs
         destination = stof(source);
     }
 
+    void StoreWorldCounts(std::string source, XMINT3& destination)
+    {
+        // Note: used to store world-space probe counts, negative values are not allowed
+        std::vector<std::string> values = Split(source, ' ');
+    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT
+        destination = { static_cast<int32_t>(stol(values[0])), static_cast<int32_t>(stol(values[1])), static_cast<int32_t>(stol(values[2])) };
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
+        destination = { static_cast<int32_t>(stol(values[0])), static_cast<int32_t>(stol(values[2])), static_cast<int32_t>(stol(values[1])) };
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
+        destination = { static_cast<int32_t>(stol(values[2])), static_cast<int32_t>(stol(values[0])), static_cast<int32_t>(stol(values[1])) };
+    #endif
+    }
+
     void Store(std::string source, XMINT3& destination)
     {
         std::vector<std::string> values = Split(source, ' ');
         destination = { static_cast<int32_t>(stol(values[0])), static_cast<int32_t>(stol(values[1])), static_cast<int32_t>(stol(values[2])) };
+    }
+
+    void StoreWorldVector(std::string source, XMFLOAT3& destination)
+    {
+        // Note: used to store world-space positions and directions
+        std::vector<std::string> values = Split(source, ' ');
+    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT
+        destination = { stof(values[0]), stof(values[1]), stof(values[2]) };
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
+        destination = { stof(values[0]), -stof(values[2]), stof(values[1]) };
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT
+        destination = { stof(values[0]), stof(values[1]), -stof(values[2]) };
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
+        destination = { -stof(values[2]), stof(values[0]), stof(values[1]) };
+    #endif
+    }
+
+    void StoreEulerAngles(std::string source, XMFLOAT3& destination)
+    {
+        // Store Euler angles for volume rotation
+        std::vector<std::string> values = Split(source, ' ');
+
+        rtxgi::float3 radians = rtxgi::ConvertEulerAngles({stof(values[0]), stof(values[1]), stof(values[2])}, static_cast<rtxgi::ECoordinateSystem>(COORDINATE_SYSTEM));
+        destination = { radians.x, radians.y, radians.z };
+    }
+
+    void StoreWorldDistance(std::string source, XMFLOAT3& destination)
+    {
+        // Note: used to store world-space distance values (between probes), negative values are not allowed
+        std::vector<std::string> values = Split(source, ' ');
+    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT
+        destination = { stof(values[0]), stof(values[1]), stof(values[2]) };
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
+        destination = { stof(values[0]), stof(values[2]), stof(values[1]) };
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
+        destination = { stof(values[2]), stof(values[0]), stof(values[1]) };
+    #endif
     }
 
     void Store(std::string source, XMFLOAT3& destination)
@@ -92,6 +144,16 @@ namespace Configs
     void Store(std::string source, ELightType& destination)
     {
         destination = (ELightType)stoi(source);
+    }
+
+    void Store(std::string source, rtxgi::EDDGIVolumeTextureFormat& destination)
+    {
+        destination = (rtxgi::EDDGIVolumeTextureFormat)stoi(source);
+    }
+
+    void Store(std::string source, rtxgi::EDDGIVolumeProbeVisType& destination)
+    {
+        destination = (rtxgi::EDDGIVolumeProbeVisType)stoi(source);
     }
 
     /*
@@ -159,10 +221,10 @@ namespace Configs
             }
 
             if (tokens[3].compare("name") == 0) { config.ddgi.volumes[volumeIndex].name = data; return true; }
-            if (tokens[3].compare("origin") == 0) { Store(data, config.ddgi.volumes[volumeIndex].origin); return true; }
-            if (tokens[3].compare("rotation") == 0) { Store(data, config.ddgi.volumes[volumeIndex].eulerAngles); return true; }
-            if (tokens[3].compare("probeCounts") == 0) { Store(data, config.ddgi.volumes[volumeIndex].probeCounts); return true; }
-            if (tokens[3].compare("probeSpacing") == 0) { Store(data, config.ddgi.volumes[volumeIndex].probeSpacing); return true; }
+            if (tokens[3].compare("origin") == 0) { StoreWorldVector(data, config.ddgi.volumes[volumeIndex].origin); return true; }
+            if (tokens[3].compare("rotation") == 0) { StoreEulerAngles(data, config.ddgi.volumes[volumeIndex].eulerAngles); return true; }
+            if (tokens[3].compare("probeCounts") == 0) { StoreWorldCounts(data, config.ddgi.volumes[volumeIndex].probeCounts); return true; }
+            if (tokens[3].compare("probeSpacing") == 0) { StoreWorldDistance(data, config.ddgi.volumes[volumeIndex].probeSpacing); return true; }
             if (tokens[3].compare("probeNumRays") == 0) { Store(data, config.ddgi.volumes[volumeIndex].probeNumRays); return true; }
             if (tokens[3].compare("probeNumIrradianceTexels") == 0) { Store(data, config.ddgi.volumes[volumeIndex].probeNumIrradianceTexels); return true; }
             if (tokens[3].compare("probeNumDistanceTexels") == 0) { Store(data, config.ddgi.volumes[volumeIndex].probeNumDistanceTexels); return true; }
@@ -231,15 +293,15 @@ namespace Configs
 
             if (tokens[3].compare("vis") == 0)
             {
-                if (tokens[4].compare("probeRadius") == 0)
+                if(tokens[4].compare("probeVisType") == 0)
                 {
-                    Store(data, config.ddgi.volumes[volumeIndex].probeRadius);
+                    Store(data, config.ddgi.volumes[volumeIndex].probeVisType);
                     return true;
                 }
 
-                if (tokens[4].compare("probeAlpha") == 0)
+                if (tokens[4].compare("probeRadius") == 0)
                 {
-                    Store(data, config.ddgi.volumes[volumeIndex].probeAlpha);
+                    Store(data, config.ddgi.volumes[volumeIndex].probeRadius);
                     return true;
                 }
 
@@ -275,15 +337,9 @@ namespace Configs
                         return true;
                     }
 
-                    if (tokens[5].compare("relocationOffsetScale") == 0)
+                    if (tokens[5].compare("probeDataScale") == 0)
                     {
-                        Store(data, config.ddgi.volumes[volumeIndex].probeRelocationOffsetScale);
-                        return true;
-                    }
-
-                    if (tokens[5].compare("classificationStateScale") == 0)
-                    {
-                        Store(data, config.ddgi.volumes[volumeIndex].probeClassificationStateScale);
+                        Store(data, config.ddgi.volumes[volumeIndex].probeDataScale);
                         return true;
                     }
                 }
@@ -364,9 +420,9 @@ namespace Configs
         return false;
     }
 
-    /*
-    * Parse a scene configuration entry.
-    */
+    /**
+     * Parse a scene configuration entry.
+     */
     bool ParseConfigSceneEntry(const std::vector<std::string>& tokens, const std::string& rhs, Config& config, uint32_t lineNumber, std::ofstream& log)
     {
         // Scene config entries have no more than 4 tokens
@@ -395,8 +451,8 @@ namespace Configs
 
             if (tokens[3].compare("name") == 0) { config.scene.lights[lightIndex].name = data; return true; }
             if (tokens[3].compare("type") == 0) { Store(data, config.scene.lights[lightIndex].type); return true; }
-            if (tokens[3].compare("position") == 0) { Store(data, config.scene.lights[lightIndex].position); return true; }
-            if (tokens[3].compare("direction") == 0) { Store(data, config.scene.lights[lightIndex].direction); return true; }
+            if (tokens[3].compare("position") == 0) { StoreWorldVector(data, config.scene.lights[lightIndex].position); return true; }
+            if (tokens[3].compare("direction") == 0) { StoreWorldVector(data, config.scene.lights[lightIndex].direction); return true; }
             if (tokens[3].compare("color") == 0) { Store(data, config.scene.lights[lightIndex].color); return true; }
             if (tokens[3].compare("power") == 0) { Store(data, config.scene.lights[lightIndex].power); return true; }
             if (tokens[3].compare("radius") == 0) { Store(data, config.scene.lights[lightIndex].radius); return true; }
@@ -411,7 +467,7 @@ namespace Configs
             if (cameraIndex >= config.scene.cameras.size()) config.scene.cameras.emplace_back();
 
             if (tokens[3].compare("name") == 0) { config.scene.cameras[cameraIndex].name = data; return true; }
-            if (tokens[3].compare("position") == 0) { Store(data, config.scene.cameras[cameraIndex].position); return true; }
+            if (tokens[3].compare("position") == 0) { StoreWorldVector(data, config.scene.cameras[cameraIndex].position); return true; }
             if (tokens[3].compare("fov") == 0) { Store(data, config.scene.cameras[cameraIndex].fov); return true; }
             if (tokens[3].compare("aspect") == 0) { Store(data, config.scene.cameras[cameraIndex].aspect); return true; }
             if (tokens[3].compare("yaw") == 0) { Store(data, config.scene.cameras[cameraIndex].yaw); return true; }
@@ -423,9 +479,9 @@ namespace Configs
         return false;
     }
 
-    /*
-    * Parse an application configuration entry.
-    */
+    /**
+     * Parse an application configuration entry.
+     */
     bool ParseConfigAppEntry(const std::vector<std::string>& tokens, const std::string& rhs, Config& config, uint32_t lineNumber, std::ofstream& log)
     {
         // App config entries have exactly 2 tokens
@@ -471,8 +527,8 @@ namespace Configs
     }
 
     /**
-    * Parse the configuration file.
-    */
+     * Parse the configuration file.
+     */
     bool ParseConfig(const char* buffer, Config& config, std::ofstream& log)
     {
         std::string file(buffer);
@@ -522,8 +578,8 @@ namespace Configs
     //----------------------------------------------------------------------------------------------------------
 
     /**
-    * Parse the command line arguments and get the configuration file path.
-    */
+     * Parse the command line arguments and get the configuration file path.
+     */
     bool ParseCommandLine(const std::vector<std::string>& arguments, Config& config, std::ofstream& log)
     {
         if (arguments.size() == 0)
@@ -547,8 +603,8 @@ namespace Configs
     }
 
     /**
-    * Load and parse the configuration file.
-    */
+     * Load and parse the configuration file.
+     */
     bool Load(Config& config, std::ofstream& log)
     {
         // Load the config file

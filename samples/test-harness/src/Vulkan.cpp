@@ -50,6 +50,17 @@ namespace Graphics
         }
     #endif
 
+        void ConvertWideStringToNarrow(std::wstring& wide, std::string& narrow)
+        {
+            narrow.resize(wide.size());
+        #if defined(_WIN32) || defined(WIN32)
+            size_t converted = 0;
+            wcstombs_s(&converted, narrow.data(), (narrow.size() + 1), wide.c_str(), wide.size());
+        #else
+            wcstombs(narrow.data(), wide.c_str(), narrow.size() + 1);
+        #endif
+        }
+
         bool Check(VkResult hr, std::string fileName, uint32_t lineNumber)
         {
             if(hr == VK_ERROR_OUT_OF_DATE_KHR) return false;    // window resized or destroyed
@@ -1106,7 +1117,7 @@ namespace Graphics
 
             // Create the device texture resource, memory, and view
             {
-                TextureDesc desc = { texture.width, texture.height, texture.mips, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT };
+                TextureDesc desc = { texture.width, texture.height, 1, texture.mips, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT };
                 if (texture.format == Textures::ETextureFormat::BC7) desc.format = VK_FORMAT_BC7_UNORM_BLOCK;
                 CHECK(CreateTexture(vk, desc, &resource, &resourceMemory, &resourceView), "create the texture buffer, memory, and view!", log);
             #ifdef GFX_NAME_OBJECTS
@@ -1226,113 +1237,176 @@ namespace Graphics
             std::vector<VkDescriptorSetLayoutBinding> bindings;
 
             // 0: Samplers
-            VkDescriptorSetLayoutBinding samplersBinding = {};
-            samplersBinding.binding = DescriptorLayoutBindings::SAMPLERS;
-            samplersBinding.descriptorCount = maxSamplerDescriptorCount;
-            samplersBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-            samplersBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::SAMPLERS;
+                bind.descriptorCount = maxSamplerDescriptorCount;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
-            bindings.push_back(samplersBinding);
+                bindings.push_back(bind);
+            }
 
-            // 1: Camera constant buffer
-            VkDescriptorSetLayoutBinding cameraCBBinding = {};
-            cameraCBBinding.binding = DescriptorLayoutBindings::CB_CAMERA;
-            cameraCBBinding.descriptorCount = 1;
-            cameraCBBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            cameraCBBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+            // 1: Camera Constant Buffer
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::CB_CAMERA;
+                bind.descriptorCount = 1;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                bind.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
-            bindings.push_back(cameraCBBinding);
+                bindings.push_back(bind);
+            }
 
-            // 2: Lights structured buffer
-            VkDescriptorSetLayoutBinding lightsSTBBinding = {};
-            lightsSTBBinding.binding = DescriptorLayoutBindings::STB_LIGHTS;
-            lightsSTBBinding.descriptorCount = 1;
-            lightsSTBBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            lightsSTBBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+            // 2: Lights StructuredBuffer
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::STB_LIGHTS;
+                bind.descriptorCount = 1;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-            bindings.push_back(lightsSTBBinding);
+                bindings.push_back(bind);
+            }
 
-            // 3: Materials structured buffer
-            VkDescriptorSetLayoutBinding materialSTBBinding = {};
-            materialSTBBinding.binding = DescriptorLayoutBindings::STB_MATERIALS;
-            materialSTBBinding.descriptorCount = 1;
-            materialSTBBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            materialSTBBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+            // 3: Materials StructuredBuffer
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::STB_MATERIALS;
+                bind.descriptorCount = 1;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
-            bindings.push_back(materialSTBBinding);
+                bindings.push_back(bind);
+            }
 
-            // 4: TLAS Instances structured buffer
-            VkDescriptorSetLayoutBinding instanceSTBBinding = {};
-            instanceSTBBinding.binding = DescriptorLayoutBindings::STB_INSTANCES;
-            instanceSTBBinding.descriptorCount = 1;
-            instanceSTBBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            instanceSTBBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+            // 4: Scene TLAS Instances StructuredBuffer
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::STB_TLAS_INSTANCES;
+                bind.descriptorCount = 1;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                bind.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-            bindings.push_back(instanceSTBBinding);
+                bindings.push_back(bind);
+            }
 
-            // 5: DDGIVolume constants structured buffer
-            VkDescriptorSetLayoutBinding ddgiVolumeSTBBinding = {};
-            ddgiVolumeSTBBinding.binding = DescriptorLayoutBindings::STB_DDGI_VOLUMES;
-            ddgiVolumeSTBBinding.descriptorCount = 1;
-            ddgiVolumeSTBBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            ddgiVolumeSTBBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+            // 5: DDGIVolume Constants StructuredBuffer
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::STB_DDGI_VOLUME_CONSTS;
+                bind.descriptorCount = 1;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-            bindings.push_back(ddgiVolumeSTBBinding);
+                bindings.push_back(bind);
+            }
 
-            // 6: RWTextures (UAVs)
-            VkDescriptorSetLayoutBinding rwTex2DBinding = {};
-            rwTex2DBinding.binding = DescriptorLayoutBindings::UAV_START;
-            rwTex2DBinding.descriptorCount = maxStorageImageDescriptorCount;
-            rwTex2DBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            rwTex2DBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+            // 6: DDGIVolume Bindless Resource Indices StructuredBuffer
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::STB_DDGI_VOLUME_RESOURCE_INDICES;
+                bind.descriptorCount = 1;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-            bindings.push_back(rwTex2DBinding);
+                bindings.push_back(bind);
+            }
 
-            // 7: Ray Tracing Acceleration Structures (TLAS)
-            VkDescriptorSetLayoutBinding bvhBinding = {};
-            bvhBinding.binding = DescriptorLayoutBindings::BVH_START;
-            bvhBinding.descriptorCount = maxAccelerationStructureDescriptorCount;
-            bvhBinding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-            bvhBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;    // we do not allow tracing in hit shaders (i.e. recursive tracing)
+            // 7: Probe Vis TLAS Instances RWStructuredBuffer
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::UAV_STB_TLAS_INSTANCES;
+                bind.descriptorCount = 1;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-            bindings.push_back(bvhBinding);
+                bindings.push_back(bind);
+            }
 
-            // 8: Textures (SRVs)
-            VkDescriptorSetLayoutBinding tex2DBinding = {};
-            tex2DBinding.binding = DescriptorLayoutBindings::SRV_START;
-            tex2DBinding.descriptorCount = maxSampledImageDescriptorCount;
-            tex2DBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-            tex2DBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+            // 8: Bindless UAVs, RWTexture2D
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::UAV_TEX2D;
+                bind.descriptorCount = maxStorageImageDescriptorCount;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-            bindings.push_back(tex2DBinding);
+                bindings.push_back(bind);
+            }
 
-            // 9: ByteAddress Buffers
-            VkDescriptorSetLayoutBinding rawBufferBinding = {};
-            rawBufferBinding.binding = DescriptorLayoutBindings::RAW_SRV_START;
-            rawBufferBinding.descriptorCount = maxStorageBufferDescriptorCount;
-            rawBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            rawBufferBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+            // 9: Bindless UAVs, RWTexture2DArray
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::UAV_TEX2DARRAY;
+                bind.descriptorCount = maxStorageImageDescriptorCount;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-            bindings.push_back(rawBufferBinding);
+                bindings.push_back(bind);
+            }
 
-            // Describe the push constants
-            VkPushConstantRange pushConstantRange = {};
-            pushConstantRange.stageFlags = VK_SHADER_STAGE_ALL;
-            pushConstantRange.offset = 0;
-            pushConstantRange.size = GlobalConstants::GetAlignedSizeInBytes() + DDGIConstants::GetAlignedSizeInBytes();
+            // 10: Bindless SRVs, Ray Tracing Acceleration Structures (TLAS)
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::SRV_TLAS;
+                bind.descriptorCount = maxAccelerationStructureDescriptorCount;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                bind.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;    // not allowing tracing in hit shaders (i.e. recursive tracing)
 
+                bindings.push_back(bind);
+            }
+
+            // 11: Bindless SRVs, Texture2D
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::SRV_TEX2D;
+                bind.descriptorCount = maxSampledImageDescriptorCount;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
+                bindings.push_back(bind);
+            }
+
+            // 12: Bindless SRVS, Texture2DArrays
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::SRV_TEX2DARRAY;
+                bind.descriptorCount = maxSampledImageDescriptorCount;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
+                bindings.push_back(bind);
+            }
+
+            // 13: Bindless SRVs, ByteAddressBuffers
+            {
+                VkDescriptorSetLayoutBinding bind = {};
+                bind.binding = DescriptorLayoutBindings::SRV_BYTEADDRESS;
+                bind.descriptorCount = maxStorageBufferDescriptorCount;
+                bind.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                bind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
+                bindings.push_back(bind);
+            }
+
+            // Specify the descriptor binding flags for each binding
             VkDescriptorBindingFlags bindingFlags[] =
             {
                 VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 0: Samplers[]
                 0, // 1: Camera Constant Buffer
-                0, // 2: Lights Structured Buffer
-                0, // 3: Materials Structured Buffer
-                0, // 4: Instances Structured Buffer
-                0, // 5: DDGIVolumes Structured Buffer
-                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 6: RWTex2D[]
-                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 7: RT Acceleration Structures[]
-                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 8: Tex2D[]
-                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 9: ByteAddressBuffer[]
+                0, // 2: Lights StructuredBuffer
+                0, // 3: Materials StructuredBuffer
+                0, // 4: TLASInstances StructuredBuffer
+                0, // 5: DDGIVolume Constants StructuredBuffer
+                0, // 6: DDGIVolume Resource Indices StructuredBuffer
+                0, // 7: RWTLASInstances StructuredBuffer
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, //  8: RWTex2D[]
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, //  9: RWTex2DArray[]
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 10: TLAS[]
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 11: Tex2D[]
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 12: Tex2DArray[]
+                VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, // 13: ByteAddrBuffer[]
             };
             assert(_countof(bindingFlags) == bindings.size()); // must have 1 binding flag per binding slot
 
@@ -1355,13 +1429,25 @@ namespace Graphics
             SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.descriptorSetLayout), "Global Descriptor Set Layout", VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT);
         #endif
 
+            // Ranges in the push constants memory block
+            std::vector<VkPushConstantRange> ranges;
+
+            // Global Constants
+            {
+                VkPushConstantRange range = {};
+                range.stageFlags = VK_SHADER_STAGE_ALL;
+                range.offset = 0;
+                range.size = GlobalConstants::GetAlignedSizeInBytes() + DDGIRootConstants::GetAlignedSizeInBytes();
+                ranges.push_back(range);
+            }
+
             // Describe the pipeline layout
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
             pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             pipelineLayoutCreateInfo.setLayoutCount = 1;
             pipelineLayoutCreateInfo.pSetLayouts = &resources.descriptorSetLayout;
-            pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-            pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+            pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<uint32_t>(ranges.size());
+            pipelineLayoutCreateInfo.pPushConstantRanges = ranges.data();
 
             // Create the pipeline layout
             VKCHECK(vkCreatePipelineLayout(vk.device, &pipelineLayoutCreateInfo, nullptr, &resources.pipelineLayout));
@@ -1378,7 +1464,7 @@ namespace Graphics
         bool CreateRenderTargets(Globals& vk, Resources& resources)
         {
             // Create the GBufferA (R8G8B8A8_UNORM) texture resource
-            TextureDesc desc = { static_cast<uint32_t>(vk.width), static_cast<uint32_t>(vk.height), 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
+            TextureDesc desc = { static_cast<uint32_t>(vk.width), static_cast<uint32_t>(vk.height), 1, 1, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
             if(!CreateTexture(vk, desc, &resources.rt.GBufferA, &resources.rt.GBufferAMemory, &resources.rt.GBufferAView)) return false;
         #ifdef GFX_NAME_OBJECTS
             SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.rt.GBufferA), "GBufferA", VK_OBJECT_TYPE_IMAGE);
@@ -1681,10 +1767,10 @@ namespace Graphics
             for (uint32_t materialIndex = 0; materialIndex < static_cast<uint32_t>(scene.materials.size()); materialIndex++)
             {
                 Scenes::Material material = scene.materials[materialIndex];
-                if (material.data.albedoTexIdx > -1) material.data.albedoTexIdx += BindlessResourceOffsets::SRV_SCENE_TEXTURES;
-                if (material.data.normalTexIdx > -1) material.data.normalTexIdx += BindlessResourceOffsets::SRV_SCENE_TEXTURES;
-                if (material.data.roughnessMetallicTexIdx > -1) material.data.roughnessMetallicTexIdx += BindlessResourceOffsets::SRV_SCENE_TEXTURES;
-                if (material.data.emissiveTexIdx > -1) material.data.emissiveTexIdx += BindlessResourceOffsets::SRV_SCENE_TEXTURES;
+                if (material.data.albedoTexIdx > -1) material.data.albedoTexIdx += Tex2DIndices::SCENE_TEXTURES;
+                if (material.data.normalTexIdx > -1) material.data.normalTexIdx += Tex2DIndices::SCENE_TEXTURES;
+                if (material.data.roughnessMetallicTexIdx > -1) material.data.roughnessMetallicTexIdx += Tex2DIndices::SCENE_TEXTURES;
+                if (material.data.emissiveTexIdx > -1) material.data.emissiveTexIdx += Tex2DIndices::SCENE_TEXTURES;
                 memcpy(resources.materialsSTBPtr + offset, material.GetGPUData(), Scenes::Material::GetGPUDataSize());
                 offset += Scenes::Material::GetGPUDataSize();
             }
@@ -2006,17 +2092,12 @@ namespace Graphics
         //----------------------------------------------------------------------------------------------------------
 
         /**
-         * Write an image to disk from the given Vulkan resource.
+         * Write an image (or images) to disk from the given Vulkan resource.
          */
-        bool WriteResourceToDisk(Globals& vk, std::string file, VkImage image, uint32_t width, uint32_t height, VkFormat imageFormat, VkImageLayout originalLayout)
+        bool WriteResourceToDisk(Globals& vk, std::string file, VkImage image, uint32_t width, uint32_t height, uint32_t arraySize, VkFormat imageFormat, VkImageLayout originalLayout)
         {
-            bool result = false;
             VkCommandPool commandPool = nullptr;
             VkCommandBuffer commandBuffer = nullptr;
-            VkImage linearScreenshotImage = nullptr;
-            VkImage optimalScreenshotImage = nullptr;
-            VkDeviceMemory linearScreenshotImageMemory;
-            VkDeviceMemory optimalScreenshotImageMemory;
 
             // Create a command pool
             {
@@ -2033,11 +2114,9 @@ namespace Graphics
 
             // Create and begin the command buffer
             {
-                uint32_t numCommandBuffers = 1;
-
                 VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
                 commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-                commandBufferAllocateInfo.commandBufferCount = numCommandBuffers;
+                commandBufferAllocateInfo.commandBufferCount = 1;
                 commandBufferAllocateInfo.commandPool = commandPool;
                 commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
@@ -2052,99 +2131,122 @@ namespace Graphics
                 VKCHECK(vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo));
             }
 
-            // Create intermediate texture resources
-            {
-                // Describe the image
-                VkImageCreateInfo imageCreateInfo = {};
-                imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-                imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-                imageCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-                imageCreateInfo.extent.width = width;
-                imageCreateInfo.extent.height = height;
-                imageCreateInfo.extent.depth = 1;
-                imageCreateInfo.mipLevels = 1;
-                imageCreateInfo.arrayLayers = 1;
-                imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-                imageCreateInfo.tiling = VK_IMAGE_TILING_LINEAR;
-                imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-                imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-                imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-                // Create the image (linear layout)
-                VKCHECK(vkCreateImage(vk.device, &imageCreateInfo, nullptr, &linearScreenshotImage));
-
-                // Create the image (optimal tiling)
-                imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-                imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-                VKCHECK(vkCreateImage(vk.device, &imageCreateInfo, nullptr, &optimalScreenshotImage));
-
-                // Get the memory requirements for the linear image
-                AllocateMemoryDesc desc = {};
-                vkGetImageMemoryRequirements(vk.device, linearScreenshotImage, &desc.requirements);
-                desc.properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-                desc.flags = 0;
-
-                // Allocate and bind the memory for the linear image
-                if (!AllocateMemory(vk, desc, &linearScreenshotImageMemory)) return false;
-                VKCHECK(vkBindImageMemory(vk.device, linearScreenshotImage, linearScreenshotImageMemory, 0));
-
-                // Get the memory requirements for the optimal tiled image
-                vkGetImageMemoryRequirements(vk.device, optimalScreenshotImage, &desc.requirements);
-                desc.properties = 0;
-                desc.flags = 0;
-
-                // Allocate and bind the memory for the optimal tiled image
-                if (!AllocateMemory(vk, desc, &optimalScreenshotImageMemory)) return false;
-                VKCHECK(vkBindImageMemory(vk.device, optimalScreenshotImage, optimalScreenshotImageMemory, 0));
-            }
-
-            // Barriers
+            // Transition the source resource to a copy source
             {
                 ImageBarrierDesc barrier =
                 {
-                    VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    originalLayout,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                    { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+                    { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, arraySize }
                 };
-
-                // Transition the intermediate images to copy destinations
-                SetImageMemoryBarrier(commandBuffer, linearScreenshotImage, barrier);
-                SetImageMemoryBarrier(commandBuffer, optimalScreenshotImage, barrier);
-
-                // Transition the source image to a copy source
-                barrier.oldLayout = originalLayout;
-                barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
                 SetImageMemoryBarrier(commandBuffer, image, barrier);
             }
 
-            // Copy the source image to the optimal tiled image
-            {
-                VkImageBlit region = {};
-                VkImageSubresourceLayers subres = {};
-                subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                subres.mipLevel = 0;
-                subres.baseArrayLayer = 0;
-                subres.layerCount = 1;
-                region.srcSubresource = subres;
-                region.dstSubresource = subres;
-                region.srcOffsets[0] = {};
-                region.srcOffsets[1] = { (int32_t) width, (int32_t) height, 1 };
-                region.dstOffsets[0] = {};
-                region.dstOffsets[1] = { (int32_t) width, (int32_t) height, 1 };
+            // Staging (read-back) texture resources
+            std::vector<VkImage> stagingResources; // linear layout
+            std::vector<VkImage> optimalStagingResources; // optimal tiled layout
+            std::vector<VkDeviceMemory> stagingResourcesMemory;
+            std::vector<VkDeviceMemory> optimalStagingResourcesMemory;
 
-                vkCmdBlitImage(
-                    commandBuffer,
-                    image,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    optimalScreenshotImage,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    1, &region, VK_FILTER_NEAREST);
-            }
-
-            // Barriers
+            // Loop over the subresources (array slices), copying them from the GPU
+            for(uint32_t subresourceIndex = 0; subresourceIndex < arraySize; subresourceIndex++)
             {
+                // Add new resource entries
+                stagingResources.emplace_back();
+                optimalStagingResources.emplace_back();
+                stagingResourcesMemory.emplace_back();
+                optimalStagingResourcesMemory.emplace_back();
+
+                // Create the staging texture resources
+                {
+                    // Describe the staging resource
+                    VkImageCreateInfo imageCreateInfo = {};
+                    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+                    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+                    imageCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+                    imageCreateInfo.extent.width = width;
+                    imageCreateInfo.extent.height = height;
+                    imageCreateInfo.extent.depth = 1;
+                    imageCreateInfo.mipLevels = 1;
+                    imageCreateInfo.arrayLayers = 1;
+                    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+                    imageCreateInfo.tiling = VK_IMAGE_TILING_LINEAR;
+                    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+                    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+                    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+                    // Create the resource (linear layout)
+                    VKCHECK(vkCreateImage(vk.device, &imageCreateInfo, nullptr, &stagingResources[subresourceIndex]));
+
+                    // Create the resource (optimal tiling)
+                    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+                    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+                    VKCHECK(vkCreateImage(vk.device, &imageCreateInfo, nullptr, &optimalStagingResources[subresourceIndex]));
+
+                    // Get the memory requirements for the linear resource
+                    AllocateMemoryDesc desc = {};
+                    vkGetImageMemoryRequirements(vk.device, stagingResources[subresourceIndex], &desc.requirements);
+                    desc.properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+                    desc.flags = 0;
+
+                    // Allocate and bind the memory for the linear resource
+                    if (!AllocateMemory(vk, desc, &stagingResourcesMemory[subresourceIndex])) return false;
+                    VKCHECK(vkBindImageMemory(vk.device, stagingResources[subresourceIndex], stagingResourcesMemory[subresourceIndex], 0));
+
+                    // Get the memory requirements for the optimal tiled resource
+                    vkGetImageMemoryRequirements(vk.device, optimalStagingResources[subresourceIndex], &desc.requirements);
+                    desc.properties = 0;
+                    desc.flags = 0;
+
+                    // Allocate and bind the memory for the optimal tiled resource
+                    if (!AllocateMemory(vk, desc, &optimalStagingResourcesMemory[subresourceIndex])) return false;
+                    VKCHECK(vkBindImageMemory(vk.device, optimalStagingResources[subresourceIndex], optimalStagingResourcesMemory[subresourceIndex], 0));
+
+                    // Transition the staging resources to copy destinations
+                    ImageBarrierDesc barrier =
+                    {
+                        VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                        { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+                    };
+                    SetImageMemoryBarrier(commandBuffer, stagingResources[subresourceIndex], barrier);
+                    SetImageMemoryBarrier(commandBuffer, optimalStagingResources[subresourceIndex], barrier);
+                }
+
+                // Copy the source resource (slice) to the optimal tiled resource
+                {
+                    VkImageSubresourceLayers source = {};
+                    source.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    source.layerCount = 1;
+                    source.baseArrayLayer = subresourceIndex;
+
+                    VkImageSubresourceLayers dest = {};
+                    dest.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    dest.layerCount = 1;
+                    dest.baseArrayLayer = 0;
+
+                    VkImageBlit region = {};
+                    region.srcSubresource = source;
+                    region.dstSubresource = dest;
+                    region.srcOffsets[0] = {};
+                    region.srcOffsets[1] = { (int32_t)width, (int32_t)height, 1 };
+                    region.dstOffsets[0] = {};
+                    region.dstOffsets[1] = { (int32_t)width, (int32_t)height, 1 };
+
+                    vkCmdBlitImage(
+                        commandBuffer,
+                        image,
+                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        optimalStagingResources[subresourceIndex],
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        1, &region, VK_FILTER_NEAREST);
+                }
+
+                // Transition the optimal tiled resource to a copy source
                 ImageBarrierDesc barrier =
                 {
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -2153,101 +2255,122 @@ namespace Graphics
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                     { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
                 };
+                SetImageMemoryBarrier(commandBuffer, optimalStagingResources[subresourceIndex], barrier);
 
-                // Transition the optimal tiled image to a copy source
-                SetImageMemoryBarrier(commandBuffer, optimalScreenshotImage, barrier);
+                // Copy the optimal tiled resource to the linear resource (for CPU copy)
+                {
+                    VkImageSubresourceLayers resource = {};
+                    resource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    resource.layerCount = 1;
+                    resource.baseArrayLayer = 0;
 
-                // Transition the source image to a copy source
-                barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                barrier.newLayout = originalLayout;
+                    VkImageCopy region = {};
+                    region.srcSubresource = resource;
+                    region.dstSubresource = resource;
+                    region.extent.width = width;
+                    region.extent.height = height;
+                    region.extent.depth = 1;
+
+                    vkCmdCopyImage(
+                        commandBuffer,
+                        optimalStagingResources[subresourceIndex],
+                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        stagingResources[subresourceIndex],
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        1, &region);
+
+                    // Transition the linear resource to general read
+                    ImageBarrierDesc barrier =
+                    {
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_IMAGE_LAYOUT_GENERAL,
+                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                        { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+                    };
+                    SetImageMemoryBarrier(commandBuffer, stagingResources[subresourceIndex], barrier);
+                }
+            }
+
+            // Transition the source resource back to its original layout
+            {
+                ImageBarrierDesc barrier =
+                {
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    originalLayout,
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                    { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, arraySize }
+                };
                 SetImageMemoryBarrier(commandBuffer, image, barrier);
-            }
-
-            // Copy optimal tiled image to linear image (for CPU copy)
-            {
-                VkImageSubresourceLayers subResource = {};
-                subResource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                subResource.baseArrayLayer = 0;
-                subResource.mipLevel = 0;
-                subResource.layerCount = 1;
-
-                VkImageCopy region = {};
-                region.srcSubresource = subResource;
-                region.dstSubresource = subResource;
-                region.srcOffset = { 0, 0, 0 };
-                region.dstOffset = { 0, 0, 0 };
-                region.extent.width = width;
-                region.extent.height = height;
-                region.extent.depth = 1;
-
-                vkCmdCopyImage(
-                    commandBuffer,
-                    optimalScreenshotImage,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    linearScreenshotImage,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    1, &region);
-            }
-
-            // Transition the linear image to general read
-            {
-                ImageBarrierDesc barrier =
-                {
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_IMAGE_LAYOUT_GENERAL,
-                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                    { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
-                };
-                SetImageMemoryBarrier(commandBuffer, linearScreenshotImage, barrier);
             }
 
             // Execute GPU work
-            {
-                VKCHECK(vkEndCommandBuffer(commandBuffer));
+            VKCHECK(vkEndCommandBuffer(commandBuffer));
 
-                VkSubmitInfo submitInfo = {};
-                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &commandBuffer;
+            VkSubmitInfo submitInfo = {};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffer;
 
-                VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
-                VKCHECK(vkQueueWaitIdle(vk.queue));
+            VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
+            VKCHECK(vkQueueWaitIdle(vk.queue));
 
-                WaitForGPU(vk);
-            }
+            WaitForGPU(vk);
 
-            // Copy the linear image to CPU memory
+            // Copy the linear resources to CPU memory
+            bool result = true;
+            for (uint32_t subresourceIndex = 0; subresourceIndex < arraySize; subresourceIndex++)
             {
                 VkImageSubresource subResource{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0 };
                 VkSubresourceLayout subResourceLayout;
-                vkGetImageSubresourceLayout(vk.device, linearScreenshotImage, &subResource, &subResourceLayout);
+                vkGetImageSubresourceLayout(vk.device, stagingResources[subresourceIndex], &subResource, &subResourceLayout);
 
-                // Map the linear image memory
-                unsigned char* pData = nullptr;
-                VKCHECK(vkMapMemory(vk.device, linearScreenshotImageMemory, 0, VK_WHOLE_SIZE, 0, (void**)&pData));
+                // Map the linear resource's memory
+                uint8_t* pData = nullptr;
+                VKCHECK(vkMapMemory(vk.device, stagingResourcesMemory[subresourceIndex], 0, VK_WHOLE_SIZE, 0, (void**)&pData));
 
-                // Copy linear image to CPU memory
-                std::vector<unsigned char> converted(width * height * ImageCapture::NumChannels);
-                memcpy(converted.data(), pData, converted.size());
+                std::vector<uint8_t> converted(width * height * ImageCapture::NumChannels);
+
+                // Copy the linear resource to CPU memory
+                uint32_t rowSizeInBytes = width * ImageCapture::NumChannels; // * sizeof(uint8_t);
+                if(rowSizeInBytes < 64)
+                {
+                    // Copy the row texels, ignoring the padding added from 64B row alignment
+                    uint8_t* dst = converted.data();
+                    for(uint32_t rowIndex = 0; rowIndex < height; rowIndex++)
+                    {
+                        memcpy(dst, pData, rowSizeInBytes);
+                        dst += rowSizeInBytes;
+                        pData += 64;
+                    }
+                }
+                else
+                {
+                    // Copy the texels, they are 256 aligned already and don't include padding
+                    memcpy(converted.data(), pData, converted.size());
+                }
 
                 // Write the resource to disk as a PNG file (using STB)
-                result = ImageCapture::CapturePng(file, width, height, converted.data());
+                std::string filename = file;
+                if (arraySize > 1) filename += "-Layer-" + std::to_string(subresourceIndex);
+                filename.append(".png");
+                result &= ImageCapture::CapturePng(filename, width, height, converted.data());
 
-                // Unmap the linear image memory
-                vkUnmapMemory(vk.device, linearScreenshotImageMemory);
+                // Unmap the linear resource's memory
+                vkUnmapMemory(vk.device, stagingResourcesMemory[subresourceIndex]);
             }
 
             // Clean up
+            for (uint32_t subresourceIndex = 0; subresourceIndex < arraySize; subresourceIndex++)
             {
-                vkFreeMemory(vk.device, linearScreenshotImageMemory, nullptr);
-                vkDestroyImage(vk.device, linearScreenshotImage, nullptr);
-                vkFreeMemory(vk.device, optimalScreenshotImageMemory, nullptr);
-                vkDestroyImage(vk.device, optimalScreenshotImage, nullptr);
-
-                vkFreeCommandBuffers(vk.device, commandPool, 1, &commandBuffer);
-                vkDestroyCommandPool(vk.device, commandPool, nullptr);
+                vkFreeMemory(vk.device, stagingResourcesMemory[subresourceIndex], nullptr);
+                vkDestroyImage(vk.device, stagingResources[subresourceIndex], nullptr);
+                vkFreeMemory(vk.device, optimalStagingResourcesMemory[subresourceIndex], nullptr);
+                vkDestroyImage(vk.device, optimalStagingResources[subresourceIndex], nullptr);
             }
+            vkFreeCommandBuffers(vk.device, commandPool, 1, &commandBuffer);
+            vkDestroyCommandPool(vk.device, commandPool, nullptr);
 
             return result;
         }
@@ -2342,11 +2465,7 @@ namespace Graphics
             imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             imageMemoryBarrier.image = image;
-            imageMemoryBarrier.subresourceRange.aspectMask = info.subresourceRange.aspectMask;
-            imageMemoryBarrier.subresourceRange.baseMipLevel = info.subresourceRange.baseMipLevel;
-            imageMemoryBarrier.subresourceRange.levelCount = info.subresourceRange.levelCount;
-            imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-            imageMemoryBarrier.subresourceRange.layerCount = 1;
+            imageMemoryBarrier.subresourceRange = info.subresourceRange;
 
             switch (info.oldLayout)
             {
@@ -2501,7 +2620,7 @@ namespace Graphics
             imageCreateInfo.extent.height = info.height;
             imageCreateInfo.extent.depth = 1;
             imageCreateInfo.mipLevels = info.mips;
-            imageCreateInfo.arrayLayers = 1;
+            imageCreateInfo.arrayLayers = info.arraySize;
             imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
             imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
             imageCreateInfo.usage = info.usage;
@@ -2528,8 +2647,9 @@ namespace Graphics
             imageViewCreateInfo.image = *image;
             imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             imageViewCreateInfo.subresourceRange.levelCount = info.mips;
-            imageViewCreateInfo.subresourceRange.layerCount = 1;
-            imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            imageViewCreateInfo.subresourceRange.layerCount = info.arraySize;
+            if(info.arraySize > 1) imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+            else imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 
             // Create the texture's image view
             VKCHECK(vkCreateImageView(vk.device, &imageViewCreateInfo, nullptr, imageView));
@@ -2617,11 +2737,18 @@ namespace Graphics
             uint32_t stageIndex = 0;
 
             // Get the stage names
+            std::wstring name;
             std::vector<std::string> entryPoints;
-            std::wstring name = std::wstring(shaders.vs.entryPoint);
-            entryPoints.push_back(std::string(name.begin(), name.end()));
+
+            // Vertex shader
+            name = std::wstring(shaders.vs.entryPoint);
+            entryPoints.emplace_back();
+            ConvertWideStringToNarrow(name, entryPoints.back());
+
+            // Pixel shader
             name = std::wstring(shaders.ps.entryPoint);
-            entryPoints.push_back(std::string(name.begin(), name.end()));
+            entryPoints.emplace_back();
+            ConvertWideStringToNarrow(name, entryPoints.back());
 
             // Describe the raster pipeline stages
             VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo[2] = {};
@@ -2667,8 +2794,10 @@ namespace Graphics
          */
         bool CreateComputePipeline(VkDevice device, VkPipelineLayout pipelineLayout, const Shaders::ShaderProgram& shader, const VkShaderModule& module, VkPipeline* pipeline)
         {
-            std::wstring wentryPoint = std::wstring(shader.entryPoint);
-            std::string entryPoint = std::string(wentryPoint.begin(), wentryPoint.end());
+            std::string entryPoint;
+            std::wstring name = std::wstring(shader.entryPoint);
+            entryPoint.resize(name.size());
+            ConvertWideStringToNarrow(name, entryPoint);
 
             // Describe the pipeline
             VkComputePipelineCreateInfo computePipelineCreateInfo = {};
@@ -2694,30 +2823,44 @@ namespace Graphics
             uint32_t numGroups = 2;     // rgs + miss + hitGroups
 
             // Find the number of pipeline stages, groups, and their names
+            std::wstring name;
             std::vector<std::string> entryPoints;
-            std::wstring name = std::wstring(shaders.rgs.entryPoint);
-            entryPoints.push_back(std::string(name.begin(), name.end()));
+
+            // Ray generation shader
+            name = std::wstring(shaders.rgs.entryPoint);
+            entryPoints.emplace_back();
+            ConvertWideStringToNarrow(name, entryPoints.back());
+
+            // Miss shader
             name = std::wstring(shaders.miss.entryPoint);
-            entryPoints.push_back(std::string(name.begin(), name.end()));
+            entryPoints.emplace_back();
+            ConvertWideStringToNarrow(name, entryPoints.back());
+
             for (uint32_t hitGroupIndex = 0; hitGroupIndex < static_cast<uint32_t>(shaders.hitGroups.size()); hitGroupIndex++)
             {
                 const Shaders::ShaderRTHitGroup& hitGroup = shaders.hitGroups[hitGroupIndex];
                 if (hitGroup.hasCHS())
                 {
+                    // Closest Hit Shader
                     name = std::wstring(hitGroup.chs.entryPoint);
-                    entryPoints.push_back(std::string(name.begin(), name.end()));
+                    entryPoints.emplace_back();
+                    ConvertWideStringToNarrow(name, entryPoints.back());
                 }
 
                 if (hitGroup.hasAHS())
                 {
+                    // Any Hit Shader
                     name = std::wstring(hitGroup.ahs.entryPoint);
-                    entryPoints.push_back(std::string(name.begin(), name.end()));
+                    entryPoints.emplace_back();
+                    ConvertWideStringToNarrow(name, entryPoints.back());
                 }
 
                 if (hitGroup.hasIS())
                 {
+                    // Intersection Shader
                     name = std::wstring(hitGroup.is.entryPoint);
-                    entryPoints.push_back(std::string(name.begin(), name.end()));
+                    entryPoints.emplace_back();
+                    ConvertWideStringToNarrow(name, entryPoints.back());
                 }
 
                 numStages += hitGroup.numStages();
@@ -3239,13 +3382,13 @@ namespace Graphics
     #ifdef GFX_PERF_INSTRUMENTATION
         void BeginFrame(Globals& vk, GlobalResources& resources, Instrumentation::Performance& performance)
         {
-            vkCmdResetQueryPool(vk.cmdBuffer[vk.frameIndex], resources.timestampPool, 0, 2);
-            vkCmdWriteTimestamp(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, resources.timestampPool, 0);
+            vkCmdResetQueryPool(vk.cmdBuffer[vk.frameIndex], resources.timestampPool, 0, performance.GetNumTotalGPUQueries());
+            vkCmdWriteTimestamp(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, resources.timestampPool, performance.gpuTimes[0]->GetGPUQueryBeginIndex());
         }
 
         void EndFrame(Globals& vk, GlobalResources& resources, Instrumentation::Performance& performance)
         {
-            vkCmdWriteTimestamp(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, resources.timestampPool, 1);
+            vkCmdWriteTimestamp(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, resources.timestampPool, performance.gpuTimes[0]->GetGPUQueryEndIndex());
         }
 
         void ResolveTimestamps(Globals& vk, GlobalResources& resources, Instrumentation::Performance& performance)
@@ -3256,25 +3399,33 @@ namespace Graphics
         bool UpdateTimestamps(Globals& vk, GlobalResources& resources, Instrumentation::Performance& performance)
         {
             std::vector<Timestamp> queries;
-            queries.resize(performance.GetNumGPUQueries());
+            queries.resize(performance.GetNumActiveGPUQueries());
 
             // Copy the query results to the CPU read-back buffer
-            vkCmdCopyQueryPoolResults(vk.cmdBuffer[vk.frameIndex], resources.timestampPool, 0, performance.GetNumGPUQueries(), resources.timestamps, 0, sizeof(Timestamp), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+            vkCmdCopyQueryPoolResults(vk.cmdBuffer[vk.frameIndex], resources.timestampPool, 0, performance.GetNumActiveGPUQueries(), resources.timestamps, 0, sizeof(Timestamp), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
 
             // Copy the timestamps from the read-back buffer
             uint8_t* pData = nullptr;
             VKCHECK(vkMapMemory(vk.device, resources.timestampsMemory, 0, VK_WHOLE_SIZE, 0, reinterpret_cast<void**>(&pData)));
-            memcpy(queries.data(), pData, sizeof(Timestamp) * performance.GetNumGPUQueries());
+            memcpy(queries.data(), pData, sizeof(Timestamp) * performance.GetNumActiveGPUQueries());
             vkUnmapMemory(vk.device, resources.timestampsMemory);
 
-            // Compute the elapsed gpu time in milliseconds
+            // Update the GPU performance stats for the active GPU timestamp queries
             uint64_t elapsedTicks;
             for (uint32_t timestampIndex = 0; timestampIndex < static_cast<uint32_t>(performance.gpuTimes.size()); timestampIndex++)
             {
+                // Get the stat
                 Instrumentation::Stat*& s = performance.gpuTimes[timestampIndex];
-                if (queries[s->GetQueryBeginIndex()].availability != 0 && queries[s->GetQueryEndIndex()].availability != 0 && queries[s->GetQueryBeginIndex()].timestamp != 0)
+
+                // Skip the stat if it wasn't active this frame
+                if(s->gpuQueryStartIndex == -1) continue;
+
+                // Compute the elapsed GPU time in milliseconds
+                Timestamp start = queries[s->gpuQueryStartIndex];
+                Timestamp end = queries[s->gpuQueryEndIndex];
+                if(start.availability != 0 && end.availability != 0 && start.timestamp != 0)
                 {
-                    elapsedTicks = queries[s->GetQueryEndIndex()].timestamp - queries[s->GetQueryBeginIndex()].timestamp;
+                    elapsedTicks = end.timestamp - start.timestamp;
                     s->elapsed = std::max(static_cast<double>(elapsedTicks) / 1000000, (double)0);
                 }
                 else
@@ -3282,7 +3433,11 @@ namespace Graphics
                     s->elapsed = 0;
                 }
                 Instrumentation::Resolve(s);
+
+                // Reset the GPU query indices for a new frame
+                s->ResetGPUQueryIndices();
             }
+            Instrumentation::Stat::ResetGPUQueryCount();
 
             return true;
         }
@@ -3302,7 +3457,7 @@ namespace Graphics
          */
         bool WriteBackBufferToDisk(Globals& vk, std::string directory)
         {
-            return WriteResourceToDisk(vk, directory + "/backbuffer.png", vk.swapChainImage[vk.frameIndex], vk.width, vk.height, vk.swapChainFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            return WriteResourceToDisk(vk, directory + "/R-BackBuffer", vk.swapChainImage[vk.frameIndex], vk.width, vk.height, 1, vk.swapChainFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         }
 
     }

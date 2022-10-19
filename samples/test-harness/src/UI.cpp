@@ -9,7 +9,6 @@
 */
 
 #include "UI.h"
-#include "DDGI.h"
 
 #include <math.h>
 #include <sstream>
@@ -226,13 +225,15 @@ namespace Graphics
         /**
          * Creates the main debug window.
          */
-        void CreateDebugWindow(Graphics::Globals& gfx, Configs::Config& config, Scenes::Scene& scene, std::vector<DDGIVolumeBase*>& volumes)
+        void CreateDebugWindow(Graphics::Globals& gfx, Configs::Config& config, Inputs::Input& input, Scenes::Scene& scene, std::vector<DDGIVolumeBase*>& volumes)
         {
             SetupStyle();
 
             // Size the debug window based on the application height
             ImGui::SetNextWindowSize(ImVec2(debugWindowWidth, gfx.height - 40.f));
             ImGui::Begin("Settings (Press 'u' to hide)", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+
+            ImGui::BeginDisabled(config.app.benchmarkRunning);
 
             // Application
             if (ImGui::CollapsingHeader("Application", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_CollapsingHeader))
@@ -256,7 +257,11 @@ namespace Graphics
                 #endif
 
                 #if RTXGI_DDGI_BINDLESS_RESOURCES
-                    ImGui::Text("RTXGI Resource Access: Bindless");
+                    #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                        ImGui::Text("RTXGI Resource Access: Bindless, Resource Arrays");
+                    #elif RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_DESCRIPTOR_HEAP
+                        ImGui::Text("RTXGI Resource Access: Bindless, Descriptor Heap (SM6.6+)");
+                    #endif
                 #else
                     ImGui::Text("RTXGI Resource Access: Bound");
                 #endif
@@ -272,6 +277,17 @@ namespace Graphics
                 ImGui::Text("Coordinate System: Right Hand, Z-Up");
             #endif
 
+                if (ImGui::Button("Write Intermediate Images to Disk"))
+                {
+                    input.event = Inputs::EInputEvent::SAVE_IMAGES;
+                }
+                ImGui::SameLine(); AddQuestionMark("Save images of GBuffer slices, RTAO intermediate buffers, and DDGIVolume resources. Press 'F2' on the keyboard for a shortcut.");
+
+                if (ImGui::Button("Screenshot"))
+                {
+                    input.event = Inputs::EInputEvent::SCREENSHOT;
+                }
+                ImGui::SameLine(); AddQuestionMark("Save a screenshot. Press 'F1' on the keyboard for a shortcut.");
             }
             ImGui::Separator();
 
@@ -283,6 +299,17 @@ namespace Graphics
                 ImGui::Text("Device: %s", config.app.gpuName.c_str());
                 ImGui::Checkbox("Detailed Performance", &config.app.showPerf);
                 ImGui::SameLine(); AddQuestionMark("Shows detailed performance information. Press 'J' on the keyboard for a shortcut.");
+
+                if(ImGui::Button("Run Benchmark"))
+                {
+                    input.event = Inputs::EInputEvent::RUN_BENCHMARK;
+                }
+                if(config.app.benchmarkRunning)
+                {
+                    ImGui::SameLine();
+                    ImGui::Text("Running...%d%%", config.app.benchmarkProgress);
+                }
+                ImGui::SameLine(); AddQuestionMark("Runs a benchmark that captures performance information for 1,000 frames. Press 'F4' on the keyboard for a shortcut.");
             }
             ImGui::Separator();
 
@@ -681,6 +708,12 @@ namespace Graphics
 
                 if (config.ddgi.enabled && volumes.size() > 0)
                 {
+                    if (ImGui::Checkbox("Insert Performance Markers##ddgi-perf-markers", &config.ddgi.insertPerfMarkers))
+                    {
+                        rtxgi::SetInsertPerfMarkers(config.ddgi.insertPerfMarkers);
+                    }
+                    ImGui::SameLine(); AddQuestionMark("Toggle inserting DDGI performance markers in the graphics command list.");
+
                     ImGui::Checkbox("Show Indirect Lighting", &config.ddgi.showIndirect);
                     ImGui::SameLine(); AddQuestionMark("Show only the indirect lighting contribution. Press '2' on the keyboard for a shortcut.");
 
@@ -698,27 +731,18 @@ namespace Graphics
                     {
                         Configs::DDGIVolume& selectedVolumeConfig = config.ddgi.volumes[config.ddgi.selectedVolume];
 
-                        AddSlider(selectedVolumeConfig.probeRayDataScale, 0.f, 10.f, 0.1f, "##rayDataTextureScale", "Ray Data Texture Scale", "Adjust the display size of the volume's ray data texture data");
                         AddSlider(selectedVolumeConfig.probeIrradianceScale, 0.f, 10.f, 0.1f, "##irradianceTextureScale", "Irradiance Texture Scale", "Adjust the display size of the volume's irradiance texture data");
                         AddSlider(selectedVolumeConfig.probeDistanceScale, 0.f, 10.f, 0.1f, "##distanceTextureScale", "Distance Texture Scale", "Adjust the display size of the volume's distance texture data");
-                        AddSlider(selectedVolumeConfig.probeDistanceDivisor, 0.f, max, step, "##probeDistanceDivisor", "Distance Normalization", "Adjust the size of the divisor used to normalize probe distance values before display");
-
-                        if(selectedVolumeConfig.probeRelocationEnabled)
-                        {
-                            AddSlider(selectedVolumeConfig.probeRelocationOffsetScale, 0.f, 10.f, 0.1f, "##probeRelocationOffsetTextureScale", "Relocation Offset Texture Scale", "Adjust the display size of the volume's probe relocation offset texture data");
-                        }
 
                         if (selectedVolumeConfig.probeClassificationEnabled)
                         {
-                            AddSlider(selectedVolumeConfig.probeClassificationStateScale, 0.f, 10.f, 0.1f, "##probeClassificationStateTextureScale", "Classification State Texture Scale", "Adjust the display size of the volume's probe classification state texture data");
+                            AddSlider(selectedVolumeConfig.probeDataScale, 0.f, 10.f, 0.1f, "##probeDataTextureScale", "Probe Data Texture Scale", "Adjust the display size of the volume's probe classification state texture data");
                         }
-                    }
+                        AddSlider(selectedVolumeConfig.probeRayDataScale, 0.f, 10.f, 0.1f, "##rayDataTextureScale", "Ray Data Texture Scale", "Adjust the display size of the volume's ray data texture data");
 
-                    if (ImGui::Checkbox("Insert Performance Markers##ddgi-perf-markers", &config.ddgi.insertPerfMarkers))
-                    {
-                        rtxgi::SetInsertPerfMarkers(config.ddgi.insertPerfMarkers);
+                        ImGui::NewLine();
+                        AddSlider(selectedVolumeConfig.probeDistanceDivisor, 0.f, max, step, "##probeDistanceDivisor", "Distance Normalization", "Adjust the size of the divisor used to normalize probe distance values before display");
                     }
-                    ImGui::SameLine(); AddQuestionMark("Toggle inserting DDGI performance markers in the graphics command list.");
 
                     AddHRule();
 
@@ -751,6 +775,9 @@ namespace Graphics
                     AddQuantityText(desc.probeNumRays * volume->GetNumProbes(), "Probe Rays Per Frame (max)");
                     AddQuantityText(desc.probeNumRays * volume->GetNumProbes() * 2, "Rays Per Frame (max) - includes shadow rays");
 
+                    int memory = (int)ceil((float)volume->GetGPUMemoryUsedInBytes() / 1024.f);
+                    AddQuantityText(memory, "KiB of GPU memory used");
+
                     // Clear probes button
                     if (ImGui::Button("Clear Probes"))
                     {
@@ -772,6 +799,27 @@ namespace Graphics
                     if (config.ddgi.volumes[config.ddgi.selectedVolume].showProbes)
                     {
                         ImGui::Indent(20.f);
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2);
+                        ImGui::Text(" Mode: ");
+                        ImGui::SameLine();
+
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 8);
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 2);
+
+                        Configs::DDGIVolume& selectedVolumeConfig = config.ddgi.volumes[config.ddgi.selectedVolume];
+
+                        static int probeVisType = static_cast<int>(selectedVolumeConfig.probeVisType);
+                        ImGui::RadioButton("Default", &probeVisType, 0);
+                        ImGui::SameLine();
+                        ImGui::RadioButton("Hide Inactive Probes", &probeVisType, 1);
+                        selectedVolumeConfig.probeVisType = static_cast<EDDGIVolumeProbeVisType>(probeVisType);
+                        volume->SetProbeVisType(selectedVolumeConfig.probeVisType);
+
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2);
+                        ImGui::Text(" Data: ");
+                        ImGui::SameLine();
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 8);
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 2);
 
                         static int probeType = 0;
                         ImGui::RadioButton("Irradiance", &probeType, 0);
@@ -900,8 +948,12 @@ namespace Graphics
                         }
 
                         // Rotation
-                        if (AddFloat3Slider(desc.eulerAngles, 0.1f, 0.f, 3.14f, "##volumeRotation", "Rotation (radians)", "Adjust the rotation of the DDGIVolume (in radians)"))
+                        float3 degrees { rtxgi::RadiansToDegrees(desc.eulerAngles.x), rtxgi::RadiansToDegrees(desc.eulerAngles.y), rtxgi::RadiansToDegrees(desc.eulerAngles.z)};
+                        if (AddFloat3Slider(degrees, 0.1f, -360.f, 360.f, "##volumeRotation", "Rotation (degrees)", "Adjust the rotation of the DDGIVolume (in degrees)"))
                         {
+                            desc.eulerAngles.x = rtxgi::DegreesToRadians(degrees.x);
+                            desc.eulerAngles.y = rtxgi::DegreesToRadians(degrees.y);
+                            desc.eulerAngles.z = rtxgi::DegreesToRadians(degrees.z);
                             volume->SetEulerAngles(desc.eulerAngles);
                         }
                     }
@@ -1065,6 +1117,8 @@ namespace Graphics
                 }
             }
             PopColorStyle();
+
+            ImGui::EndDisabled();
 
             ImGui::SetWindowPos("Settings (Press 'u' to hide)", ImVec2((gfx.width - ImGui::GetWindowWidth() - 20.f), 20));
             ImGui::End();

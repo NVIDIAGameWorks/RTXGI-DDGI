@@ -54,7 +54,14 @@ namespace Graphics
                 return true;
             }
 
-            void Update(Graphics::Globals& d3d, Resources& resources, Configs::Config& config, Scenes::Scene& scene, std::vector<DDGIVolumeBase*>& volumes, const Instrumentation::Performance& perf)
+            void Update(
+                Graphics::Globals& d3d,
+                Resources& resources,
+                Configs::Config& config,
+                Inputs::Input& input,
+                Scenes::Scene& scene,
+                std::vector<DDGIVolumeBase*>& volumes,
+                const Instrumentation::Performance& perf)
             {
                 CPU_TIMESTAMP_BEGIN(resources.cpuStat);
 
@@ -65,7 +72,7 @@ namespace Graphics
                     ImGui_ImplGlfw_NewFrame();
                     ImGui::NewFrame();
 
-                    Graphics::UI::CreateDebugWindow(d3d, config, scene, volumes);
+                    Graphics::UI::CreateDebugWindow(d3d, config, input, scene, volumes);
                     Graphics::UI::CreatePerfWindow(d3d, config, perf);
                 }
 
@@ -96,15 +103,15 @@ namespace Graphics
                     rtvHandle.ptr = d3dResources.rtvDescHeapStart.ptr + (d3d.frameIndex * d3dResources.rtvDescHeapEntrySize);
                     d3d.cmdList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
-                    // Set the CBV/SRV/UAV descriptor heap
+                    // Set the resources descriptor heap
                     ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap };
                     d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                     // Render
-                    GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetQueryBeginIndex());
+                    GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
                     ImGui::Render();
                     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), d3d.cmdList);
-                    GPU_TIMESTAMP_END(resources.gpuStat->GetQueryEndIndex());
+                    GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
                     // Transition the back buffer back to present
                     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -142,9 +149,9 @@ namespace Graphics
             return Graphics::D3D12::UI::Initialize(d3d, d3dResources, resources, perf, log);
         }
 
-        void Update(Globals& d3d, Resources& resources, Configs::Config& config, Scenes::Scene& scene, std::vector<DDGIVolumeBase*>& volumes, const Instrumentation::Performance& perf)
+        void Update(Globals& d3d, Resources& resources, Configs::Config& config, Inputs::Input& input, Scenes::Scene& scene, std::vector<DDGIVolumeBase*>& volumes, const Instrumentation::Performance& perf)
         {
-            return Graphics::D3D12::UI::Update(d3d, resources, config, scene, volumes, perf);
+            return Graphics::D3D12::UI::Update(d3d, resources, config, input, scene, volumes, perf);
         }
 
         void Execute(Globals& d3d, GlobalResources& d3dResources, Resources& resources, const Configs::Config& config)

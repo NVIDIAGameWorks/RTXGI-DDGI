@@ -11,12 +11,12 @@
 #ifndef RTXGI_PLATFORM_HLSL
 #define RTXGI_PLATFORM_HLSL
 
-#if SPIRV == 1
+#ifdef __spirv__
 #define RTXGI_VK_BINDING(x, y)    [[vk::binding(x, y)]]
 #define RTXGI_VK_PUSH_CONST       [[vk::push_constant]]
 #else
-#define RTXGI_VK_BINDING(x,y)
-#define RTXGI_VK_PUSH_CONST
-#endif //SPIRV == 1
+#define RTXGI_VK_BINDING(x, y) 
+#define RTXGI_VK_PUSH_CONST 
+#endif
 
 #endif //RTXGI_PLATFORM_HLSL

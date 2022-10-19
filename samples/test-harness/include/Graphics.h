@@ -15,10 +15,13 @@
 #include "Scenes.h"
 #include "Instrumentation.h"
 
-const int MAX_BVH = 1;
+const int MAX_TLAS = 2;
 const int MAX_TEXTURES = 300;
 const int MAX_DDGIVOLUMES = 6;
 const int MAX_TIMESTAMPS = 200;
+
+#define RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS 0
+#define RTXGI_BINDLESS_TYPE_DESCRIPTOR_HEAP 1
 
 #define GFX_PERF_INSTRUMENTATION
 
@@ -64,10 +67,4 @@ namespace Graphics
 
     bool WriteBackBufferToDisk(Globals& gfx, std::string directory);
 
-    namespace BindlessResourceOffsets
-    {
-        const int UAV_DDGI_VOLUME = 9;
-        const int SRV_DDGI_VOLUME = 2;
-        const int SRV_SCENE_TEXTURES = SRV_DDGI_VOLUME + (rtxgi::GetDDGIVolumeNumSRVDescriptors() * MAX_DDGIVOLUMES);
-    }
 }

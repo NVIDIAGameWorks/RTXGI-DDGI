@@ -86,7 +86,16 @@ inline static uint32_t DivRoundUp(uint32_t x, uint32_t y)
 #define COORDINATE_SYSTEM_LEFT_Z_UP 1
 #define COORDINATE_SYSTEM_RIGHT 2
 #define COORDINATE_SYSTEM_RIGHT_Z_UP 3
-#define COORDINATE_SYSTEM COORDINATE_SYSTEM_RIGHT
+// #define COORDINATE_SYSTEM COORDINATE_SYSTEM_RIGHT  // set by CMake
+
+inline const char* GetCoordinateSystemName(uint32_t coordinateSystem)
+{
+    if(coordinateSystem == 0) return "Left Hand, Y-Up";
+    else if(coordinateSystem == 1) return "Left Hand, Z-Up";
+    else if(coordinateSystem == 2) return "Right Hand, Y-Up";
+    else if(coordinateSystem == 3) return "Right Hand, Z-Up";
+    else return "Unknown";
+}
 
 #if defined(_WIN32) || defined(WIN32)
 #define GPU_COMPRESSION

@@ -24,12 +24,7 @@ namespace Graphics
                 struct Resources
                 {
                     // Pipeline Layout and Descriptor Set
-                    VkPipelineLayout                                pipelineLayout = nullptr;
-                    VkDescriptorSetLayout                           descriptorSetLayout = nullptr;
                     VkDescriptorSet                                 descriptorSet = nullptr;
-
-                    // Constants
-                    DDGIVisConstants                                constants = {};
 
                     // Flags
                     uint32_t                                        flags = 0;
@@ -37,6 +32,9 @@ namespace Graphics
                     // Shaders
                     Shaders::ShaderRTPipeline                       rtShaders;
                     RTShaderModules                                 rtShadersModule;
+                    Shaders::ShaderRTPipeline                       rtShaders2;
+                    RTShaderModules                                 rtShadersModule2;
+
                     Shaders::ShaderProgram                          textureVisCS;
                     VkShaderModule                                  textureVisModule = nullptr;
                     Shaders::ShaderProgram                          updateTlasCS;
@@ -49,6 +47,7 @@ namespace Graphics
                     VkDeviceMemory                                  shaderTableUploadMemory = nullptr;
 
                     VkPipeline                                      rtPipeline = nullptr;
+                    VkPipeline                                      rtPipeline2 = nullptr;
                     VkPipeline                                      textureVisPipeline = nullptr;
                     VkPipeline                                      updateTlasPipeline = nullptr;
 
@@ -60,6 +59,10 @@ namespace Graphics
                     VkDeviceAddress                                 shaderTableRGSStartAddress;
                     VkDeviceAddress                                 shaderTableMissTableStartAddress;
                     VkDeviceAddress                                 shaderTableHitGroupTableStartAddress;
+
+                    VkDeviceAddress                                 shaderTableRGS2StartAddress;
+                    VkDeviceAddress                                 shaderTableMissTable2StartAddress;
+                    VkDeviceAddress                                 shaderTableHitGroupTable2StartAddress;
 
                     // Probe Sphere Resources
                     VkBuffer                                        probeVB = nullptr;
@@ -80,9 +83,11 @@ namespace Graphics
                     std::vector<VkAccelerationStructureInstanceKHR> probeInstances;
 
                     // DDGI Resources
+                    uint32_t                                        selectedVolume = 0;
                     std::vector<rtxgi::DDGIVolumeBase*>*            volumes;
 
-                    VkBuffer                                        constantsSTB = nullptr;
+                    VkBuffer                                        volumeConstantsSTB = nullptr;
+                    VkBuffer                                        volumeResourceIndicesSTB = nullptr;
 
                     Instrumentation::Stat*                          cpuStat = nullptr;
                     Instrumentation::Stat*                          gpuProbeStat = nullptr;

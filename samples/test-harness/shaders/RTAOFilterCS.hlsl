@@ -56,6 +56,11 @@ float FilterAO(int2 paddedPixelPos)
 [numthreads(BLOCK_SIZE, BLOCK_SIZE, 1)]
 void CS(uint3 GroupID : SV_GroupID, uint GroupIndex : SV_GroupIndex, uint3 GroupThreadID : SV_GroupThreadID, uint3 DispatchThreadID : SV_DispatchThreadID)
 {
+    // Get the (bindless) resources
+    RWTexture2D<float4> GBufferB = GetRWTex2D(GBUFFERB_INDEX);
+    RWTexture2D<float4> RTAOOutput = GetRWTex2D(RTAO_OUTPUT_INDEX);
+    RWTexture2D<float4> RTAORaw = GetRWTex2D(RTAO_RAW_INDEX);
+
     // Load hit distance and ambient occlusion for this pixel and share it with the thread group
     {
         int2 pixelBase = int2(GroupID.xy) * int2(BLOCK_SIZE, BLOCK_SIZE) - int2(c_radius, c_radius);

@@ -46,6 +46,7 @@ float4 PS(PSInput input) : SV_TARGET
     float  ambientOcclusion = 1.f;
 
     // Load the albedo and convert to linear before lighting
+    RWTexture2D<float4> GBufferA = GetRWTex2D(GBUFFERA_INDEX);
     float4 albedo = GBufferA.Load(input.position.xy);
 
     // Store the albedo for pixels that aren't lit (e.g. visualizations)
@@ -55,8 +56,13 @@ float4 PS(PSInput input) : SV_TARGET
     uint useFlags = GetGlobalConst(composite, useFlags);
 
     // Primary ray hit, need to light it
-    if (albedo.a > 0.f)
+    if (albedo.a >= COMPOSITE_FLAG_LIGHT_PIXEL)
     {
+        // Get the (bindless) resources
+        RWTexture2D<float4> GBufferB = GetRWTex2D(GBUFFERB_INDEX);
+        RWTexture2D<float4> GBufferC = GetRWTex2D(GBUFFERC_INDEX);
+        RWTexture2D<float4> GBufferD = GetRWTex2D(GBUFFERD_INDEX);
+
         // Convert albedo back to linear
         albedo.rgb = SRGBToLinear(albedo.rgb);
 
@@ -71,6 +77,7 @@ float4 PS(PSInput input) : SV_TARGET
         if (useFlags & COMPOSITE_FLAG_USE_DDGI)
         {
             // Add direct and indirect lighting
+            RWTexture2D<float4> DDGIOutput = GetRWTex2D(DDGI_OUTPUT_INDEX);
             float3 indirect = DDGIOutput.Load(input.position.xy).rgb;
             color += indirect;
         }
@@ -78,6 +85,7 @@ float4 PS(PSInput input) : SV_TARGET
         if (useFlags & COMPOSITE_FLAG_USE_RTAO)
         {
             // Load ambient occlusion and multiply with lighting
+            RWTexture2D<float4> RTAOOutput = GetRWTex2D(RTAO_OUTPUT_INDEX);
             ambientOcclusion = RTAOOutput.Load(input.position.xy).x;
             color *= ambientOcclusion;
         }
@@ -99,6 +107,7 @@ float4 PS(PSInput input) : SV_TARGET
     if ((useFlags & COMPOSITE_FLAG_USE_DDGI) && (showFlags & COMPOSITE_FLAG_SHOW_DDGI_INDIRECT))
     {
         // Show only the indirect lighting from DDGI
+        RWTexture2D<float4> DDGIOutput = GetRWTex2D(DDGI_OUTPUT_INDEX);
         float3 indirect = DDGIOutput.Load(input.position.xy).rgb;
         color = indirect;
     }
@@ -106,22 +115,27 @@ float4 PS(PSInput input) : SV_TARGET
     // Early out, no post processing
     if (ppUseFlags == POSTPROCESS_FLAG_USE_NONE) return float4(color, 1.f);
 
-    // Exposure
-    if (ppUseFlags & POSTPROCESS_FLAG_USE_EXPOSURE)
+    // Selectively apply exposure, tonemapping, and dither based on the GBuffer's composite flag
+    if(albedo.a > COMPOSITE_FLAG_IGNORE_PIXEL)
     {
-        color *= GetGlobalConst(post, exposure);
-    }
+        // Exposure
+        if (ppUseFlags & POSTPROCESS_FLAG_USE_EXPOSURE)
+        {
+            color *= GetGlobalConst(post, exposure);
+        }
 
-    // Tonemapping
-    if (ppUseFlags & POSTPROCESS_FLAG_USE_TONEMAPPING)
-    {
-        color = ACESFilm(color);
-    }
+        // Tonemapping
+        if (ppUseFlags & POSTPROCESS_FLAG_USE_TONEMAPPING)
+        {
+            color = ACESFilm(color);
+        }
 
-    // Dither to reduce SDR color banding
-    if (ppUseFlags & POSTPROCESS_FLAG_USE_DITHER)
-    {
-        color += GetLowDiscrepancyBlueNoise(int2(input.position.xy), GetGlobalConst(app, frameNumber), 1.f / 256.f, BlueNoise);
+        // Dither to reduce SDR color banding
+        if (ppUseFlags & POSTPROCESS_FLAG_USE_DITHER)
+        {
+            Texture2D<float4> BlueNoise = GetTex2D(BLUE_NOISE_INDEX);
+            color += GetLowDiscrepancyBlueNoise(int2(input.position.xy), GetGlobalConst(app, frameNumber), 1.f / 256.f, BlueNoise);
+        }
     }
 
     // Gamma correction

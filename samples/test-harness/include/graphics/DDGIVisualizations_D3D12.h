@@ -23,20 +23,12 @@ namespace Graphics
 
                 struct Resources
                 {
-                    ID3D12RootSignature*                        rootSignature = nullptr;
-                    ID3D12DescriptorHeap*                       srvDescHeap = nullptr;
-
-                    D3D12_CPU_DESCRIPTOR_HANDLE                 srvDescHeapStart = { 0 };
-                    UINT                                        srvDescHeapEntrySize = 0;
-
-                    // Constants
-                    DDGIVisConstants                            constants = {};
-
                     // Flags
                     UINT                                        flags = 0;
 
                     // Shaders
                     Shaders::ShaderRTPipeline                   rtShaders;
+                    Shaders::ShaderRTPipeline                   rtShaders2;
                     Shaders::ShaderProgram                      textureVisCS;
                     Shaders::ShaderProgram                      updateTlasCS;
 
@@ -45,7 +37,9 @@ namespace Graphics
                     ID3D12Resource*                             shaderTableUpload = nullptr;
 
                     ID3D12StateObject*                          rtpso = nullptr;
+                    ID3D12StateObject*                          rtpso2 = nullptr;
                     ID3D12StateObjectProperties*                rtpsoInfo = nullptr;
+                    ID3D12StateObjectProperties*                rtpsoInfo2 = nullptr;
                     ID3D12PipelineState*                        texturesVisPSO = nullptr;
                     ID3D12PipelineState*                        updateTlasPSO = nullptr;
 
@@ -55,6 +49,7 @@ namespace Graphics
                     UINT                                        shaderTableHitGroupTableSize = 0;
 
                     D3D12_GPU_VIRTUAL_ADDRESS                   shaderTableRGSStartAddress;
+                    D3D12_GPU_VIRTUAL_ADDRESS                   shaderTableRGS2StartAddress;
                     D3D12_GPU_VIRTUAL_ADDRESS                   shaderTableMissTableStartAddress;
                     D3D12_GPU_VIRTUAL_ADDRESS                   shaderTableHitGroupTableStartAddress;
 
@@ -75,8 +70,10 @@ namespace Graphics
                     std::vector<D3D12_RAYTRACING_INSTANCE_DESC> probeInstances;
 
                     // DDGI Resources
+                    UINT                                        selectedVolume = 0;
                     std::vector<rtxgi::DDGIVolumeBase*>*        volumes;
-                    ID3D12Resource*                             constantsSTB = nullptr;
+                    ID3D12Resource*                             ddgiConstantsCB = nullptr;
+                    ID3D12Resource*                             volumeConstantsSTB = nullptr;
 
                     Instrumentation::Stat*                      cpuStat = nullptr;
                     Instrumentation::Stat*                      gpuProbeStat = nullptr;

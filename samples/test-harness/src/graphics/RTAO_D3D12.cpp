@@ -25,7 +25,7 @@ namespace Graphics
             bool CreateTextures(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::ofstream& log)
             {
                 // Create the output (R8_UNORM) texture resource
-                TextureDesc desc = { static_cast<uint32_t>(d3d.width), static_cast<uint32_t>(d3d.height), 1, DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+                TextureDesc desc = { static_cast<uint32_t>(d3d.width), static_cast<uint32_t>(d3d.height), 1, 1, DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
                 CHECK(CreateTexture(d3d, desc, &resources.RTAOOutput), "create RTAO output texture resource!\n", log);
             #ifdef GFX_NAME_OBJECTS
                 resources.RTAOOutput->SetName(L"RTAO Output");
@@ -65,12 +65,14 @@ namespace Graphics
                 resources.rtShaders.rgs.filepath = root + L"shaders/RTAOTraceRGS.hlsl";
                 resources.rtShaders.rgs.entryPoint = L"RayGen";
                 resources.rtShaders.rgs.exportName = L"RTAOTraceRGS";
+                Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.rgs, true), "compile RTAO ray generation shader!\n", log);
 
                 // Load and compile the miss shader
                 resources.rtShaders.miss.filepath = root + L"shaders/Miss.hlsl";
                 resources.rtShaders.miss.entryPoint = L"Miss";
                 resources.rtShaders.miss.exportName = L"RTAOMiss";
+                Shaders::AddDefine(resources.rtShaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.miss, true), "compile RTAO miss shader!\n", log);
 
                 // Add the hit group
@@ -83,12 +85,14 @@ namespace Graphics
                 group.chs.filepath = root + L"shaders/CHS.hlsl";
                 group.chs.entryPoint = L"CHS_VISIBILITY";
                 group.chs.exportName = L"RTAOCHS";
+                Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs, true), "compile RTAO closest hit shader!\n", log);
 
                 // Load and compile the AHS
                 group.ahs.filepath = root + L"shaders/AHS.hlsl";
                 group.ahs.entryPoint = L"AHS_GI";
                 group.ahs.exportName = L"RTAOAHS";
+                Shaders::AddDefine(group.ahs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, group.ahs, true), "compile RTAO any hit shader!\n", log);
 
                 // Set the payload size
@@ -99,10 +103,9 @@ namespace Graphics
 
                 resources.filterCS.filepath = root + L"shaders/RTAOFilterCS.hlsl";
                 resources.filterCS.entryPoint = L"CS";
-                resources.filterCS.targetProfile = L"cs_6_0";
-
+                resources.filterCS.targetProfile = L"cs_6_6";
+                Shaders::AddDefine(resources.filterCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 Shaders::AddDefine(resources.filterCS, L"BLOCK_SIZE", blockSize);
-
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.filterCS, true), "compile RTAO filter compute shader!\n", log);
 
                 return true;
@@ -178,7 +181,7 @@ namespace Graphics
             #endif
 
                 // Create the shader table buffer resource
-                desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+                desc = { resources.shaderTableSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
                 CHECK(CreateBuffer(d3d, desc, &resources.shaderTable), "create RTAO shader table!", log);
             #ifdef GFX_NAME_OBJECTS
                 resources.shaderTable->SetName(L"RTAO Shader Table");
@@ -333,7 +336,7 @@ namespace Graphics
                 PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_RED), "RTAO");
             #endif
                 CPU_TIMESTAMP_BEGIN(resources.cpuStat);
-                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetQueryBeginIndex());
+                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
 
                 if (resources.enabled)
                 {
@@ -344,17 +347,19 @@ namespace Graphics
                     // Set the global root signature
                     d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
 
-                    // Set the root parameters
-                    d3d.cmdList->SetComputeRootDescriptorTable(0, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                    d3d.cmdList->SetComputeRootDescriptorTable(1, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
-
                     // Update the root constants
                     UINT offset = 0;
                     GlobalConstants consts = d3dResources.constants;
                     offset += AppConsts::GetAlignedNum32BitValues();
                     offset += PathTraceConsts::GetAlignedNum32BitValues();
                     offset += LightingConsts::GetAlignedNum32BitValues();
-                    d3d.cmdList->SetComputeRoot32BitConstants(2, RTAOConsts::GetNum32BitValues(), consts.rtao.GetData(), offset);
+                    d3d.cmdList->SetComputeRoot32BitConstants(0, RTAOConsts::GetNum32BitValues(), consts.rtao.GetData(), offset);
+
+                    // Set the root parameter descriptor tables
+                #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                    d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                    d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                #endif
 
                     // Dispatch rays
                     D3D12_DISPATCH_RAYS_DESC desc = {};
@@ -400,7 +405,7 @@ namespace Graphics
                     d3d.cmdList->ResourceBarrier(1, &barrier);
                 }
 
-                GPU_TIMESTAMP_END(resources.gpuStat->GetQueryEndIndex());
+                GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
                 CPU_TIMESTAMP_ENDANDRESOLVE(resources.cpuStat);
             #ifdef GFX_PERF_MARKERS
                 PIXEndEvent(d3d.cmdList);
@@ -440,8 +445,8 @@ namespace Graphics
             bool WriteRTAOBuffersToDisk(Globals& d3d, GlobalResources& d3dResources, Resources& resources, std::string directory)
             {
                 CoInitialize(NULL);
-                bool success = WriteResourceToDisk(d3d, directory + "/rtaoraw.png", resources.RTAORaw, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                success &= WriteResourceToDisk(d3d, directory + "/rtaofiltered.png", resources.RTAOOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                bool success = WriteResourceToDisk(d3d, directory + "/R-RTAO_Raw", resources.RTAORaw, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                success &= WriteResourceToDisk(d3d, directory + "/R-RTAO_Filtered", resources.RTAOOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 return success;
             }
 

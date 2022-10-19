@@ -31,13 +31,15 @@ namespace Graphics
                 // Load and compile the vertex shader
                 resources.shaders.vs.filepath = root + L"shaders/Composite.hlsl";
                 resources.shaders.vs.entryPoint = L"VS";
-                resources.shaders.vs.targetProfile = L"vs_6_0";
+                resources.shaders.vs.targetProfile = L"vs_6_6";
+                Shaders::AddDefine(resources.shaders.vs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.vs, true), "compile composition vertex shader!\n", log);
 
                 // Load and compile the pixel shader
                 resources.shaders.ps.filepath = root + L"shaders/Composite.hlsl";
                 resources.shaders.ps.entryPoint = L"PS";
-                resources.shaders.ps.targetProfile = L"ps_6_0";
+                resources.shaders.ps.targetProfile = L"ps_6_6";
+                Shaders::AddDefine(resources.shaders.ps, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.ps, true), "compile composition pixel shader!\n", log);
 
                 return true;
@@ -170,44 +172,48 @@ namespace Graphics
                 // Wait for the transition to complete
                 d3d.cmdList->ResourceBarrier(1, &barrier);
 
+                // Set the CBV/SRV/UAV and sampler descriptor heaps
+                ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
+                d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
+                // Set the root signature
+                d3d.cmdList->SetGraphicsRootSignature(d3dResources.rootSignature);
+
+                // Update the root constants
+                UINT offset = 0;
+                GlobalConstants consts = d3dResources.constants;
+                d3d.cmdList->SetGraphicsRoot32BitConstants(0, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
+                offset += AppConsts::GetAlignedNum32BitValues();
+                offset += PathTraceConsts::GetAlignedNum32BitValues();
+                offset += LightingConsts::GetAlignedNum32BitValues();
+                offset += RTAOConsts::GetAlignedNum32BitValues();
+                d3d.cmdList->SetGraphicsRoot32BitConstants(0, CompositeConsts::GetNum32BitValues(), consts.composite.GetData(), offset);
+                offset += CompositeConsts::GetAlignedNum32BitValues();
+                d3d.cmdList->SetGraphicsRoot32BitConstants(0, PostProcessConsts::GetNum32BitValues(), consts.post.GetData(), offset);
+
                 // Set the render target
                 D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = d3dResources.rtvDescHeap->GetCPUDescriptorHandleForHeapStart();
                 rtvHandle.ptr += (d3dResources.rtvDescHeapEntrySize * d3d.frameIndex);
                 d3d.cmdList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
-                // Set the root signature and pipeline state object
-                d3d.cmdList->SetGraphicsRootSignature(d3dResources.rootSignature);
-                d3d.cmdList->SetPipelineState(resources.pso);
-
-                // Set the CBV/SRV/UAV and sampler descriptor heaps
-                ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
-                d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-
-                // Set the descriptor tables
-                d3d.cmdList->SetGraphicsRootDescriptorTable(0, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                d3d.cmdList->SetGraphicsRootDescriptorTable(1, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
-
-                // Update the root constants
-                UINT offset = 0;
-                GlobalConstants consts = d3dResources.constants;
-                d3d.cmdList->SetGraphicsRoot32BitConstants(2, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
-                offset += AppConsts::GetAlignedNum32BitValues();
-                offset += PathTraceConsts::GetAlignedNum32BitValues();
-                offset += LightingConsts::GetAlignedNum32BitValues();
-                offset += RTAOConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetGraphicsRoot32BitConstants(2, CompositeConsts::GetNum32BitValues(), consts.composite.GetData(), offset);
-                offset += CompositeConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetGraphicsRoot32BitConstants(2, PostProcessConsts::GetNum32BitValues(), consts.post.GetData(), offset);
+                // Set the root parameter descriptor tables
+            #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
+                d3d.cmdList->SetGraphicsRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                d3d.cmdList->SetGraphicsRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+            #endif
 
                 // Set raster state
                 d3d.cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
                 d3d.cmdList->RSSetViewports(1, &d3d.viewport);
                 d3d.cmdList->RSSetScissorRects(1, &d3d.scissor);
 
+                // Set the pipeline state object
+                d3d.cmdList->SetPipelineState(resources.pso);
+
                 // Draw
-                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetQueryBeginIndex());
+                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
                 d3d.cmdList->DrawInstanced(3, 1, 0, 0);
-                GPU_TIMESTAMP_END(resources.gpuStat->GetQueryEndIndex());
+                GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
                 // Transition the back buffer to present
                 barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;

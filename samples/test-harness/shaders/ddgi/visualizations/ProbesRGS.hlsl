@@ -8,21 +8,28 @@
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
 
-#include "Descriptors.hlsl"
 #include "../../include/Common.hlsl"
+#include "../../include/Descriptors.hlsl"
 #include "../../include/RayTracing.hlsl"
 
 #include "../../../../../rtxgi-sdk/shaders/ddgi/include/ProbeCommon.hlsl"
+#include "../../../../../rtxgi-sdk/shaders/ddgi/include/DDGIRootConstants.hlsl"
 
 
 // ---[ Helpers ]---
 
-float3 GetProbeData(uint volumeIndex, int probeIndex, int3 probeCoords, float3 worldPosition, DDGIVolumeDescGPU volume, out float3 sampleDirection)
+float3 GetProbeData(
+    int probeIndex,
+    int3 probeCoords,
+    float3 worldPosition,
+    DDGIVolumeResourceIndices resourceIndices,
+    DDGIVolumeDescGPU volume,
+    out float3 sampleDirection)
 {
     float3 color = float3(0.f, 0.f, 0.f);
 
-    // Get the probe data texture
-    Texture2D<float4> ProbeData = GetDDGIVolumeProbeDataSRV(volumeIndex);
+    // Get the probe data texture array
+    Texture2DArray<float4> ProbeData = GetTex2DArray(resourceIndices.probeDataSRVIndex);
 
     // Get the probe's world-space position
     float3 probePosition = DDGIGetProbeWorldPosition(probeCoords, volume, ProbeData);
@@ -35,14 +42,14 @@ float3 GetProbeData(uint volumeIndex, int probeIndex, int3 probeCoords, float3 w
     uint type = GetGlobalConst(ddgivis, probeType);
     if (type == RTXGI_DDGI_VISUALIZE_PROBE_IRRADIANCE)
     {
-        // Get the volume's irradiance texture
-        Texture2D<float4> ProbeIrradiance = GetDDGIVolumeIrradianceSRV(volumeIndex);
+        // Get the volume's irradiance texture array
+        Texture2DArray<float4> ProbeIrradiance = GetTex2DArray(resourceIndices.probeIrradianceSRVIndex);
 
-        // Get the texture atlas uv coordinates for the octant of the probe
-        float2 uv = DDGIGetProbeUV(probeIndex, octantCoords, volume.probeNumIrradianceTexels, volume);
+        // Get the texture array uv coordinates for the octant of the probe
+        float3 uv = DDGIGetProbeUV(probeIndex, octantCoords, volume.probeNumIrradianceInteriorTexels, volume);
 
         // Sample the irradiance texture
-        color = ProbeIrradiance.SampleLevel(BilinearWrapSampler, uv, 0).rgb;
+        color = ProbeIrradiance.SampleLevel(GetBilinearWrapSampler(), uv, 0).rgb;
 
         // Decode the tone curve
         float3 exponent = volume.probeIrradianceEncodingGamma * 0.5f;
@@ -55,21 +62,21 @@ float3 GetProbeData(uint volumeIndex, int probeIndex, int3 probeCoords, float3 w
         color *= 2.f;
 
         // Adjust for energy loss due to reduced precision in the R10G10B10A2 irradiance texture format
-        if (volume.probeIrradianceFormat == RTXGI_DDGI_FORMAT_PROBE_IRRADIANCE_R10G10B10A2_FLOAT)
+        if (volume.probeIrradianceFormat == RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_U32)
         {
             color *= 1.0989f;
         }
     }
     else if (type == RTXGI_DDGI_VISUALIZE_PROBE_DISTANCE)
     {
-        // Get the volume's distance texture
-        Texture2D<float4> ProbeDistance = GetDDGIVolumeDistanceSRV(volumeIndex);
+        // Get the volume's distance texture array
+        Texture2DArray<float4> ProbeDistance = GetTex2DArray(resourceIndices.probeDistanceSRVIndex);
 
-        // Get the texture atlas uv coordinates for the octant of the probe
-        float2 uv = DDGIGetProbeUV(probeIndex, octantCoords, volume.probeNumDistanceTexels, volume);
+        // Get the texture array uv coordinates for the octant of the probe
+        float3 uv = DDGIGetProbeUV(probeIndex, octantCoords, volume.probeNumDistanceInteriorTexels, volume);
 
         // Sample the distance texture and reconstruct the depth
-        float distance = 2.f * ProbeDistance.SampleLevel(BilinearWrapSampler, uv, 0).r;
+        float distance = 2.f * ProbeDistance.SampleLevel(GetBilinearWrapSampler(), uv, 0).r;
 
         // Normalize the distance for visualization
         float value = saturate(distance / GetGlobalConst(ddgivis, distanceDivisor));
@@ -79,16 +86,21 @@ float3 GetProbeData(uint volumeIndex, int probeIndex, int3 probeCoords, float3 w
     return color;
 }
 
-void WriteResult(uint2 LaunchIndex, float3 color, float hitT)
+void WriteResult(
+    uint2 LaunchIndex,
+    float3 color,
+    float hitT,
+    RWTexture2D<float4> GBufferAOutput,
+    RWTexture2D<float4> GBufferBOutput)
 {
     // Convert from linear to sRGB
     color = LinearToSRGB(color);
 
-    // Overwrite GBufferA's albedo and mark the pixel to not be lit
-    GBufferA[LaunchIndex] = float4(color, 0.f);
+    // Overwrite GBufferA's albedo and mark the pixel to not be lit or post processed
+    GBufferAOutput[LaunchIndex] = float4(color, COMPOSITE_FLAG_IGNORE_PIXEL);
 
     // Overwrite GBufferB's hit distance with the distance to the probe
-    GBufferB[LaunchIndex].w = hitT;
+    GBufferBOutput[LaunchIndex].w = hitT;
 }
 
 // ---[ Ray Generation Shaders ]---
@@ -99,18 +111,23 @@ void RayGen()
     uint2 LaunchIndex = DispatchRaysIndex().xy;
     uint2 LaunchDimensions = DispatchRaysDimensions().xy;
 
+    // Get the (bindless) resources
+    RWTexture2D<float4> GBufferA = GetRWTex2D(GBUFFERA_INDEX);
+    RWTexture2D<float4> GBufferB = GetRWTex2D(GBUFFERB_INDEX);
+    RaytracingAccelerationStructure DDGIProbeVisTLAS = GetAccelerationStructure(DDGIPROBEVIS_TLAS_INDEX);
+
     // Setup the primary ray
     RayDesc ray;
-    ray.Origin = Camera.position;
+    ray.Origin = GetCamera().position;
     ray.TMin = 0.f;
     ray.TMax = 1e27f;
 
-    // Compute the ray direction
-    float  halfHeight = Camera.tanHalfFovY;
-    float  halfWidth = (Camera.aspect * halfHeight);
-    float3 lowerLeftCorner = Camera.position - (halfWidth * Camera.right) - (halfHeight * Camera.up) + Camera.forward;
-    float3 horizontal = (2.f * halfWidth) * Camera.right;
-    float3 vertical = (2.f * halfHeight) * Camera.up;
+    // Compute the primary ray direction
+    float  halfHeight = GetCamera().tanHalfFovY;
+    float  halfWidth = (GetCamera().aspect * halfHeight);
+    float3 lowerLeftCorner = GetCamera().position - (halfWidth * GetCamera().right) - (halfHeight * GetCamera().up) + GetCamera().forward;
+    float3 horizontal = (2.f * halfWidth) * GetCamera().right;
+    float3 vertical = (2.f * halfHeight) * GetCamera().up;
 
     float s = ((float)LaunchIndex.x + 0.5f) / (float)LaunchDimensions.x;
     float t = 1.f - (((float)LaunchIndex.y + 0.5f) / (float)LaunchDimensions.y);
@@ -118,11 +135,11 @@ void RayGen()
     ray.Direction = (lowerLeftCorner + s * horizontal + t * vertical) - ray.Origin;
 
     // Trace
-    ProbesPayload payload = (ProbesPayload)0;
+    ProbeVisualizationPayload payload = (ProbeVisualizationPayload)0;
     TraceRay(
-        SceneBVH,
+        DDGIProbeVisTLAS,
         RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
-        0xFF,
+        0x01,
         0,
         1,
         0,
@@ -140,6 +157,13 @@ void RayGen()
             // Get the DDGIVolume index
             uint volumeIndex = payload.volumeIndex;
 
+            // Get the DDGIVolume structured buffers
+            StructuredBuffer<DDGIVolumeDescGPUPacked> DDGIVolumes = GetDDGIVolumeConstants(GetDDGIVolumeConstantsIndex());
+            StructuredBuffer<DDGIVolumeResourceIndices> DDGIVolumeBindless = GetDDGIVolumeResourceIndices(GetDDGIVolumeResourceIndicesIndex());
+
+            // Get the DDGIVolume's bindless resource indices
+            DDGIVolumeResourceIndices resourceIndices = DDGIVolumeBindless[volumeIndex];
+
             // Load the DDGIVolume constants
             DDGIVolumeDescGPU volume = UnpackDDGIVolumeDescGPU(DDGIVolumes[volumeIndex]);
 
@@ -154,7 +178,7 @@ void RayGen()
 
             // Get the probe's data to display
             float3 sampleDirection;
-            float3 color = GetProbeData(volumeIndex, probeIndex, probeCoords, payload.worldPosition, volume, sampleDirection);
+            float3 color = GetProbeData(probeIndex, probeCoords, payload.worldPosition, resourceIndices, volume, sampleDirection);
 
             // Color the probe if classification is enabled
             if (volume.probeClassificationEnabled)
@@ -162,9 +186,11 @@ void RayGen()
                 const float3 INACTIVE_COLOR = float3(1.f, 0.f, 0.f);      // Red
                 const float3 ACTIVE_COLOR = float3(0.f, 1.f, 0.f);        // Green
 
+                // Get the probe data texture array
+                Texture2DArray<float4> ProbeData = GetTex2DArray(resourceIndices.probeDataSRVIndex);
+
                 // Get the probe's location in the probe data texture
-                Texture2D<float4> ProbeData = GetDDGIVolumeProbeDataSRV(volumeIndex);
-                uint2 probeStateTexCoords = DDGIGetProbeTexelCoords(probeIndex, volume);
+                uint3 probeStateTexCoords = DDGIGetProbeTexelCoords(probeIndex, volume);
 
                 // Get the probe's state
                 float probeState = ProbeData[probeStateTexCoords].w;
@@ -184,7 +210,7 @@ void RayGen()
             }
 
             // Write the result to the GBuffer
-            WriteResult(LaunchIndex, color, payload.hitT);
+            WriteResult(LaunchIndex, color, payload.hitT, GBufferA, GBufferB);
         }
     }
 }
@@ -197,32 +223,37 @@ void RayGenHideInactive()
 
     float3 color = float3(0.f, 1.f, 0.f);
 
+    // Get the (bindless) resources
+    RWTexture2D<float4> GBufferA = GetRWTex2D(GBUFFERA_INDEX);
+    RWTexture2D<float4> GBufferB = GetRWTex2D(GBUFFERB_INDEX);
+    RaytracingAccelerationStructure DDGIProbeVisTLAS = GetAccelerationStructure(DDGIPROBEVIS_TLAS_INDEX);
+
     // Setup the primary ray
     RayDesc ray;
-    ray.Origin = Camera.position;
+    ray.Origin = GetCamera().position;
     ray.TMin = 0.f;
     ray.TMax = 1e27f;
 
-    // Compute the ray direction
-    float  halfHeight = Camera.tanHalfFovY;
-    float  halfWidth = (Camera.aspect * halfHeight);
-    float3 lowerLeftCorner = Camera.position - (halfWidth * Camera.right) - (halfHeight * Camera.up) + Camera.forward;
-    float3 horizontal = (2.f * halfWidth) * Camera.right;
-    float3 vertical = (2.f * halfHeight) * Camera.up;
+    // Compute the primary ray direction
+    float  halfHeight = GetCamera().tanHalfFovY;
+    float  halfWidth = (GetCamera().aspect * halfHeight);
+    float3 lowerLeftCorner = GetCamera().position - (halfWidth * GetCamera().right) - (halfHeight * GetCamera().up) + GetCamera().forward;
+    float3 horizontal = (2.f * halfWidth) * GetCamera().right;
+    float3 vertical = (2.f * halfHeight) * GetCamera().up;
 
     float s = ((float)LaunchIndex.x + 0.5f) / (float)LaunchDimensions.x;
     float t = 1.f - (((float)LaunchIndex.y + 0.5f) / (float)LaunchDimensions.y);
 
     ray.Direction = (lowerLeftCorner + s * horizontal + t * vertical) - ray.Origin;
 
-    ProbesPayload payload = (ProbesPayload)0;
+    ProbeVisualizationPayload payload = (ProbeVisualizationPayload)0;
     while(payload.hitT >= 0.f)
     {
         // Trace
         TraceRay(
-            SceneBVH,
+            DDGIProbeVisTLAS,
             RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
-            0xFF,
+            0x02,
             0,
             1,
             0,
@@ -243,11 +274,18 @@ void RayGenHideInactive()
                 // Get the DDGIVolume index
                 uint volumeIndex = payload.volumeIndex;
 
-                // Adjust for all volume probe instances existing in a single TLAS
-                int probeIndex = (payload.instanceIndex - payload.instanceOffset);
+                // Get the DDGIVolume structured buffers
+                StructuredBuffer<DDGIVolumeDescGPUPacked> DDGIVolumes = GetDDGIVolumeConstants(GetDDGIVolumeConstantsIndex());
+                StructuredBuffer<DDGIVolumeResourceIndices> DDGIVolumeBindless = GetDDGIVolumeResourceIndices(GetDDGIVolumeResourceIndicesIndex());
+
+                // Get the DDGIVolume's bindless resource indices
+                DDGIVolumeResourceIndices resourceIndices = DDGIVolumeBindless[volumeIndex];
 
                 // Load the DDGIVolume constants
                 DDGIVolumeDescGPU volume = UnpackDDGIVolumeDescGPU(DDGIVolumes[volumeIndex]);
+
+                // Adjust for all volume probe instances existing in a single TLAS
+                int probeIndex = (payload.instanceIndex - payload.instanceOffset);
 
                 // Get the probe's grid coordinates
                 float3 probeCoords = DDGIGetProbeCoords(probeIndex, volume);
@@ -255,19 +293,20 @@ void RayGenHideInactive()
                 // Adjust probe index for scroll offsets
                 probeIndex = DDGIGetScrollingProbeIndex(probeCoords, volume);
 
-                // Get the probe's state
-                Texture2D<float4> ProbeData = GetDDGIVolumeProbeDataSRV(volumeIndex);
-                uint2 probeStateTexCoords = DDGIGetProbeTexelCoords(probeIndex, volume);
-                float probeState = ProbeData[probeStateTexCoords].w;
+                // Get the probe data texture array
+                Texture2DArray<float4> ProbeData = GetTex2DArray(resourceIndices.probeDataSRVIndex);
 
+                // Early out: if the probe is inactive
+                uint3 probeStateTexCoords = DDGIGetProbeTexelCoords(probeIndex, volume);
+                float probeState = ProbeData[probeStateTexCoords].w;
                 if(probeState == RTXGI_DDGI_PROBE_STATE_INACTIVE) continue;
 
                 // Get the probe's data to display
                 float3 sampleDirection;
-                float3 color = GetProbeData(volumeIndex, probeIndex, probeCoords, payload.worldPosition, volume, sampleDirection);
+                float3 color = GetProbeData(probeIndex, probeCoords, payload.worldPosition, resourceIndices, volume, sampleDirection);
 
                 // Write the result to the GBuffer
-                WriteResult(LaunchIndex, color, payload.hitT);
+                WriteResult(LaunchIndex, color, payload.hitT, GBufferA, GBufferB);
             }
         }
     }

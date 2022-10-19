@@ -27,20 +27,21 @@ namespace Graphics
                 resources.shaders.Release();
 
                 std::wstring root = std::wstring(vk.shaderCompiler.root.begin(), vk.shaderCompiler.root.end());
-                std::wstring shaderPath = root + L"shaders/Composite.hlsl";
 
                 // Load and compile the vertex shader
-                resources.shaders.vs.filepath = shaderPath.c_str();
+                resources.shaders.vs.filepath = root + L"shaders/Composite.hlsl";
                 resources.shaders.vs.entryPoint = L"VS";
-                resources.shaders.vs.targetProfile = L"vs_6_4";
-                resources.shaders.vs.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                resources.shaders.vs.targetProfile = L"vs_6_6";
+                resources.shaders.vs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                Shaders::AddDefine(resources.shaders.vs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                 CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.vs, true), "compile composition vertex shader!\n", log);
 
                 // Load and compile the pixel shader
-                resources.shaders.ps.filepath = shaderPath.c_str();
+                resources.shaders.ps.filepath = root + L"shaders/Composite.hlsl";
                 resources.shaders.ps.entryPoint = L"PS";
-                resources.shaders.ps.targetProfile = L"ps_6_4";
-                resources.shaders.ps.arguments = { L"-spirv", L"-D SPIRV=1", L"-fspv-target-env=vulkan1.2" };
+                resources.shaders.ps.targetProfile = L"ps_6_6";
+                resources.shaders.ps.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                Shaders::AddDefine(resources.shaders.ps, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                 CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.ps, true), "compile composition pixel shader!\n", log);
 
                 return true;
@@ -129,69 +130,47 @@ namespace Graphics
             bool UpdateDescriptorSets(Globals& vk, GlobalResources& vkResources, Resources& resources, std::ofstream& log)
             {
                 // Store the data to be written to the descriptor set
-                std::vector<VkWriteDescriptorSet> writeDescriptorSets;
+                VkWriteDescriptorSet* descriptor = nullptr;
+                std::vector<VkWriteDescriptorSet> descriptors;
 
-                // Samplers
-                VkDescriptorImageInfo samplersInfo[] =
-                {
-                    { vkResources.samplers[0], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED },  // bilinear sampler
-                    { vkResources.samplers[1], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED }   // point sampler
-                };
-
-                VkWriteDescriptorSet samplerSet = {};
-                samplerSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                samplerSet.dstSet = resources.descriptorSet;
-                samplerSet.dstBinding = DescriptorLayoutBindings::SAMPLERS;
-                samplerSet.dstArrayElement = SamplerIndices::POINT_CLAMP;
-                samplerSet.descriptorCount = _countof(samplersInfo);
-                samplerSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-                samplerSet.pImageInfo = samplersInfo;
-
-                writeDescriptorSets.push_back(samplerSet);
-
-                // RWTex2D UAVs
-                // GBufferA, GBufferB, GBufferC, GBufferD, RTAOOutput, DDGIOutput storage images
-                VkDescriptorImageInfo gBufferImageInfo[] =
+                // 8: Texture2D UAVs
+                VkDescriptorImageInfo rwTex2D[] =
                 {
                     { VK_NULL_HANDLE, vkResources.rt.GBufferAView, VK_IMAGE_LAYOUT_GENERAL },
                     { VK_NULL_HANDLE, vkResources.rt.GBufferBView, VK_IMAGE_LAYOUT_GENERAL },
                     { VK_NULL_HANDLE, vkResources.rt.GBufferCView, VK_IMAGE_LAYOUT_GENERAL },
                     { VK_NULL_HANDLE, vkResources.rt.GBufferDView, VK_IMAGE_LAYOUT_GENERAL },
                     { VK_NULL_HANDLE, vkResources.rt.RTAOOutputView, VK_IMAGE_LAYOUT_GENERAL },
-                    { VK_NULL_HANDLE, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL }, // RTAORaw
+                    { VK_NULL_HANDLE, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL }, // RTAORaw (skipped)
                     { VK_NULL_HANDLE, vkResources.rt.DDGIOutputView, VK_IMAGE_LAYOUT_GENERAL }
                 };
 
-                VkWriteDescriptorSet rwTex2DSet = {};
-                rwTex2DSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                rwTex2DSet.dstSet = resources.descriptorSet;
-                rwTex2DSet.dstBinding = DescriptorLayoutBindings::UAV_START;
-                rwTex2DSet.dstArrayElement = RWTex2DIndices::GBUFFERA;
-                rwTex2DSet.descriptorCount = _countof(gBufferImageInfo);
-                rwTex2DSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                rwTex2DSet.pImageInfo = gBufferImageInfo;
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::UAV_TEX2D;
+                descriptor->dstArrayElement = RWTex2DIndices::GBUFFERA;
+                descriptor->descriptorCount = _countof(rwTex2D);
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                descriptor->pImageInfo = rwTex2D;
 
-                writeDescriptorSets.push_back(rwTex2DSet);
-
-                // Additional texture SRVs
-                VkDescriptorImageInfo tex2DImageInfo[] =
+                // 11: Texture2D SRVs
+                VkDescriptorImageInfo tex2D[] =
                 {
-                    { VK_NULL_HANDLE, vkResources.textureViews[0], VK_IMAGE_LAYOUT_GENERAL } // Blue Noise
+                    { VK_NULL_HANDLE, vkResources.textureViews[0], VK_IMAGE_LAYOUT_GENERAL } // blue noise
                 };
 
-                VkWriteDescriptorSet tex2DSet = {};
-                tex2DSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                tex2DSet.dstSet = resources.descriptorSet;
-                tex2DSet.dstBinding = DescriptorLayoutBindings::SRV_START;
-                tex2DSet.dstArrayElement = Tex2DIndices::BLUE_NOISE;
-                tex2DSet.descriptorCount = _countof(tex2DImageInfo);
-                tex2DSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-                tex2DSet.pImageInfo = tex2DImageInfo;
-
-                writeDescriptorSets.push_back(tex2DSet);
+                descriptor = &descriptors.emplace_back();
+                descriptor->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptor->dstSet = resources.descriptorSet;
+                descriptor->dstBinding = DescriptorLayoutBindings::SRV_TEX2D;
+                descriptor->dstArrayElement = Tex2DIndices::BLUE_NOISE;
+                descriptor->descriptorCount = _countof(tex2D);
+                descriptor->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                descriptor->pImageInfo = tex2D;
 
                 // Update the descriptor set
-                vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+                vkUpdateDescriptorSets(vk.device, static_cast<uint32_t>(descriptors.size()), descriptors.data(), 0, nullptr);
 
                 return true;
             }
@@ -283,12 +262,6 @@ namespace Graphics
             #endif
                 CPU_TIMESTAMP_BEGIN(resources.cpuStat);
 
-                // Set the pipeline
-                vkCmdBindPipeline(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, resources.pipeline);
-
-                // Set the descriptor set
-                vkCmdBindDescriptorSets(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, vkResources.pipelineLayout, 0, 1, &resources.descriptorSet, 0, nullptr);
-
                 // Set the push constants
                 uint32_t offset = 0;
                 GlobalConstants consts = vkResources.constants;
@@ -301,12 +274,18 @@ namespace Graphics
                 offset += CompositeConsts::GetAlignedSizeInBytes();
                 vkCmdPushConstants(vk.cmdBuffer[vk.frameIndex], vkResources.pipelineLayout, VK_SHADER_STAGE_ALL, offset, PostProcessConsts::GetSizeInBytes(), consts.post.GetData());
 
+                // Set the pipeline
+                vkCmdBindPipeline(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, resources.pipeline);
+
+                // Set the descriptor set
+                vkCmdBindDescriptorSets(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, vkResources.pipelineLayout, 0, 1, &resources.descriptorSet, 0, nullptr);
+
                 // Set raster state
                 vkCmdSetViewport(vk.cmdBuffer[vk.frameIndex], 0, 1, &vk.viewport);
                 vkCmdSetScissor(vk.cmdBuffer[vk.frameIndex], 0, 1, &vk.scissor);
 
                 // Transition the back buffer to a render target (start render pass)
-                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetQueryBeginIndex());
+                GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
                 BeginRenderPass(vk);
 
                 // Draw
@@ -314,7 +293,7 @@ namespace Graphics
 
                 // Transition the back buffer to present (end render pass)
                 vkCmdEndRenderPass(vk.cmdBuffer[vk.frameIndex]);
-                GPU_TIMESTAMP_END(resources.gpuStat->GetQueryEndIndex());
+                GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
             #ifdef GFX_PERF_MARKERS
                 vkCmdEndDebugUtilsLabelEXT(vk.cmdBuffer[vk.frameIndex]);

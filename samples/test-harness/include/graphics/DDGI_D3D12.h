@@ -53,9 +53,13 @@ namespace Graphics
 
                 ID3D12DescriptorHeap*        rtvDescriptorHeap = nullptr;
 
-                ID3D12Resource*              constantsSTB = nullptr;
-                ID3D12Resource*              constantsSTBUpload = nullptr;
-                UINT                         constantsSTBSizeInBytes = 0;
+                ID3D12Resource*              volumeResourceIndicesSTB = nullptr;
+                ID3D12Resource*              volumeResourceIndicesSTBUpload = nullptr;
+                UINT                         volumeResourceIndicesSTBSizeInBytes = 0;
+
+                ID3D12Resource*              volumeConstantsSTB = nullptr;
+                ID3D12Resource*              volumeConstantsSTBUpload = nullptr;
+                UINT                         volumeConstantsSTBSizeInBytes = 0;
 
                 // Performance Stats
                 Instrumentation::Stat*       cpuStat = nullptr;

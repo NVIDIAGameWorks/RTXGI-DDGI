@@ -30,10 +30,13 @@ namespace Benchmark
             config.ddgi.reload = true;
         }
         gfx.frameNumber = 1;
+        config.app.benchmarkRunning = true;
     }
 
-    bool UpdateBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx, std::ofstream& log)
+    void UpdateBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx, std::ofstream& log)
     {
+        config.app.benchmarkProgress = (uint32_t)(((float)benchmarkRun.numFramesBenched / (float)NumBenchmarkFrames) * 100.f);
+
         // If the benchmark is currently running, make a row for the frame's timings
         if(benchmarkRun.numFramesBenched < NumBenchmarkFrames)
         {
@@ -115,10 +118,9 @@ namespace Benchmark
                 log << "\t" << stat->name << "=" << stat->average << "ms(GPU)" << std::endl;
             }
 
-            return false;
+            config.app.benchmarkRunning = false;
         }
 
         benchmarkRun.numFramesBenched++;
-        return true;
     }
 }

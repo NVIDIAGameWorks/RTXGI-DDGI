@@ -50,7 +50,7 @@ float3 DDGIGetProbeWorldPosition(int3 probeCoords, DDGIVolumeDescGPU volume)
  * When probe relocation is enabled, offsets are loaded from the probe data
  * Texture2D and used to adjust the final world position.
  */
-float3 DDGIGetProbeWorldPosition(int3 probeCoords, DDGIVolumeDescGPU volume, Texture2D<float4> probeData)
+float3 DDGIGetProbeWorldPosition(int3 probeCoords, DDGIVolumeDescGPU volume, Texture2DArray<float4> probeData)
 {
     // Get the probe's world-space position
     float3 probeWorldPosition = DDGIGetProbeWorldPosition(probeCoords, volume);
@@ -62,7 +62,7 @@ float3 DDGIGetProbeWorldPosition(int3 probeCoords, DDGIVolumeDescGPU volume, Tex
         int probeIndex = DDGIGetScrollingProbeIndex(probeCoords, volume);
 
         // Find the texture coordinates of the probe in the Probe Data texture
-        uint2 coords = DDGIGetProbeTexelCoords(probeIndex, volume);
+        uint3 coords = DDGIGetProbeTexelCoords(probeIndex, volume);
 
         // Load the probe's world-space position offset and add it to the current world position
         probeWorldPosition += DDGILoadProbeDataOffset(probeData, coords, volume);
@@ -76,7 +76,7 @@ float3 DDGIGetProbeWorldPosition(int3 probeCoords, DDGIVolumeDescGPU volume, Tex
  * When probe relocation is enabled, offsets are loaded from the probe data
  * RWTexture2D and used to adjust the final world position.
  */
-float3 DDGIGetProbeWorldPosition(int3 probeCoords, DDGIVolumeDescGPU volume, RWTexture2D<float4> probeData)
+float3 DDGIGetProbeWorldPosition(int3 probeCoords, DDGIVolumeDescGPU volume, RWTexture2DArray<float4> probeData)
 {
     // Get the probe's world-space position
     float3 probeWorldPosition = DDGIGetProbeWorldPosition(probeCoords, volume);
@@ -88,7 +88,7 @@ float3 DDGIGetProbeWorldPosition(int3 probeCoords, DDGIVolumeDescGPU volume, RWT
         int probeIndex = DDGIGetScrollingProbeIndex(probeCoords, volume);
 
         // Find the texture coordinates of the probe in the Probe Data texture
-        uint2 coords = DDGIGetProbeTexelCoords(probeIndex, volume);
+        uint3 coords = DDGIGetProbeTexelCoords(probeIndex, volume);
 
         // Load the probe's world-space position offset and add it to the current world position
         probeWorldPosition += DDGILoadProbeDataOffset(probeData, coords, volume);

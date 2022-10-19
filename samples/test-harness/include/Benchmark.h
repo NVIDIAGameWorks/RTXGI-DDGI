@@ -27,5 +27,5 @@ namespace Benchmark
         std::stringstream gpuTimingCsv;
     };
     void StartBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx);
-    bool UpdateBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx, std::ofstream& log);
+    void UpdateBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx, std::ofstream& log);
 }

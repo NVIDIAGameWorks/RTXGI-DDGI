@@ -30,6 +30,43 @@ namespace Scenes
     // Private Functions
     //----------------------------------------------------------------------------------------------------------
 
+    void SetTranslation(const tinygltf::Node& gltfNode, XMFLOAT3& translation)
+    {
+    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT
+        translation = XMFLOAT3((float)gltfNode.translation[0], (float)gltfNode.translation[1], (float)gltfNode.translation[2]);
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
+        translation = XMFLOAT3((float)gltfNode.translation[0], -(float)gltfNode.translation[2], (float)gltfNode.translation[1]);
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT
+        translation = XMFLOAT3((float)gltfNode.translation[0], (float)gltfNode.translation[1], -(float)gltfNode.translation[2]);
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
+        translation = XMFLOAT3(-(float)gltfNode.translation[2], (float)gltfNode.translation[0], (float)gltfNode.translation[1]);
+    #endif
+    }
+
+    void SetRotation(const tinygltf::Node& gltfNode, XMFLOAT4& rotation)
+    {
+    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT
+        rotation = XMFLOAT4((float)gltfNode.rotation[0], (float)gltfNode.rotation[1], (float)gltfNode.rotation[2], (float)gltfNode.rotation[3]);
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
+        rotation = XMFLOAT4((float)gltfNode.rotation[0], -(float)gltfNode.rotation[2], (float)gltfNode.rotation[1], (float)gltfNode.rotation[3]);
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT
+        rotation = XMFLOAT4(-(float)gltfNode.rotation[0], -(float)gltfNode.rotation[1], (float)gltfNode.rotation[2], (float)gltfNode.rotation[3]);
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
+        rotation = XMFLOAT4((float)gltfNode.rotation[2], -(float)gltfNode.rotation[0], -(float)gltfNode.rotation[1], (float)gltfNode.rotation[3]);
+    #endif
+    }
+
+    void SetScale(const tinygltf::Node& gltfNode, XMFLOAT3& scale)
+    {
+    #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT
+        scale = XMFLOAT3((float)gltfNode.scale[0], (float)gltfNode.scale[1], (float)gltfNode.scale[2]);
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
+        scale = XMFLOAT3((float)gltfNode.scale[0], (float)gltfNode.scale[2], (float)gltfNode.scale[1]);
+    #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
+        scale = XMFLOAT3((float)gltfNode.scale[2], (float)gltfNode.scale[0], (float)gltfNode.scale[1]);
+    #endif
+    }
+
     /**
      * Parse a URI, removing escaped characters (e.g. %20 for spaces)
      */
@@ -103,9 +140,9 @@ namespace Scenes
             }
             else
             {
-                if (gltfNode.translation.size() > 0) node.translation = XMFLOAT3((float)gltfNode.translation[0], (float)gltfNode.translation[1], (float)gltfNode.translation[2]);
-                if (gltfNode.rotation.size() > 0) node.rotation = XMFLOAT4((float)gltfNode.rotation[0], (float)gltfNode.rotation[1], (float)gltfNode.rotation[2], (float)gltfNode.rotation[3]);
-                if (gltfNode.scale.size() > 0) node.scale = XMFLOAT3((float)gltfNode.scale[0], (float)gltfNode.scale[1], (float)gltfNode.scale[2]);
+                if (gltfNode.translation.size() > 0) SetTranslation(gltfNode, node.translation);
+                if (gltfNode.rotation.size() > 0) SetRotation(gltfNode, node.rotation);
+                if (gltfNode.scale.size() > 0) SetScale(gltfNode, node.scale);
             }
 
             // Camera node, store the transforms
@@ -245,8 +282,8 @@ namespace Scenes
             // Load the texture from disk
             if (!Textures::Load(texture)) return false;
 
-        #if defined(__x86_64__) || defined(_M_X64)
-            // Generate mipmaps and compress the texture
+        #if defined(WIN32) && defined(__x86_64__) || defined(_M_X64)
+            // Generate mipmaps and compress the texture (Windows only)
             if(!Textures::MipmapAndCompress(texture)) return false;
         #endif
 
@@ -276,7 +313,7 @@ namespace Scenes
 
             // Initialize the mesh bounding box
             mesh.boundingBox.min = { FLT_MAX, FLT_MAX, FLT_MAX };
-            mesh.boundingBox.max = { FLT_MIN, FLT_MIN, FLT_MIN };
+            mesh.boundingBox.max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
             for (uint32_t primitiveIndex = 0; primitiveIndex < static_cast<uint32_t>(gltfMesh.primitives.size()); primitiveIndex++)
             {
@@ -286,6 +323,10 @@ namespace Scenes
                 MeshPrimitive m;
                 m.index = geometryIndex;
                 m.material = p.material;
+
+                // Initialize the mesh primitive bounding box
+                m.boundingBox.min = { FLT_MAX, FLT_MAX, FLT_MAX };
+                m.boundingBox.max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
                 // Set the mesh primitive's material to the default material if one is not assigned or if no materials exist in the GLTF
                 if (m.material == -1) m.material = 0;
@@ -320,36 +361,6 @@ namespace Scenes
                 if (p.attributes.count("TEXCOORD_0") > 0)
                 {
                     uv0Index = p.attributes.at("TEXCOORD_0");
-                }
-
-                // Bounding Box
-                if (positionIndex > -1)
-                {
-                    const std::vector<double>& min = gltfData.accessors[positionIndex].minValues;
-                    const std::vector<double>& max = gltfData.accessors[positionIndex].maxValues;
-
-                    m.boundingBox.min = { (float)min[0], (float)min[1], (float)min[2] };
-                    m.boundingBox.max = { (float)max[0], (float)max[1], (float)max[2] };
-
-                #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
-                    // Invert the z-coordinate to convert from right hand to left hand
-                    m.boundingBox.min.z *= -1.f;
-                    m.boundingBox.max.z *= -1.f;
-                #endif
-
-                #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
-                    // Convert to left hand, z-up (unreal)
-                    m.boundingBox.min = { m.boundingBox.min.z, m.boundingBox.min.x, m.boundingBox.min.y };
-                    m.boundingBox.max = { m.boundingBox.max.z, m.boundingBox.max.x, m.boundingBox.max.y };
-                #elif COORDINATE_SYSTEM == COORDINATE_SYSTEM_RIGHT_Z_UP
-                    // Convert to right hand, z-up
-                    m.boundingBox.min = { m.boundingBox.min.x, -m.boundingBox.min.z, m.boundingBox.min.y };
-                    m.boundingBox.max = { m.boundingBox.max.x, -m.boundingBox.max.z, m.boundingBox.max.y };
-                #endif
-
-                    // Update the mesh bounding box
-                    mesh.boundingBox.min = rtxgi::Min(mesh.boundingBox.min, m.boundingBox.min);
-                    mesh.boundingBox.max = rtxgi::Max(mesh.boundingBox.max, m.boundingBox.max);
                 }
 
                 // Vertex positions
@@ -481,6 +492,10 @@ namespace Scenes
                         memcpy(&v.uv0, address, uv0Stride);
                     }
 
+                    // Update the mesh primitive's bounding box
+                    m.boundingBox.min = rtxgi::Min(m.boundingBox.min, v.position);
+                    m.boundingBox.max = rtxgi::Max(m.boundingBox.max, v.position);
+
                     m.vertices.push_back(v);
                 }
 
@@ -522,6 +537,10 @@ namespace Scenes
                 // Increment the triangle count
                 scene.numTriangles += static_cast<uint32_t>(indexAccessor.count) / 3;
 
+                // Update the mesh's bounding box
+                mesh.boundingBox.min = rtxgi::Min(mesh.boundingBox.min, m.boundingBox.min);
+                mesh.boundingBox.max = rtxgi::Max(mesh.boundingBox.max, m.boundingBox.max);
+
                 // Add the mesh primitive
                 mesh.primitives.push_back(m);
 
@@ -535,20 +554,24 @@ namespace Scenes
     }
 
     /**
-     * Determine the scene bounding box, accounting for mesh instances and instance transforms.
+     * Update the scene mesh's bounding boxes, accounting for the mesh instances and instance transforms.
      */
-    void ComputeSceneBoundingBox(Scene& scene)
+    void UpdateSceneBoundingBoxes(Scene& scene)
     {
         // Initialize the scene bounding box
         scene.boundingBox.min = { FLT_MAX, FLT_MAX };
-        scene.boundingBox.max = { FLT_MIN, FLT_MIN };
+        scene.boundingBox.max = { -FLT_MAX, -FLT_MAX };
 
         XMFLOAT4 r3  = XMFLOAT4(0.f, 0.f, 0.f, 1.f);
         for(uint32_t instanceIndex = 0; instanceIndex < static_cast<uint32_t>(scene.instances.size()); instanceIndex++)
         {
             // Get the mesh instance and mesh
-            const Scenes::MeshInstance& instance = scene.instances[instanceIndex];
+            Scenes::MeshInstance& instance = scene.instances[instanceIndex];
             const Scenes::Mesh& mesh = scene.meshes[instance.meshIndex];
+
+            // Initialize the mesh instance bounding box
+            instance.boundingBox.min = { FLT_MAX, FLT_MAX };
+            instance.boundingBox.max = { -FLT_MAX, -FLT_MAX };
 
             // Instance transform rows
             XMFLOAT4 instanceXformR0 = XMFLOAT4(&instance.transform[0][0]);
@@ -562,17 +585,26 @@ namespace Scenes
             xform.r[2] = DirectX::XMLoadFloat4(&instanceXformR2);
             xform.r[3] = DirectX::XMLoadFloat4(&r3);
 
+            // Remove the transpose (transforms are transposed for copying to GPU)
+            XMMATRIX transpose = XMMatrixTranspose(xform);
+
             // Get the mesh bounding box vertices
             XMFLOAT3 min = XMFLOAT3(mesh.boundingBox.min.x, mesh.boundingBox.min.y, mesh.boundingBox.min.z);
             XMFLOAT3 max = XMFLOAT3(mesh.boundingBox.max.x, mesh.boundingBox.max.y, mesh.boundingBox.max.z);
 
-            // Transform the mesh bounding box vertices using the mesh instance transform
-            DirectX::XMStoreFloat3(&min, XMVector3Transform(DirectX::XMLoadFloat3(&min), xform));
-            DirectX::XMStoreFloat3(&max, XMVector3Transform(DirectX::XMLoadFloat3(&max), xform));
+            // Transform the mesh bounding box vertices
+            DirectX::XMStoreFloat3(&min, XMVector3Transform(DirectX::XMLoadFloat3(&min), transpose));
+            DirectX::XMStoreFloat3(&max, XMVector3Transform(DirectX::XMLoadFloat3(&max), transpose));
+
+            // Update the mesh instance bounding box
+            instance.boundingBox.min = rtxgi::Min(instance.boundingBox.min, { max.x, max.y, max.z });
+            instance.boundingBox.min = rtxgi::Min(instance.boundingBox.min, { min.x, min.y, min.z });
+            instance.boundingBox.max = rtxgi::Max(instance.boundingBox.max, { max.x, max.y, max.z });
+            instance.boundingBox.max = rtxgi::Max(instance.boundingBox.max, { min.x, min.y, min.z });
 
             // Update the scene bounding box
-            scene.boundingBox.min = rtxgi::Min(scene.boundingBox.min, { min.x, min.y, min.z });
-            scene.boundingBox.max = rtxgi::Max(scene.boundingBox.max, { max.x, max.y, max.z });
+            scene.boundingBox.min = rtxgi::Min(scene.boundingBox.min, instance.boundingBox.min);
+            scene.boundingBox.max = rtxgi::Max(scene.boundingBox.min, instance.boundingBox.max);
         }
     }
 
@@ -612,8 +644,8 @@ namespace Scenes
         // Parse Meshes
         ParseGLTFMeshes(gltfData, scene);
 
-        // Compute the scene's bounding box
-        ComputeSceneBoundingBox(scene);
+        // Update the scene's bounding boxes, based on the instance transforms
+        UpdateSceneBoundingBoxes(scene);
 
         return true;
     }
@@ -750,7 +782,7 @@ namespace Scenes
             return true;
         }
 
-        // Load the scene GLTF (no cache file exists)
+        // Load the scene GLTF (no cache file exists or the existing cache file is invalid)
         tinygltf::Model gltfData;
         tinygltf::TinyGLTF gltfLoader;
         std::string err, warn, filepath;
@@ -781,11 +813,8 @@ namespace Scenes
         // Parse the GLTF data
         CHECK(ParseGLTF(gltfData, config, binary, scene, log), "parse scene file!\n", log);
 
-        if (!binary)
-        {
-            // Serialize the scene and store a cache file to speed up future loads
-            if (!Caches::Serialize(sceneCache, scene, log)) return false;
-        }
+        // Serialize the scene and store a cache file to speed up future loads
+        if (!Caches::Serialize(sceneCache, scene, log)) return false;
 
         // Add config specific cameras and lights
         ParseConfigCamerasLights(config, scene);

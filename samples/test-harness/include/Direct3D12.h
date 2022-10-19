@@ -34,7 +34,8 @@ namespace Graphics
         #define GPU_TIMESTAMP_BEGIN(x) d3d.cmdList->EndQuery(d3dResources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, x);
         #define GPU_TIMESTAMP_END(x) d3d.cmdList->EndQuery(d3dResources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, x);
     #else
-        #define GPU_TIMESTAMP_BEGIN(x)
+        #define GPU_TIMESTAMP_BEGIN(x) 
+        #define GPU_TIMESTAMP_END(x) 
     #endif
 
         enum class EHeapType
@@ -49,7 +50,7 @@ namespace Graphics
             UINT64 size = 0;
             UINT64 alignment = 0;
             EHeapType heap = EHeapType::UPLOAD;
-            D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_GENERIC_READ;
+            D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON;
             D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
         };
 
@@ -57,6 +58,7 @@ namespace Graphics
         {
             UINT width = 0;
             UINT height = 0;
+            UINT arraySize = 1;
             UINT mips = 1;
             DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
             D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_GENERIC_READ;
@@ -90,7 +92,7 @@ namespace Graphics
         struct Globals
         {
             IDXGIFactory7*               factory = nullptr;
-            ID3D12Device5*               device = nullptr;
+            ID3D12Device6*               device = nullptr;
             ID3D12CommandQueue*          cmdQueue = nullptr;
             ID3D12CommandAllocator*      cmdAlloc[2] = { nullptr, nullptr };
             ID3D12GraphicsCommandList4*  cmdList = nullptr;
@@ -141,7 +143,6 @@ namespace Graphics
         {
             // Root Constants
             GlobalConstants                        constants = {};
-            DDGIConstants                          ddgi = {};
 
             // Descriptor Heaps
             ID3D12DescriptorHeap*                  rtvDescHeap = nullptr;
@@ -232,9 +233,9 @@ namespace Graphics
 
         namespace SamplerHeapOffsets
         {
-            const int BILINEAR_WRAP = 0;
-            const int POINT_CLAMP = 1;
-            const int ANISO = 2;
+            const int BILINEAR_WRAP = 0;                                            // 0: bilinear filter, repeat
+            const int POINT_CLAMP = BILINEAR_WRAP + 1;                              // 1: point (nearest neighbor) filter, clamp
+            const int ANISO = POINT_CLAMP + 1;                                      // 2: anisotropic filter, repeat
         }
 
         namespace DescriptorHeapOffsets
@@ -245,44 +246,57 @@ namespace Graphics
             // Structured Buffers
             const int STB_LIGHTS = CBV_CAMERA + 1;                                  //   1:   1 SRV for the lights structured buffer
             const int STB_MATERIALS = STB_LIGHTS + 1;                               //   2:   1 SRV for the materials structured buffer
-            const int STB_INSTANCES = STB_MATERIALS + 1;                            //   3:   1 SRV for the TLAS instance descriptors structured buffer
-            const int STB_DDGI_VOLUMES = STB_INSTANCES + 1;                         //   4:   1 SRV for DDGIVolume constants structured buffer
+            const int STB_TLAS_INSTANCES = STB_MATERIALS + 1;                       //   3:   1 SRV for the Scene TLAS instance descriptors structured buffer
+            const int STB_DDGI_VOLUME_CONSTS = STB_TLAS_INSTANCES + 1;              //   4:   1 SRV for DDGIVolume constants structured buffers
+            const int STB_DDGI_VOLUME_RESOURCE_INDICES = STB_DDGI_VOLUME_CONSTS + 1;//   5:   1 SRV for DDGIVolume resource indices structured buffers
 
             // Unordered Access Views
-            const int UAV_START = STB_DDGI_VOLUMES + 1;
+            const int UAV_START = STB_DDGI_VOLUME_RESOURCE_INDICES + 1;             //   6:   UAV Start
+
+            // RW Structured Buffers
+            const int UAV_STB_TLAS_INSTANCES = UAV_START;                           //   6:   1 UAV for the Scene TLAS instance descriptors structured buffer
 
             // Texture2D UAV
-            const int UAV_PT_OUTPUT = UAV_START;                                    //   5:   1 UAV for the Path Tracer Output RWTexture
-            const int UAV_PT_ACCUMULATION = UAV_PT_OUTPUT + 1;                      //   6    1 UAV for the Path Tracer Accumulation RWTexture
-            const int UAV_GBUFFERA = UAV_PT_ACCUMULATION + 1;                       //   7:   1 UAV for the GBufferA RWTexture
-            const int UAV_GBUFFERB = UAV_GBUFFERA + 1;                              //   8:   1 UAV for the GBufferB RWTexture
-            const int UAV_GBUFFERC = UAV_GBUFFERB + 1;                              //   9:   1 UAV for the GBufferC RWTexture
-            const int UAV_GBUFFERD = UAV_GBUFFERC + 1;                              //  10:   1 UAV for the GBufferD RWTexture
-            const int UAV_RTAO_OUTPUT = UAV_GBUFFERD + 1;                           //  11:   1 UAV for the RTAO Output RWTexture
-            const int UAV_RTAO_RAW = UAV_RTAO_OUTPUT + 1;                           //  12:   1 UAV for the RTAO Raw RWTexture
-            const int UAV_DDGI_OUTPUT = UAV_RTAO_RAW + 1;                           //  13:   1 UAV for the DDGI RWTexture
-            const int UAV_DDGI_VOLUME = UAV_DDGI_OUTPUT + 1;                        //  14:  24 UAV for DDGIVolume RWTextures, 4 UAV per DDGIVolume (Ray Data, Irradiance, Distance, Probe Data)
+            const int UAV_TEX2D_START = UAV_STB_TLAS_INSTANCES + 1;                 //   7:   RWTexture2D UAV Start
+            const int UAV_PT_OUTPUT = UAV_TEX2D_START;                              //   7:   1 UAV for the Path Tracer Output RWTexture
+            const int UAV_PT_ACCUMULATION = UAV_PT_OUTPUT + 1;                      //   8    1 UAV for the Path Tracer Accumulation RWTexture
+            const int UAV_GBUFFERA = UAV_PT_ACCUMULATION + 1;                       //   9:   1 UAV for the GBufferA RWTexture
+            const int UAV_GBUFFERB = UAV_GBUFFERA + 1;                              //  10:   1 UAV for the GBufferB RWTexture
+            const int UAV_GBUFFERC = UAV_GBUFFERB + 1;                              //  11:   1 UAV for the GBufferC RWTexture
+            const int UAV_GBUFFERD = UAV_GBUFFERC + 1;                              //  12:   1 UAV for the GBufferD RWTexture
+            const int UAV_RTAO_OUTPUT = UAV_GBUFFERD + 1;                           //  13:   1 UAV for the RTAO Output RWTexture
+            const int UAV_RTAO_RAW = UAV_RTAO_OUTPUT + 1;                           //  14:   1 UAV for the RTAO Raw RWTexture
+            const int UAV_DDGI_OUTPUT = UAV_RTAO_RAW + 1;                           //  15:   1 UAV for the DDGI RWTexture
 
-            // Shader Resource Views
-            const int SRV_START = UAV_DDGI_VOLUME + (rtxgi::GetDDGIVolumeNumUAVDescriptors() * MAX_DDGIVOLUMES);
+            // Texture2DArray UAV
+            const int UAV_TEX2DARRAY_START = UAV_DDGI_OUTPUT + 1;                   //  16:   RWTexture2DArray UAV Start
+            const int UAV_DDGI_VOLUME_TEX2DARRAY = UAV_TEX2DARRAY_START;            //  16:   24 UAV, 4 for each DDGIVolume (RayData, Irradiance, Distance, Probe Data)
+
+            // Shader Resource Views                                                //  40:   SRV Start
+            const int SRV_START = UAV_DDGI_VOLUME_TEX2DARRAY + (rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors() * MAX_DDGIVOLUMES);
 
             // RaytracingAccelerationStructure SRV
-            const int SRV_BVH_START = SRV_START;
-            const int SRV_BVH = SRV_BVH_START;                                      //  38:   1 SRV for the Scene BVH
+            const int SRV_TLAS_START = SRV_START;                                   //  40:   TLAS SRV Start
+            const int SRV_SCENE_TLAS = SRV_TLAS_START;                              //  40:   1 SRV for the Scene TLAS
+            const int SRV_DDGI_PROBE_VIS_TLAS = SRV_SCENE_TLAS + 1;                 //  41:   1 SRV for the DDGI Probe Vis TLAS
 
             // Texture2D SRV
-            const int SRV_TEXTURE2D_START = SRV_BVH + MAX_BVH;
-            const int SRV_BLUE_NOISE = SRV_TEXTURE2D_START;                         //  39:   1 SRV for the Blue Noise Texture
-            const int SRV_IMGUI_FONTS = SRV_BLUE_NOISE + 1;                         //  40:   1 SRV for the ImGui Font Texture
-            const int SRV_DDGI_VOLUME = SRV_IMGUI_FONTS + 1;                        //  41:  24 SRV for DDGIVolume Textures, 4 SRV per DDGIVolume (Ray Data, Irradiance, Distance, Probe Data)
-            const int SRV_SCENE_TEXTURES = SRV_DDGI_VOLUME + (rtxgi::GetDDGIVolumeNumSRVDescriptors() * MAX_DDGIVOLUMES);
-                                                                                    //  65: 300 SRV (max), 1 SRV for each Material Texture
+            const int SRV_TEX2D_START = SRV_TLAS_START + MAX_TLAS;                  //  42:   Texture2D SRV Start
+            const int SRV_BLUE_NOISE = SRV_TEX2D_START;                             //  42:   1 SRV for the Blue Noise Texture
+            const int SRV_IMGUI_FONTS = SRV_BLUE_NOISE + 1;                         //  43:   1 SRV for the ImGui Font Texture
+            const int SRV_SCENE_TEXTURES = SRV_IMGUI_FONTS + 1;                     //  44: 300 SRV (max), 1 SRV for each Material Texture
 
-            // ByteAddressBuffer SRV
-            const int SRV_BYTEADDRESS_START = SRV_SCENE_TEXTURES + MAX_TEXTURES;
-            const int SRV_MATERIAL_INDICES = SRV_BYTEADDRESS_START;                 // 366:  1 SRV for Mesh Primitive Material Indices
-            const int SRV_INDICES = SRV_MATERIAL_INDICES + 1;                       // 367:  n SRV for Mesh Primitive Index Buffers
-            const int SRV_VERTICES = SRV_INDICES + 1;                               // 368:  n SRV for Mesh Primitive Vertex Buffers
+            // Texture2DArray SRV
+            const int SRV_TEX2DARRAY_START = SRV_SCENE_TEXTURES + MAX_TEXTURES;     // 344:   Texture2DArray SRV Start
+            const int SRV_DDGI_VOLUME_TEX2DARRAY = SRV_TEX2DARRAY_START;            // 344:  24 SRV, 4 for each DDGIVolume (RayData, Irradiance, Distance, Probe Data)
+
+            // ByteAddressBuffer SRV                                                // 368:   ByteAddressBuffer SRV Start
+            const int SRV_BYTEADDRESS_START = SRV_TEX2DARRAY_START + (rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors() * MAX_DDGIVOLUMES);
+            const int SRV_SPHERE_INDICES = SRV_BYTEADDRESS_START;                   // 368:  1 SRV for DDGI Probe Vis Sphere Index Buffer
+            const int SRV_SPHERE_VERTICES = SRV_SPHERE_INDICES + 1;                 // 369:  1 SRV for DDGI Probe Vis Sphere Vertex Buffer
+            const int SRV_MATERIAL_INDICES = SRV_SPHERE_VERTICES + 1;               // 370:  1 SRV for Mesh Primitive Material Indices
+            const int SRV_INDICES = SRV_MATERIAL_INDICES + 1;                       // 371:  n SRV for Mesh Primitive Index Buffers
+            const int SRV_VERTICES = SRV_INDICES + 1;                               // 372:  n SRV for Mesh Primitive Vertex Buffers
         };
     }
 

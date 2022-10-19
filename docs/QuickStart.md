@@ -1,6 +1,6 @@
 # RTXGI Quick Start
 
-This fastest way to start learning RTXGI is to clone, build, and run the Test Harness sample application provided alongside the SDK.
+The fastest way to start learning RTXGI is to clone, build, and run the Test Harness sample application provided alongside the SDK.
 
 ## Clone the Code and Sample Content
 
@@ -8,11 +8,13 @@ This fastest way to start learning RTXGI is to clone, build, and run the Test Ha
 
     `git clone --recursive https://github.com/NVIDIAGameWorks/RTXGI.git`
 
-2. Pull the DirectX Shader Compiler (DXC) binaries from packman
+2. Download the dependencies using Packman
 
-   `update_dependencies.bat` (Windows)
+    `update_dependencies.bat` (Windows)
 
-   `update_dependencies.sh` (Linux)
+    `update_dependencies.sh` (Linux)
+
+    After executing the appropriate script, the **d3d** and **dxc** directories containing the DirectX12 Agility SDK and DirectX Shader Compiler (respectively) should exist next to the cloned files from Step 1.
 
 3. Install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) (optional on Windows)
 
@@ -37,7 +39,7 @@ This fastest way to start learning RTXGI is to clone, build, and run the Test Ha
 
 7. Click `Configure`
    * If using Visual Studio 2017 on Windows, select `x64` as the platform for the generator in the dropdown.
-   * If using Visual Studio 2019 on Windows, the platform is `x64` by default.
+   * If using Visual Studio 2019 or later on Windows, the platform is `x64` by default.
 
 8. Click `Generate`
    * The generated Visual Studio project is located in `[path-to-repo]/build/RTXGI.sln` (e.g. `C:/rtxgi/build/RTXGI.sln`).
@@ -54,7 +56,7 @@ This fastest way to start learning RTXGI is to clone, build, and run the Test Ha
 
 10. Build the solution.
 
-   * **Note:** if you want to just build the RTXGI SDK, uncheck the `RTXGI_BUILD_SAMPLES` option in CMake, click Generate, and reload the Visual Studio solution. The RTXGI Samples and Thirdparty folders will be removed.
+    * **Note:** if you want to just build the RTXGI SDK, **uncheck** the `RTXGI_BUILD_SAMPLES` option in CMake, click Generate, and reload the Visual Studio solution. The RTXGI Samples and Thirdparty folders will be removed.
 
 11. Set the Startup Project to `TestHarness-D3D12` (or `TestHarness-VK`).
 

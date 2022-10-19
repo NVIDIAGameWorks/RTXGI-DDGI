@@ -12,11 +12,11 @@
 #include "include/Descriptors.hlsl"
 #include "include/RayTracing.hlsl"
 
-/*
-* Computes a low discrepancy spherically distributed direction on the unit sphere,
-* for the given index in a set of samples. Each direction is unique in
-* the set, but the set of directions is always the same.
-*/
+/**
+ * Computes a low discrepancy spherically distributed direction on the unit sphere,
+ * for the given index in a set of samples. Each direction is unique in
+ * the set, but the set of directions is always the same.
+ */
 float3 SphericalFibonacci(float index, float numSamples)
 {
     const float b = (sqrt(5.f) * 0.5f + 0.5f) - 1.f;
@@ -33,6 +33,10 @@ float3 SphericalFibonacci(float index, float numSamples)
 float GetOcclusion(int2 screenPos, float3 worldPos, float3 normal)
 {
     static const float c_numAngles = 10.f;
+
+    // Get the (bindless) resources
+    Texture2D<float4> BlueNoise = GetTex2D(BLUE_NOISE_INDEX);
+    RaytracingAccelerationStructure SceneTLAS = GetAccelerationStructure(SCENE_TLAS_INDEX);
 
     // Load a value from the noise texture
     float  blueNoiseValue = BlueNoise.Load(int3(screenPos.xy, 0) % 256).r;
@@ -51,7 +55,7 @@ float GetOcclusion(int2 screenPos, float3 worldPos, float3 normal)
     // Trace a visibility ray
     PackedPayload packedPayload = (PackedPayload)0;
     TraceRay(
-        SceneBVH,
+        SceneTLAS,
         RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
         0xFF,
         0,
@@ -71,8 +75,15 @@ void RayGen()
 {
     int2 LaunchIndex = int2(DispatchRaysIndex().xy);
 
+    // Get the (bindless) resources
+    RWTexture2D<float4> GBufferA = GetRWTex2D(GBUFFERA_INDEX);
+    RWTexture2D<float4> GBufferB = GetRWTex2D(GBUFFERB_INDEX);
+    RWTexture2D<float4> GBufferC = GetRWTex2D(GBUFFERC_INDEX);
+    RWTexture2D<float4> GBufferD = GetRWTex2D(GBUFFERD_INDEX);
+    RWTexture2D<float4> RTAORaw = GetRWTex2D(RTAO_RAW_INDEX);
+
     // Early exit for pixels without a primary ray intersection
-    if (GBufferA.Load(LaunchIndex).w == 0.f)
+    if (GBufferA.Load(LaunchIndex).w < COMPOSITE_FLAG_LIGHT_PIXEL)
     {
         GBufferD[LaunchIndex].a = 1.f;  // No occlusion
         return;

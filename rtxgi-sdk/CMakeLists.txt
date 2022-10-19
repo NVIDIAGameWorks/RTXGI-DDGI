@@ -26,8 +26,8 @@ if(MSVC)
 endif()
 
 set(RTXGI_SDK_VERSION_MAJOR 1)
-set(RTXGI_SDK_VERSION_MINOR 2)
-set(RTXGI_SDK_VERSION_REVISION 12)
+set(RTXGI_SDK_VERSION_MINOR 3)
+set(RTXGI_SDK_VERSION_REVISION 0)
 
 # Only 64-bit platforms are supported
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4" )
@@ -36,6 +36,9 @@ endif()
 
 # Look for Windows and Vulkan SDKs
 include("FindSDKs.cmake")
+
+# Library type (static lib or dll)
+option(RTXGI_STATIC_LIB "Generate a Static Library (*.lib)" OFF)
 
 # D3D12, only available on Windows
 if(WIN32 AND RTXGI_API_D3D12_DXIL_PATH)
@@ -75,9 +78,14 @@ file(GLOB SOURCE
     "src/Math.cpp"
 )
 
+file(GLOB GFX_VULKAN_SOURCE
+    "include/rtxgi/VulkanExtensions.h"
+    "src/VulkanExtensions.cpp"
+)
+
 file(GLOB DDGI_HEADERS
     "include/rtxgi/ddgi/DDGIVolume.h"
-    "include/rtxgi/ddgi/DDGIConstants.h"
+    "include/rtxgi/ddgi/DDGIRootConstants.h"
     "include/rtxgi/ddgi/DDGIVolumeDescGPU.h"
 )
 
@@ -113,19 +121,25 @@ file(GLOB DDGI_SHADER_INCLUDE
     "shaders/ddgi/include/ProbeIndexing.hlsl"
     "shaders/ddgi/include/ProbeOctahedral.hlsl"
     "shaders/ddgi/include/ProbeRayCommon.hlsl"
+    "shaders/ddgi/include/DDGIRootConstants.hlsl"
+)
+
+file(GLOB DDGI_SHADER_INCLUDE_VALIDATION
+    "shaders/ddgi/include/validation/ProbeBlendingDefines.hlsl"
+    "shaders/ddgi/include/validation/ProbeClassificationDefines.hlsl"
+    "shaders/ddgi/include/validation/ProbeRelocationDefines.hlsl"
 )
 
 file(GLOB DDGI_SHADER_SOURCE
     "shaders/ddgi/Irradiance.hlsl"
     "shaders/ddgi/ProbeBlendingCS.hlsl"
-    "shaders/ddgi/ProbeBorderUpdateCS.hlsl"
     "shaders/ddgi/ProbeClassificationCS.hlsl"
     "shaders/ddgi/ProbeRelocationCS.hlsl"
 )
 
 # Shaders do not participate in the build
 set_source_files_properties(${SHADER_SOURCE} PROPERTIES VS_TOOL_OVERRIDE "None")
-set_source_files_properties(${DDGI_SHADER_INCLUDE} ${DDGI_SHADER_SOURCE} PROPERTIES VS_TOOL_OVERRIDE "None")
+set_source_files_properties(${DDGI_SHADER_INCLUDE} ${DDGI_SHADER_INCLUDE_VALIDATION} ${DDGI_SHADER_SOURCE} PROPERTIES VS_TOOL_OVERRIDE "None")
 
 # Setup the RTXGI library target and options
 function(SetupRTXGIOptions ARG_TARGET_LIB )
@@ -164,14 +178,50 @@ if(WIN32 AND RTXGI_API_D3D12_ENABLE)
     # Set the target library's name
     set(TARGET_LIB RTXGI-D3D12)
 
-    # Add the output lib target
-    add_library(${TARGET_LIB} STATIC ${SOURCE} ${DDGI_HEADERS} ${DDGI_HEADERS_D3D12} ${DDGI_SOURCE} ${DDGI_SOURCE_D3D12} ${SHADER_SOURCE} ${DDGI_SHADER_INCLUDE} ${DDGI_SHADER_SOURCE})
+    if(RTXGI_STATIC_LIB)
+        # Add the static library output target
+        add_library(${TARGET_LIB} STATIC
+            ${SOURCE}
+            ${DDGI_HEADERS}
+            ${DDGI_HEADERS_D3D12}
+            ${DDGI_SOURCE}
+            ${DDGI_SOURCE_D3D12}
+            ${SHADER_SOURCE}
+            ${DDGI_SHADER_INCLUDE}
+            ${DDGI_SHADER_INCLUDE_VALIDATION}
+            ${DDGI_SHADER_SOURCE})
+    else()
+        # Add the dynamic library output target
+        add_library(${TARGET_LIB} SHARED
+            ${SOURCE}
+            ${DDGI_HEADERS}
+            ${DDGI_HEADERS_D3D12}
+            ${DDGI_SOURCE}
+            ${DDGI_SOURCE_D3D12}
+            ${SHADER_SOURCE}
+            ${DDGI_SHADER_INCLUDE}
+            ${DDGI_SHADER_INCLUDE_VALIDATION}
+            ${DDGI_SHADER_SOURCE})
+    endif()
 
     # Setup the library and its options
     SetupRTXGIOptions(${TARGET_LIB})
 
+    # Add statically linked libs
+    target_link_libraries(${TARGET_LIB} PRIVATE d3d12)
+
+    # Set the lib's filename
+    set_target_properties(${TARGET_LIB} PROPERTIES OUTPUT_NAME "rtxgi-d3d12")
+
     # Add the project to a folder
     set_target_properties(${TARGET_LIB} PROPERTIES FOLDER "RTXGI SDK")
+
+    if(NOT RTXGI_STATIC_LIB)
+        target_compile_definitions(${TARGET_LIB} PUBLIC RTXGI_EXPORT_DLL)
+
+        set(RTXGI_SDK_D3D12_BINARY ${CMAKE_CURRENT_BINARY_DIR}/bin/$<CONFIG>/rtxgi-d3d12.dll PARENT_SCOPE)
+        set(RTXGI_SDK_D3D12_SYMBOLS ${CMAKE_CURRENT_BINARY_DIR}/bin/$<CONFIG>/rtxgi-d3d12.pdb PARENT_SCOPE)
+    endif()
 endif()
 
 # Setup the Vulkan library
@@ -179,8 +229,33 @@ if(RTXGI_API_VULKAN_ENABLE)
     # Set the target library's name
     set(TARGET_LIB RTXGI-VK)
 
-    # Add the output lib target
-    add_library(${TARGET_LIB} STATIC ${SOURCE} ${DDGI_HEADERS} ${DDGI_HEADERS_VULKAN} ${DDGI_SOURCE} ${DDGI_SOURCE_VULKAN} ${SHADER_SOURCE} ${DDGI_SHADER_INCLUDE} ${DDGI_SHADER_SOURCE})
+    if(RTXGI_STATIC_LIB)
+        # Add the static library output target
+        add_library(${TARGET_LIB} STATIC
+            ${SOURCE}
+            ${GFX_VULKAN_SOURCE}
+            ${DDGI_HEADERS}
+            ${DDGI_HEADERS_VULKAN}
+            ${DDGI_SOURCE}
+            ${DDGI_SOURCE_VULKAN}
+            ${SHADER_SOURCE}
+            ${DDGI_SHADER_INCLUDE}
+            ${DDGI_SHADER_INCLUDE_VALIDATION}
+            ${DDGI_SHADER_SOURCE})
+    else()
+        # Add the dynamic library output target
+        add_library(${TARGET_LIB} SHARED
+            ${SOURCE}
+            ${GFX_VULKAN_SOURCE}
+            ${DDGI_HEADERS}
+            ${DDGI_HEADERS_VULKAN}
+            ${DDGI_SOURCE}
+            ${DDGI_SOURCE_VULKAN}
+            ${SHADER_SOURCE}
+            ${DDGI_SHADER_INCLUDE}
+            ${DDGI_SHADER_INCLUDE_VALIDATION}
+            ${DDGI_SHADER_SOURCE})
+    endif()
 
     # Setup the library and its options
     SetupRTXGIOptions(${TARGET_LIB})
@@ -193,8 +268,29 @@ if(RTXGI_API_VULKAN_ENABLE)
     # Add the include directories
     target_include_directories(${TARGET_LIB} PUBLIC ${Vulkan_INCLUDE_DIR})
 
+    # Add statically linked libs
+    if(WIN32)
+        target_link_libraries(${TARGET_LIB} PRIVATE ${Vulkan_LIBRARY})
+    elseif(UNIX AND NOT APPLE)
+        target_link_libraries(${TARGET_LIB} PRIVATE -lvulkan)
+    endif()
+
+    # Set the lib's filename
+    set_target_properties(${TARGET_LIB} PROPERTIES OUTPUT_NAME "rtxgi-vulkan")
+
     # Add the project to a folder
     set_target_properties(${TARGET_LIB} PROPERTIES FOLDER "RTXGI SDK")
+
+    if(NOT RTXGI_STATIC_LIB)
+        target_compile_definitions(${TARGET_LIB} PUBLIC RTXGI_EXPORT_DLL)
+
+        if(WIN32)
+            set(RTXGI_SDK_VK_BINARY ${CMAKE_CURRENT_BINARY_DIR}/bin/$<CONFIG>/rtxgi-vulkan.dll PARENT_SCOPE)
+            set(RTXGI_SDK_VK_SYMBOLS ${CMAKE_CURRENT_BINARY_DIR}/bin/$<CONFIG>/rtxgi-vulkan.pdb PARENT_SCOPE)
+        elseif(UNIX AND NOT APPLE)
+            set(RTXGI_SDK_VK_BINARY ${CMAKE_CURRENT_BINARY_DIR}/librtxgi-vulkan.so PARENT_SCOPE)
+        endif()
+    endif()
 endif()
 
 if(WIN32)
@@ -206,6 +302,7 @@ if(WIN32)
     source_group("Shaders" FILES ${SHADER_SOURCE})
     source_group("Shaders/ddgi" FILES ${DDGI_SHADER_SOURCE})
     source_group("Shaders/ddgi/include" FILES ${DDGI_SHADER_INCLUDE})
+    source_group("Shaders/ddgi/include/validation" FILES ${DDGI_SHADER_INCLUDE_VALIDATION})
 
     # Set the default project. If D3D12 is an option, set it as default.
     if(RTXGI_API_D3D12_ENABLE)
