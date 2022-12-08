@@ -121,4 +121,17 @@ float4 RTXGIQuaternionConjugate(float4 q)
     return float4(-q.xyz, q.w);
 }
 
+//------------------------------------------------------------------------
+// Luminance Helper
+//------------------------------------------------------------------------
+
+/**
+ * Convert Linear RGB value to Luminance
+ */
+float RTXGILinearRGBToLuminance(float3 rgb)
+{
+    const float3 LuminanceWeights = float3(0.2126, 0.7152, 0.0722);
+    return dot(rgb, LuminanceWeights);
+}
+
 #endif // RTXGI_COMMON_HLSL

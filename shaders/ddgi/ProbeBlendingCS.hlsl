@@ -32,7 +32,10 @@
     #else
         #define RAY_DATA_REG_DECL 
         #define OUTPUT_REG_DECL 
-        #define PROBE_DATA_REG_DECL 
+        #define PROBE_DATA_REG_DECL
+        #if RTXGI_DDGI_BLEND_RADIANCE
+        #define PROBE_VARIABILITY_REG_DECL
+        #endif
     #endif
 
 #else
@@ -48,6 +51,9 @@
         #define RAY_DATA_REG_DECL : register(RAY_DATA_REGISTER, RAY_DATA_SPACE)
         #define OUTPUT_REG_DECL : register(OUTPUT_REGISTER, OUTPUT_SPACE)
         #define PROBE_DATA_REG_DECL : register(PROBE_DATA_REGISTER, PROBE_DATA_SPACE)
+        #if RTXGI_DDGI_BLEND_RADIANCE
+        #define PROBE_VARIABILITY_REG_DECL : register(PROBE_VARIABILITY_REGISTER, PROBE_VARIABILITY_SPACE)
+        #endif
     #endif // RTXGI_DDGI_BINDLESS_RESOURCES
 
 #endif // RTXGI_DDGI_SHADER_REFLECTION || SPIRV
@@ -94,6 +100,12 @@
     // Probe data (world-space offsets and classification states)
     RTXGI_VK_BINDING(PROBE_DATA_REGISTER, PROBE_DATA_SPACE)
     RWTexture2DArray<float4> ProbeData PROBE_DATA_REG_DECL;
+
+#if RTXGI_DDGI_BLEND_RADIANCE
+    // Probe variability
+    RTXGI_VK_BINDING(PROBE_VARIABILITY_REGISTER, PROBE_VARIABILITY_SPACE)
+    RWTexture2DArray<float4> ProbeVariability PROBE_VARIABILITY_REG_DECL;
+#endif
 
 #endif // RTXGI_DDGI_BINDLESS_RESOURCES
 
@@ -291,6 +303,7 @@ void DDGIProbeBlendingCS(
         RWTexture2DArray<float4> RayData = ResourceDescriptorHeap[resourceIndices.rayDataUAVIndex];
         #if RTXGI_DDGI_BLEND_RADIANCE
             RWTexture2DArray<float4> Output = ResourceDescriptorHeap[resourceIndices.probeIrradianceUAVIndex];
+            RWTexture2DArray<float4> ProbeVariability = ResourceDescriptorHeap[resourceIndices.probeVariabilityUAVIndex];
         #else
             RWTexture2DArray<float4> Output = ResourceDescriptorHeap[resourceIndices.probeDistanceUAVIndex];
         #endif
@@ -305,6 +318,7 @@ void DDGIProbeBlendingCS(
         RWTexture2DArray<float4> RayData = RWTex2DArray[resourceIndices.rayDataUAVIndex];
         #if RTXGI_DDGI_BLEND_RADIANCE
             RWTexture2DArray<float4> Output = RWTex2DArray[resourceIndices.probeIrradianceUAVIndex];
+            RWTexture2DArray<float4> ProbeVariability = RWTex2DArray[resourceIndices.probeVariabilityUAVIndex];
         #else
             RWTexture2DArray<float4> Output = RWTex2DArray[resourceIndices.probeDistanceUAVIndex];
         #endif
@@ -374,7 +388,13 @@ void DDGIProbeBlendingCS(
 
         // Early out: don't blend rays for probes that are inactive
         int probeState = DDGILoadProbeState(probeIndex, ProbeData, volume);
-        if (probeState == RTXGI_DDGI_PROBE_STATE_INACTIVE) return;
+        if (probeState == RTXGI_DDGI_PROBE_STATE_INACTIVE)
+        {
+        #if RTXGI_DDGI_BLEND_RADIANCE
+            ProbeVariability[DispatchThreadID].r = 0.f;
+        #endif
+            return;
+        }
 
         // Get the probe ray direction associated with this thread
         float2 probeOctantUV = DDGIGetNormalizedOctahedralCoordinates(int2(threadCoords.xy), RTXGI_DDGI_PROBE_NUM_INTERIOR_TEXELS);
@@ -496,6 +516,9 @@ void DDGIProbeBlendingCS(
 
         float3 delta = (result.rgb - previous.rgb);
 
+        float3 previousIrradianceMean = previous.rgb;
+        float3 currentIrradianceSample = result.rgb;
+
         if (RTXGIMaxComponent(previous.rgb - result.rgb) > volume.probeIrradianceThreshold)
         {
             // Lower the hysteresis when a large lighting change is detected
@@ -524,6 +547,16 @@ void DDGIProbeBlendingCS(
             lerpDelta = min(max(c_threshold, abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
         }
         result = float4(previous.rgb + lerpDelta, 1.f);
+
+        if (volume.probeVariabilityEnabled)
+        {
+            float3 newIrradianceMean = result.rgb;
+            float3 newIrradianceSigma2 = (currentIrradianceSample - previousIrradianceMean) * (currentIrradianceSample - newIrradianceMean);
+            float newLuminanceSigma2 = RTXGILinearRGBToLuminance(newIrradianceSigma2);
+            float newLuminanceMean = RTXGILinearRGBToLuminance(newIrradianceMean);
+            float coefficientOfVariation = (newLuminanceMean <= c_threshold) ? 0.f : sqrt(newLuminanceSigma2) / newLuminanceMean;
+            ProbeVariability[threadCoords].r = coefficientOfVariation;
+        }
     #else
 
         // Interpolate the new filtered distance with the existing filtered distance in the probe.

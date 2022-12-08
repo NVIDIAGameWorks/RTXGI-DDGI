@@ -25,7 +25,7 @@ namespace rtxgi
     void SetInsertPerfMarkers(bool value) { bInsertPerfMarkers = value; }
 
     int GetDDGIVolumeNumRTVDescriptors() { return 2; }
-    int GetDDGIVolumeNumTex2DArrayDescriptors() { return 4; }
+    int GetDDGIVolumeNumTex2DArrayDescriptors() { return 6; }
     int GetDDGIVolumeNumResourceDescriptors() { return 2 * GetDDGIVolumeNumTex2DArrayDescriptors(); } // Multiplied by 2 to account for UAV *and* SRV descriptors
 
     bool ValidateShaderBytecode(const ShaderBytecode& bytecode)
@@ -74,6 +74,25 @@ namespace rtxgi
                 width *= (uint32_t)(desc.probeNumDistanceTexels);
                 height *= (uint32_t)(desc.probeNumDistanceTexels);
             }
+            else if (type == EDDGIVolumeTextureType::Variability)
+            {
+                width *= (uint32_t)(desc.probeNumIrradianceInteriorTexels);
+                height *= (uint32_t)(desc.probeNumIrradianceInteriorTexels);
+            }
+            else if (type == EDDGIVolumeTextureType::VariabilityAverage)
+            {
+                // Start with Probe variability texture dimensions
+                width *= (uint32_t)(desc.probeNumIrradianceInteriorTexels);
+                height *= (uint32_t)(desc.probeNumIrradianceInteriorTexels);
+                // Divide into thread groups, should match NUM_THREADS_XYZ in ReductionCS.hlsl
+                const uint3 NumThreadsInGroup = { 4, 8, 4 };
+                // Also divide by sample footprint per-thread, should match ThreadSampleFootprint in ReductionCS.hlsl
+                const uint3 DimensionScale = { NumThreadsInGroup.x * 4, NumThreadsInGroup.y * 2, NumThreadsInGroup.z };
+                // Size of diff total texture is just diff divided by thread group dimensions, rounded up
+                width = (width + DimensionScale.x - 1) / DimensionScale.x;
+                height = (height + DimensionScale.y - 1) / DimensionScale.y;
+                arraySize = (arraySize + DimensionScale.z - 1) / DimensionScale.z;
+            }
         }
     }
 
@@ -90,6 +109,7 @@ namespace rtxgi
         if(m_desc.movementType == EDDGIVolumeMovementType::Scrolling) ComputeScrolling();
     }
 
+#if _DEBUG
     void DDGIVolumeBase::ValidatePackedData(const DDGIVolumeDescGPUPacked packed) const
     {
         DDGIVolumeDescGPU l = UnpackDDGIVolumeDescGPU(packed);
@@ -120,6 +140,7 @@ namespace rtxgi
         assert(l.probeIrradianceFormat == r.probeIrradianceFormat);
         assert(l.probeRelocationEnabled == r.probeRelocationEnabled);
         assert(l.probeClassificationEnabled == r.probeClassificationEnabled);
+        assert(l.probeVariabilityEnabled == r.probeVariabilityEnabled);
         assert(l.probeScrollClear[0] == r.probeScrollClear[0]);
         assert(l.probeScrollClear[1] == r.probeScrollClear[1]);
         assert(l.probeScrollClear[2] == r.probeScrollClear[2]);
@@ -127,6 +148,7 @@ namespace rtxgi
         assert(l.probeScrollDirections[1] == r.probeScrollDirections[1]);
         assert(l.probeScrollDirections[2] == r.probeScrollDirections[2]);
     }
+#endif
 
     //------------------------------------------------------------------------
     // Getters
@@ -168,6 +190,7 @@ namespace rtxgi
         descGPU.probeIrradianceFormat = static_cast<uint32_t>(m_desc.probeIrradianceFormat);
         descGPU.probeRelocationEnabled = m_desc.probeRelocationEnabled;
         descGPU.probeClassificationEnabled = m_desc.probeClassificationEnabled;
+        descGPU.probeVariabilityEnabled = m_desc.probeVariabilityEnabled;
         descGPU.probeScrollClear[0] = m_probeScrollClear[0];
         descGPU.probeScrollClear[1] = m_probeScrollClear[1];
         descGPU.probeScrollClear[2] = m_probeScrollClear[2];
@@ -267,6 +290,8 @@ namespace rtxgi
         uint32_t numIrradianceBytesPerTexel = 0;
         uint32_t numDistanceBytesPerTexel = 0;
         uint32_t numProbeDataBytesPerTexel = 0;
+        uint32_t numProbeVariabilityBytesPerTexel = 0;
+        uint32_t numProbeVariabilityAverageBytesPerTexel = 0;
 
         // Compute the number of irradiance and distance texels
         uint32_t numIrradianceTexelsPerProbe = (m_desc.probeNumIrradianceTexels * m_desc.probeNumIrradianceTexels);
@@ -289,12 +314,25 @@ namespace rtxgi
         if (m_desc.probeDataFormat == EDDGIVolumeTextureFormat::F16x4) numProbeDataBytesPerTexel = 8;
         else if (m_desc.probeDataFormat == EDDGIVolumeTextureFormat::F32x4) numProbeDataBytesPerTexel = 16;
 
+        // Get the number of bytes per probe variability texel
+        if (m_desc.probeVariabilityFormat == EDDGIVolumeTextureFormat::F16) numProbeVariabilityBytesPerTexel = 2;
+        else if (m_desc.probeVariabilityFormat == EDDGIVolumeTextureFormat::F32) numProbeVariabilityBytesPerTexel = 4;
+
+        // Variability average is always F32x2 (8 bytes)
+        numProbeVariabilityAverageBytesPerTexel = 8;
+
         // Compute the number of bytes per probe
         uint32_t bytesPerProbe = 0;
         bytesPerProbe += GetNumRaysPerProbe() * numRayDataBytesPerTexel;
         bytesPerProbe += (numIrradianceTexelsPerProbe * numIrradianceBytesPerTexel);
         bytesPerProbe += (numDistanceTexelsPerProbe * numDistanceBytesPerTexel);
         bytesPerProbe += numProbeDataBytesPerTexel;
+        bytesPerProbe += numProbeVariabilityBytesPerTexel;
+
+        // Coefficient of variation average texture is different (smaller) dimensions from other textures
+        uint32_t width, height, arraySize;
+        GetDDGIVolumeTextureDimensions(m_desc, EDDGIVolumeTextureType::VariabilityAverage, width, height, arraySize);
+        bytesPerVolume += width * height * arraySize * numProbeVariabilityAverageBytesPerTexel;
 
         // Add the per probe memory use
         bytesPerVolume += GetNumProbes() * bytesPerProbe;

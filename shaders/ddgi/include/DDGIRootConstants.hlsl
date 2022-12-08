@@ -37,6 +37,7 @@
     uint GetDDGIVolumeIndex() { return DDGI.volumeIndex; }
     uint GetDDGIVolumeConstantsIndex() { return DDGI.volumeConstantsIndex; }
     uint GetDDGIVolumeResourceIndicesIndex() { return DDGI.volumeResourceIndicesIndex; }
+    uint3 GetReductionInputSize() { return uint3(DDGI.reductionInputSizeX, DDGI.reductionInputSizeY, DDGI.reductionInputSizeZ); }
 
 #else // VULKAN
 
@@ -77,22 +78,33 @@
             {
                 // IMPORTANT: insert padding to match the layout of your push constants!
                 // The padding below matches the size of the Test Harness' "GlobalConstants" struct
-                // with 44 float values before the DDGIRootConstants (see test-harness/include/graphics/Types.h)
+                // with 48 float values before the DDGIRootConstants (see test-harness/include/graphics/Types.h)
                 float4x4 padding0;
                 float4x4 padding1;
-                float4x3 padding2;
+                float4x4 padding2;
                 uint     RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME;
-                uint3    ddgi_pad;
+                uint2    ddgi_pad0;
+                uint     RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_X_NAME;
+                uint     RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Y_NAME;
+                uint     RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME;
+                uint2    ddgi_pad1;
             };
             [[vk::push_constant]] RTXGI_PUSH_CONSTS_STRUCT_NAME RTXGI_PUSH_CONSTS_VARIABLE_NAME;
         #endif
 
         uint GetDDGIVolumeIndex() { return RTXGI_PUSH_CONSTS_VARIABLE_NAME.RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME; }
+        uint3 GetReductionInputSize()
+        {
+            return uint3(RTXGI_PUSH_CONSTS_VARIABLE_NAME.RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_X_NAME,
+                RTXGI_PUSH_CONSTS_VARIABLE_NAME.RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Y_NAME,
+                RTXGI_PUSH_CONSTS_VARIABLE_NAME.RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME);
+        }
 
     #elif RTXGI_PUSH_CONSTS_TYPE == RTXGI_PUSH_CONSTS_TYPE_SDK
 
         [[vk::push_constant]] ConstantBuffer<DDGIRootConstants> DDGI;
         uint GetDDGIVolumeIndex() { return DDGI.volumeIndex; }
+        uint3 GetReductionInputSize() { return uint3(DDGI.reductionInputSizeX, DDGI.reductionInputSizeY, DDGI.reductionInputSizeZ); }
 
     #endif // RTXGI_PUSH_CONSTS_TYPE
 
