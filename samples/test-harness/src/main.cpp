@@ -380,7 +380,7 @@ int Run(const std::vector<std::string>& arguments)
         if (!Graphics::Present(gfx)) continue;
         if (!Graphics::WaitForGPU(gfx)) { log << "GPU took too long to complete, device removed!"; break; }
 
-        // Image Capture
+        // Image Capture (user triggered)
         StoreImages(input.event, config, gfx, gfxResources, rtao, ddgi);
 
         if (!Graphics::MoveToNextFrame(gfx)) break;
@@ -390,7 +390,18 @@ int Run(const std::vector<std::string>& arguments)
 
     #ifdef GFX_PERF_INSTRUMENTATION
         if (!Graphics::UpdateTimestamps(gfx, gfxResources, perf)) break;
-        if (config.app.benchmarkRunning) Benchmark::UpdateBenchmark(benchmarkRun, perf, config, gfx, log);
+        if (config.app.benchmarkRunning)
+        {
+            if (Benchmark::UpdateBenchmark(benchmarkRun, perf, config, gfx, log))
+            {
+                // Store intermediate images when the benchmark ends
+                Inputs::EInputEvent e = Inputs::EInputEvent::SCREENSHOT;
+                StoreImages(e, config, gfx, gfxResources, rtao, ddgi);
+
+                e = Inputs::EInputEvent::SAVE_IMAGES;
+                StoreImages(e, config, gfx, gfxResources, rtao, ddgi);
+            }
+        }
         Graphics::BeginFrame(gfx, gfxResources, perf);
     #endif
     }

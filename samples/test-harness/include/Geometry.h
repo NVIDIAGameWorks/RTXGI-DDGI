@@ -13,6 +13,6 @@
 
 namespace Geometry
 {
-    void CreateSphere(uint32_t latitudes, uint32_t longitudes, Scenes::MeshPrimitive& mesh);
+    void CreateSphere(uint32_t latitudes, uint32_t longitudes, Scenes::Mesh& mesh);
 }
 

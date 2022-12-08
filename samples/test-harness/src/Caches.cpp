@@ -12,7 +12,7 @@
 
 using namespace DirectX;
 
-#define SCENE_CACHE_VERSION 3
+#define SCENE_CACHE_VERSION 4
 
 namespace Caches
 {
@@ -95,6 +95,10 @@ namespace Caches
         mesh.name = std::string(buffer);
         delete[] buffer;
 
+        Read(in, &mesh.index, sizeof(uint32_t));
+        Read(in, &mesh.numIndices, sizeof(uint32_t));
+        Read(in, &mesh.numVertices, sizeof(uint32_t));
+
         // Read mesh bounding box
         Read(in, &mesh.boundingBox, sizeof(rtxgi::AABB));
 
@@ -114,6 +118,8 @@ namespace Caches
             Read(in, &mp.material, sizeof(int));
             Read(in, &mp.opaque, sizeof(bool));
             Read(in, &mp.doubleSided, sizeof(bool));
+            Read(in, &mp.indexByteOffset, sizeof(uint32_t));
+            Read(in, &mp.vertexByteOffset, sizeof(uint32_t));
             Read(in, &mp.boundingBox, sizeof(rtxgi::AABB)); // post-transform bounding box
 
             Read(in, &numVertices);
@@ -245,6 +251,10 @@ namespace Caches
         out.write(mesh.name.c_str(), numChars);
         out.seekp(out.tellp());
 
+        Write(out, &mesh.index, sizeof(uint32_t));
+        Write(out, &mesh.numIndices, sizeof(uint32_t));
+        Write(out, &mesh.numVertices, sizeof(uint32_t));
+
         // Mesh bounding box
         Write(out, &mesh.boundingBox, sizeof(rtxgi::AABB));
 
@@ -260,6 +270,8 @@ namespace Caches
             Write(out, &primitive.material, sizeof(int));
             Write(out, &primitive.opaque, sizeof(bool));
             Write(out, &primitive.doubleSided, sizeof(bool));
+            Write(out, &primitive.indexByteOffset, sizeof(uint32_t));
+            Write(out, &primitive.vertexByteOffset, sizeof(uint32_t));
             Write(out, &primitive.boundingBox, sizeof(rtxgi::AABB));
             Write(out, &numVertices);
             Write(out, primitive.vertices.data(), sizeof(Graphics::Vertex) * numVertices);
@@ -436,7 +448,7 @@ namespace Caches
             Read(in, &cacheVersion, sizeof(uint32_t));
             if(cacheVersion != SCENE_CACHE_VERSION)
             {
-                log << "\n\tWarning: scene cache version '" << cacheVersion << "' does not match expected version '" << SCENE_CACHE_VERSION << "'\n";
+                log << "\n\tWarning: scene cache version '" << cacheVersion << "' does not match expected version '" << SCENE_CACHE_VERSION << "'";
                 log << "\n\tRebuilding scene cache...";
                 return false;
             }

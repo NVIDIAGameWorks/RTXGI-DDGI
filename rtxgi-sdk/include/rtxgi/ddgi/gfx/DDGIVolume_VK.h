@@ -33,6 +33,8 @@ namespace rtxgi
             ProbeIrradiance,
             ProbeDistance,
             ProbeData,
+            ProbeVariability,
+            ProbeVariabilityAverage
         };
 
         //------------------------------------------------------------------------
@@ -51,6 +53,12 @@ namespace rtxgi
             ShaderBytecode              resetCS;                                            // Probe classification reset compute shader bytecode
         };
 
+        struct ProbeVariabilityByteCode
+        {
+            ShaderBytecode               reductionCS;                                       // Probe variability reduction compute shader bytecode
+            ShaderBytecode               extraReductionCS;                                  // Probe variability reduction extra passes compute shader bytecode
+        };
+
         struct DDGIVolumeManagedResourcesDesc
         {
             bool                         enabled = false;                                    // Enable or disable managed resources mode
@@ -62,8 +70,10 @@ namespace rtxgi
             // Shader bytecode
             ShaderBytecode               probeBlendingIrradianceCS;                          // Probe blending (irradiance) compute shader bytecode
             ShaderBytecode               probeBlendingDistanceCS;                            // Probe blending (distance) compute shader bytecode
-            ProbeRelocationBytecode      probeRelocation;                                    // [Optional] Probe Relocation bytecode
-            ProbeClassificationBytecode  probeClassification;                                // [Optional] Probe Classification bytecode
+
+            ProbeRelocationBytecode      probeRelocation;                                    // Probe Relocation bytecode
+            ProbeClassificationBytecode  probeClassification;                                // Probe Classification bytecode
+            ProbeVariabilityByteCode     probeVariability;                                   // Probe Classification bytecode
         };
 
         //------------------------------------------------------------------------
@@ -88,6 +98,15 @@ namespace rtxgi
             VkPipeline                  resetPipeline = nullptr;                            // Probe classification reset compute pipeline
         };
 
+        struct ProbeVariabilityPipeline
+        {
+            VkShaderModule              reductionModule = nullptr;                          // Probe variability reduction shader module
+            VkShaderModule              extraReductionModule = nullptr;                     // Probe variability reduction extra passes shader module
+
+            VkPipeline                  reductionPipeline = nullptr;                        // Probe variability reduction compute pipeline
+            VkPipeline                  extraReductionPipeline = nullptr;                   // Probe variability extra reduction compute pipeline
+        };
+
         struct DDGIVolumeUnmanagedResourcesDesc
         {
             bool                        enabled = false;                                    // Enable or disable unmanaged resources mode
@@ -100,18 +119,26 @@ namespace rtxgi
             VkImage                     probeIrradiance = nullptr;                          // Probe irradiance texture array - RGB: irradiance, encoded with a high gamma curve
             VkImage                     probeDistance = nullptr;                            // Probe distance texture array - R: mean distance | G: mean distance^2
             VkImage                     probeData = nullptr;                                // Probe data texture array - XYZ: world-space relocation offsets | W: classification state
+            VkImage                     probeVariability = nullptr;                         // Probe variability texture array
+            VkImage                     probeVariabilityAverage = nullptr;                  // Average of Probe variability for whole volume
+            VkBuffer                    probeVariabilityReadback = nullptr;                 // CPU-readable resource containing final Probe variability average
 
             // Texture Memory
             VkDeviceMemory              probeRayDataMemory = nullptr;                       // Probe ray data texture array device memory
             VkDeviceMemory              probeIrradianceMemory = nullptr;                    // Probe irradiance texture array device memory
             VkDeviceMemory              probeDistanceMemory = nullptr;                      // Probe distance texture array device memory
             VkDeviceMemory              probeDataMemory = nullptr;                          // Probe data texture array device memory
+            VkDeviceMemory              probeVariabilityMemory = nullptr;                   // Probe variability texture array device memory
+            VkDeviceMemory              probeVariabilityAverageMemory = nullptr;            // Probe variability average texture device memory
+            VkDeviceMemory              probeVariabilityReadbackMemory = nullptr;           // Probe variability readback texture device memory
 
             // Texture Views
             VkImageView                 probeRayDataView = nullptr;                         // Probe ray data texture array view
             VkImageView                 probeIrradianceView = nullptr;                      // Probe irradiance texture array view
             VkImageView                 probeDistanceView = nullptr;                        // Probe distance texture array view
             VkImageView                 probeDataView = nullptr;                            // Probe data texture array view
+            VkImageView                 probeVariabilityView = nullptr;                     // Probe variability texture array view
+            VkImageView                 probeVariabilityAverageView = nullptr;              // Probe variability average texture view
 
             // Shader Modules
             VkShaderModule              probeBlendingIrradianceModule = nullptr;             // Probe blending (irradiance) shader module
@@ -120,8 +147,10 @@ namespace rtxgi
             // Pipelines
             VkPipeline                  probeBlendingIrradiancePipeline = nullptr;           // Probe blending (irradiance) compute pipeline
             VkPipeline                  probeBlendingDistancePipeline = nullptr;             // Probe blending (distance) compute pipeline
-            ProbeRelocationPipeline     probeRelocation;                                    // [Optional] Probe Relocation pipelines
-            ProbeClassificationPipeline probeClassification;                                // [Optional] Probe Classification pipelines
+
+            ProbeRelocationPipeline     probeRelocation;                                     // Probe Relocation pipelines
+            ProbeClassificationPipeline probeClassification;                                 // Probe Classification pipelines
+            ProbeVariabilityPipeline    probeVariabilityPipelines;                           // Probe Variability pipelines
         };
 
         //------------------------------------------------------------------------
@@ -238,7 +267,7 @@ namespace rtxgi
 
             // Push Constants
             uint32_t GetPushConstantsOffset() const { return m_pushConstantsOffset; }
-            DDGIRootConstants GetPushConstants() const { return { m_desc.index, 0, 0 }; }
+            DDGIRootConstants GetPushConstants() const { return { m_desc.index, 0, 0, 0, 0, 0 }; }
 
             // Resource Indices (Bindless)
             DDGIVolumeResourceIndices GetResourceIndices() const { return m_bindlessResources.resourceIndices; }
@@ -258,24 +287,33 @@ namespace rtxgi
             EDDGIVolumeTextureFormat GetIrradianceFormat() const { return m_desc.probeIrradianceFormat; }
             EDDGIVolumeTextureFormat GetDistanceFormat() const { return m_desc.probeDistanceFormat; }
             EDDGIVolumeTextureFormat GetProbeDataFormat() const { return m_desc.probeDataFormat; }
+            EDDGIVolumeTextureFormat GetProbeVariabilityFormat() const { return m_desc.probeVariabilityFormat; }
 
             // Texture Arrays
             VkImage GetProbeRayData() const { return m_probeRayData; }
             VkImage GetProbeIrradiance() const { return m_probeIrradiance; }
             VkImage GetProbeDistance() const { return m_probeDistance; }
             VkImage GetProbeData() const { return m_probeData; }
+            VkImage GetProbeVariability() const { return m_probeVariability; }
+            VkImage GetProbeVariabilityAverage() const { return m_probeVariabilityAverage; }
+            VkBuffer GetProbeVariabilityReadback() const { return m_probeVariabilityReadback; }
 
             // Texture Array Memory
             VkDeviceMemory GetProbeRayDataMemory() const { return m_probeRayDataMemory; }
             VkDeviceMemory GetProbeIrradianceMemory() const { return m_probeIrradianceMemory; }
             VkDeviceMemory GetProbeDistanceMemory() const { return m_probeDistanceMemory; }
             VkDeviceMemory GetProbeDataMemory() const { return m_probeDataMemory; }
+            VkDeviceMemory GetProbeVariabilityMemory() const { return m_probeVariabilityMemory; }
+            VkDeviceMemory GetProbeVariabilityAverageMemory() const { return m_probeVariabilityAverageMemory; }
+            VkDeviceMemory GetProbeVariabilityReadbackMemory() const { return m_probeVariabilityReadbackMemory; }
 
             // Texture Array Views
             VkImageView GetProbeRayDataView() const { return m_probeRayDataView; }
             VkImageView GetProbeIrradianceView() const { return m_probeIrradianceView; }
             VkImageView GetProbeDistanceView() const { return m_probeDistanceView; }
             VkImageView GetProbeDataView() const { return m_probeDataView; }
+            VkImageView GetProbeVariabilityView() const { return m_probeVariabilityView; }
+            VkImageView GetProbeVariabilityAverageView() const { return m_probeVariabilityAverageView; }
 
             // Shader Modules
             VkShaderModule GetProbeBlendingIrradianceModule() const { return m_probeBlendingIrradianceModule; }
@@ -284,6 +322,8 @@ namespace rtxgi
             VkShaderModule GetProbeRelocationResetModule() const { return m_probeRelocationResetModule; }
             VkShaderModule GetProbeClassificationModule() const { return m_probeClassificationModule; }
             VkShaderModule GetProbeClassificationResetModule() const { return m_probeClassificationResetModule; }
+            VkShaderModule GetProbeVariabilityReductionModule() const { return m_probeVariabilityReductionModule; }
+            VkShaderModule GetProbeVariabilityExtraReductionModule() const { return m_probeVariabilityExtraReductionModule; }
 
             // Pipelines
             VkPipeline GetProbeBlendingIrradiancePipeline() const { return m_probeBlendingIrradiancePipeline; }
@@ -292,6 +332,8 @@ namespace rtxgi
             VkPipeline GetProbeRelocationResetPipeline() const { return m_probeRelocationResetPipeline; }
             VkPipeline GetProbeClassificationPipeline() const { return m_probeClassificationPipeline; }
             VkPipeline GetProbeClassificationResetPipeline() const { return m_probeClassificationResetPipeline; }
+            VkPipeline GetProbeVariabilityReductionPipeline() const { return m_probeVariabilityReductionPipeline; }
+            VkPipeline GetProbeVariabilityExtraReductionPipeline() const { return m_probeVariabilityExtraReductionPipeline; }
 
             //------------------------------------------------------------------------
             // Resource Setters
@@ -318,12 +360,16 @@ namespace rtxgi
             void SetIrradianceFormat(EDDGIVolumeTextureFormat format) { m_desc.probeIrradianceFormat = format; }
             void SetDistanceFormat(EDDGIVolumeTextureFormat format) { m_desc.probeDistanceFormat = format; }
             void SetProbeDataFormat(EDDGIVolumeTextureFormat format) { m_desc.probeDataFormat = format; }
+            void SetProbeVariabilityFromat(EDDGIVolumeTextureFormat format) { m_desc.probeVariabilityFormat = format; }
 
         #if !RTXGI_DDGI_RESOURCE_MANAGEMENT
             void SetProbeRayData(VkImage ptr, VkDeviceMemory memoryPtr, VkImageView viewPtr) { m_probeRayData = ptr; m_probeRayDataMemory = memoryPtr; m_probeRayDataView = viewPtr; }
             void SetProbeIrradiance(VkImage ptr, VkDeviceMemory memoryPtr, VkImageView viewPtr) { m_probeIrradiance = ptr; m_probeIrradianceMemory = memoryPtr; m_probeIrradianceView = viewPtr; }
             void SetProbeDistance(VkImage ptr, VkDeviceMemory memoryPtr, VkImageView viewPtr) { m_probeDistance = ptr; m_probeDistanceMemory = memoryPtr; m_probeDistanceView = viewPtr; }
             void SetProbeData(VkImage ptr, VkDeviceMemory memoryPtr, VkImageView viewPtr) { m_probeData = ptr; m_probeDataMemory = memoryPtr; m_probeDataView = viewPtr; }
+            void SetProbeVariability(VkImage ptr, VkDeviceMemory memoryPtr, VkImageView viewPtr) { m_probeVariability = ptr; m_probeVariabilityMemory = memoryPtr; m_probeVariabilityView = viewPtr; }
+            void SetProbeVariabilityAverage(VkImage ptr, VkDeviceMemory memoryPtr, VkImageView viewPtr) { m_probeVariabilityAverage = ptr; m_probeVariabilityAverageMemory = memoryPtr; m_probeVariabilityAverageView = viewPtr; }
+            void SetProbeVariabilityReadback(VkBuffer ptr, VkDeviceMemory memoryPtr) { m_probeVariabilityReadback = ptr; m_probeVariabilityReadbackMemory = memoryPtr; }
         #endif
 
         private:
@@ -345,18 +391,26 @@ namespace rtxgi
             VkImage                         m_probeIrradiance = nullptr;                        // Probe irradiance texture array - RGB: irradiance, encoded with a high gamma curve
             VkImage                         m_probeDistance = nullptr;                          // Probe distance texture array - R: mean distance | G: mean distance^2
             VkImage                         m_probeData = nullptr;                              // Probe data texture array - XYZ: world-space relocation offsets | W: classification state
+            VkImage                         m_probeVariability = nullptr;                       // Probe variability texture
+            VkImage                         m_probeVariabilityAverage = nullptr;                // Probe variability average texture
+            VkBuffer                        m_probeVariabilityReadback = nullptr;               // Probe variability readback texture
 
             // Texture Array Memory
             VkDeviceMemory                  m_probeRayDataMemory = nullptr;                     // Probe ray data memory
             VkDeviceMemory                  m_probeIrradianceMemory = nullptr;                  // Probe irradiance memory
             VkDeviceMemory                  m_probeDistanceMemory = nullptr;                    // Probe distance memory
             VkDeviceMemory                  m_probeDataMemory = nullptr;                        // Probe data memory
+            VkDeviceMemory                  m_probeVariabilityMemory = nullptr;                 // Probe variability memory
+            VkDeviceMemory                  m_probeVariabilityAverageMemory = nullptr;          // Probe variability average memory
+            VkDeviceMemory                  m_probeVariabilityReadbackMemory = nullptr;         // Probe variability readback memory
 
             // Texture Array Views
             VkImageView                     m_probeRayDataView = nullptr;                       // Probe ray data view
             VkImageView                     m_probeIrradianceView = nullptr;                    // Probe irradiance view
             VkImageView                     m_probeDistanceView = nullptr;                      // Probe distance view
             VkImageView                     m_probeDataView = nullptr;                          // Probe data view
+            VkImageView                     m_probeVariabilityView = nullptr;                   // Probe variability view
+            VkImageView                     m_probeVariabilityAverageView = nullptr;            // Probe variability average view
 
             // Pipeline Layout
             VkPipelineLayout                m_pipelineLayout = nullptr;                         // Pipeline layout, used for all update compute shaders
@@ -378,6 +432,8 @@ namespace rtxgi
             VkShaderModule                  m_probeRelocationResetModule = nullptr;             // Probe relocation reset shader module
             VkShaderModule                  m_probeClassificationModule = nullptr;              // Probe classification shader module
             VkShaderModule                  m_probeClassificationResetModule = nullptr;         // Probe classification reset shader module
+            VkShaderModule                  m_probeVariabilityReductionModule = nullptr;        // Probe variability reduction shader module
+            VkShaderModule                  m_probeVariabilityExtraReductionModule = nullptr;   // Probe variability reduction extra passes shader module
 
             // Pipelines
             VkPipeline                      m_probeBlendingIrradiancePipeline = nullptr;         // Probe blending (irradiance) compute shader pipeline
@@ -386,6 +442,8 @@ namespace rtxgi
             VkPipeline                      m_probeRelocationResetPipeline = nullptr;            // Probe relocation reset compute shader pipeline
             VkPipeline                      m_probeClassificationPipeline = nullptr;             // Probe classification compute shader pipeline
             VkPipeline                      m_probeClassificationResetPipeline = nullptr;        // Probe classification reset compute shader pipeline
+            VkPipeline                      m_probeVariabilityReductionPipeline = nullptr;       // Probe variability reduction compute shader pipeline
+            VkPipeline                      m_probeVariabilityExtraReductionPipeline = nullptr;  // Probe variability reduction extra passes compute shader pipeline
 
         #if RTXGI_DDGI_RESOURCE_MANAGEMENT
             ERTXGIStatus CreateManagedResources(const DDGIVolumeDesc& desc, const DDGIVolumeManagedResourcesDesc& managed);
@@ -402,6 +460,8 @@ namespace rtxgi
             bool CreateProbeIrradiance(const DDGIVolumeDesc& desc);
             bool CreateProbeDistance(const DDGIVolumeDesc& desc);
             bool CreateProbeData(const DDGIVolumeDesc& desc);
+            bool CreateProbeVariability(const DDGIVolumeDesc& desc);
+            bool CreateProbeVariabilityAverage(const DDGIVolumeDesc& desc);
 
             bool IsDeviceChanged(const DDGIVolumeManagedResourcesDesc& desc)
             {
@@ -448,5 +508,14 @@ namespace rtxgi
          */
         RTXGI_API ERTXGIStatus ClassifyDDGIVolumeProbes(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes);
 
+        /**
+         * Calculates average variability for all probes in each provided volume
+         */
+        RTXGI_API ERTXGIStatus CalculateDDGIVolumeVariability(VkCommandBuffer cmdBuffer, uint32_t numVolumes, DDGIVolume** volumes);
+
+        /**
+         * Reads back average variability for each provided volume, at the time of the call
+         */
+        RTXGI_API ERTXGIStatus ReadbackDDGIVolumeVariability(VkDevice device, uint32_t numVolumes, DDGIVolume** volumes);
     } // namespace vulkan
 } // namespace rtxgi

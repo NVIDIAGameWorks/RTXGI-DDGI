@@ -96,6 +96,13 @@ namespace Graphics
         float2 uv0;
     };
 
+    struct GeometryData
+    {
+        uint materialIndex;
+        uint indexByteAddress;
+        uint vertexByteAddress;
+    };
+
     struct Camera
     {
         float3 position;
@@ -183,9 +190,15 @@ namespace Graphics
             return data;
         }
 
+        // Pack the SER bool into the second-to-last bit of samplesPerPixel
+        void SetShaderExecutionReordering(bool value)
+        {
+            samplesPerPixel |= ((uint)value << 30);
+        }
+
+        // Pack the AA bool into the last bit of samplesPerPixel
         void SetAntialiasing(bool value)
         {
-            // Pack bool into the last bit of samplesPerPixel
             samplesPerPixel |= ((uint)value << 31);
         }
     #endif
@@ -318,12 +331,14 @@ namespace Graphics
         float irradianceTextureScale;
         float distanceTextureScale;
         float probeDataTextureScale;
+        float probeVariabilityTextureScale;
+        float probeVariabilityTextureThreshold;
 
     #ifndef HLSL
-        uint32_t data[8];
-        static uint32_t GetNum32BitValues() { return 8; }
+        uint32_t data[10];
+        static uint32_t GetNum32BitValues() { return 10; }
         static uint32_t GetSizeInBytes() { return GetNum32BitValues() * 4; }
-        static uint32_t GetAlignedNum32BitValues() { return 8; }
+        static uint32_t GetAlignedNum32BitValues() { return 12; }
         static uint32_t GetAlignedSizeInBytes() { return GetAlignedNum32BitValues() * 4; }
         uint32_t* GetData()
         {
@@ -335,6 +350,9 @@ namespace Graphics
             data[5] = *(uint32_t*)&irradianceTextureScale;
             data[6] = *(uint32_t*)&distanceTextureScale;
             data[7] = *(uint32_t*)&probeDataTextureScale;
+            data[8] = *(uint32_t*)&probeVariabilityTextureScale;
+            data[9] = *(uint32_t*)&probeVariabilityTextureThreshold;
+            //data[10/11] = 0; // empty, alignment padding
 
             return data;
         }
@@ -350,8 +368,8 @@ namespace Graphics
         RTAOConsts        rtao;        // 16 32-bit values,  64 bytes
         CompositeConsts   composite;   //  4 32-bit values,  16 bytes
         PostProcessConsts post;        //  4 32-bit values,  16 bytes
-        DDGIVisConsts     ddgivis;     //  8 32-bit values,  32 bytes
-                                       // 44 32-bit values, 176 bytes
+        DDGIVisConsts     ddgivis;     // 12 32-bit values,  48 bytes
+                                       // 48 32-bit values, 192 bytes
 
         static uint32_t GetNum32BitValues()
         {
@@ -453,11 +471,18 @@ namespace Graphics
         float  ddgivis_irradianceTextureScale;
         float  ddgivis_distanceTextureScale;
         float  ddgivis_probeDataTextureScale;
+        float  ddgivis_probeVariabilityTextureScale;
+        float  ddgivis_probeVariabilityTextureThreshold;
+        uint2  ddgivis_pad;
 
     #ifdef __spirv__
         // DDGIRootConstants
         uint   ddgi_volumeIndex;
-        uint3  ddgi_pad;
+        uint2  ddgi_pad0;
+        uint   ddgi_reductionInputSizeX;
+        uint   ddgi_reductionInputSizeY;
+        uint   ddgi_reductionInputSizeZ;
+        uint2  ddgi_pad1;
     #endif
     #endif // HLSL
     };

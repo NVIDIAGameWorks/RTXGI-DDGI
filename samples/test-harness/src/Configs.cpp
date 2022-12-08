@@ -156,9 +156,9 @@ namespace Configs
         destination = (rtxgi::EDDGIVolumeProbeVisType)stoi(source);
     }
 
-    /*
-    * Parse a post process configuration entry.
-    */
+    /**
+     * Parse a post process configuration entry.
+     */
     bool ParseConfigPostProcessEntry(const std::vector<std::string>& tokens, const std::string& rhs, Config& config, uint32_t lineNumber, std::ofstream& log)
     {
         // Post process entries have no more than 3 tokens
@@ -199,9 +199,9 @@ namespace Configs
         return false;
     }
 
-    /*
-    * Parse a DDGI configuration entry.
-    */
+    /**
+     * Parse a DDGI configuration entry.
+     */
     bool ParseConfigDDGIEntry(const std::vector<std::string>& tokens, const std::string& rhs, Config& config, uint32_t lineNumber, std::ofstream& log)
     {
         // DDGI entries have no more than 6 tokens
@@ -257,7 +257,19 @@ namespace Configs
                     Store(data, config.ddgi.volumes[volumeIndex].probeClassificationEnabled); return true;
                 }
             }
-            
+
+            if (tokens[3].compare("probeVariability") == 0)
+            {
+                if (tokens.size() == 5 && tokens[4].compare("enabled") == 0)
+                {
+                    Store(data, config.ddgi.volumes[volumeIndex].probeVariabilityEnabled); return true;
+                }
+                else if (tokens.size() == 5 && tokens[4].compare("threshold") == 0)
+                {
+                    Store(data, config.ddgi.volumes[volumeIndex].probeVariabilityThreshold); return true;
+                }
+            }
+
             if (tokens[3].compare("infiniteScrolling") == 0)
             {
                 if (tokens.size() == 5 && tokens[4].compare("enabled") == 0)
@@ -287,6 +299,11 @@ namespace Configs
                 else if (tokens[4].compare("data") == 0 && tokens[5].compare("format") == 0)
                 {
                     Store(data, config.ddgi.volumes[volumeIndex].textureFormats.dataFormat);
+                    return true;
+                }
+                else if (tokens[4].compare("variability") == 0 && tokens[5].compare("format") == 0)
+                {
+                    Store(data, config.ddgi.volumes[volumeIndex].textureFormats.variabilityFormat);
                     return true;
                 }
             }
@@ -340,6 +357,12 @@ namespace Configs
                     if (tokens[5].compare("probeDataScale") == 0)
                     {
                         Store(data, config.ddgi.volumes[volumeIndex].probeDataScale);
+                        return true;
+                    }
+
+                    if (tokens[5].compare("probeVariabilityScale") == 0)
+                    {
+                        Store(data, config.ddgi.volumes[volumeIndex].probeVariabilityScale);
                         return true;
                     }
                 }

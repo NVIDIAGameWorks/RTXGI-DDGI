@@ -198,6 +198,11 @@ namespace Graphics
             }
         };
 
+        struct Features
+        {
+            uint32_t waveLaneCount;
+        };
+
         struct Globals
         {
             VkInstance                              instance = nullptr;
@@ -234,6 +239,8 @@ namespace Graphics
 
             Shaders::ShaderCompiler                 shaderCompiler;
 
+            Features                                features = {};
+
             // For Windowed->Fullscreen->Windowed transitions
             int                                     x = 0;
             int                                     y = 0;
@@ -247,12 +254,15 @@ namespace Graphics
             int                                     fullscreen = 0;
             bool                                    fullscreenChanged = false;
 
+            bool                                    supportsShaderExecutionReordering = false;
+
             VkDebugUtilsMessengerEXT                debugUtilsMessenger = nullptr;
 
             VkPhysicalDeviceFeatures                           deviceFeatures = {};
             VkPhysicalDeviceProperties2                        deviceProps = {};
             VkPhysicalDeviceAccelerationStructurePropertiesKHR deviceASProps = {};
             VkPhysicalDeviceRayTracingPipelinePropertiesKHR    deviceRTPipelineProps = {};
+            VkPhysicalDeviceSubgroupProperties                 deviceSubgroupProps = {};
         };
 
         struct RenderTargets
@@ -315,11 +325,17 @@ namespace Graphics
             uint8_t*                                materialsSTBPtr = nullptr;
 
             // ByteAddress Buffers
-            VkBuffer                                materialIndicesRB = nullptr;
-            VkDeviceMemory                          materialIndicesRBMemory = nullptr;
-            VkBuffer                                materialIndicesRBUploadBuffer = nullptr;
-            VkDeviceMemory                          materialIndicesRBUploadMemory = nullptr;
-            uint8_t*                                materialIndicesRBPtr = nullptr;
+            VkBuffer                                meshOffsetsRB = nullptr;
+            VkDeviceMemory                          meshOffsetsRBMemory = nullptr;
+            VkBuffer                                meshOffsetsRBUploadBuffer = nullptr;
+            VkDeviceMemory                          meshOffsetsRBUploadMemory = nullptr;
+            uint8_t*                                meshOffsetsRBPtr = nullptr;
+
+            VkBuffer                                geometryDataRB = nullptr;
+            VkDeviceMemory                          geometryDataRBMemory = nullptr;
+            VkBuffer                                geometryDataRBUploadBuffer = nullptr;
+            VkDeviceMemory                          geometryDataRBUploadMemory = nullptr;
+            uint8_t*                                geometryDataRBPtr = nullptr;
 
             // Shared Render Targets
             RenderTargets                           rt;
@@ -363,8 +379,8 @@ namespace Graphics
         void SetImageLayoutBarrier(VkCommandBuffer cmdBuffer, VkImage image, const ImageBarrierDesc info);
 
         bool CreateBuffer(Globals& vk, const BufferDesc& info, VkBuffer* buffer, VkDeviceMemory* memory);
-        bool CreateIndexBuffer(Globals& vk, const Scenes::MeshPrimitive& primitive, VkBuffer* ib, VkDeviceMemory* ibMemory, VkBuffer* ibUpload, VkDeviceMemory* ibUploadMemory);
-        bool CreateVertexBuffer(Globals& vk, const Scenes::MeshPrimitive& primitive, VkBuffer* vb, VkDeviceMemory* vbMemory, VkBuffer* vbUpload, VkDeviceMemory* vbUploadMemory);
+        bool CreateIndexBuffer(Globals& vk, const Scenes::Mesh& mesh, VkBuffer* ib, VkDeviceMemory* ibMemory, VkBuffer* ibUpload, VkDeviceMemory* ibUploadMemory);
+        bool CreateVertexBuffer(Globals& vk, const Scenes::Mesh& mesh, VkBuffer* vb, VkDeviceMemory* vbMemory, VkBuffer* vbUpload, VkDeviceMemory* vbUploadMemory);
         bool CreateTexture(Globals& vk, const TextureDesc& info, VkImage* image, VkDeviceMemory* imageMemory, VkImageView* imageView);
 
         bool CreateShaderModule(VkDevice device, const Shaders::ShaderProgram& shader, VkShaderModule* module);

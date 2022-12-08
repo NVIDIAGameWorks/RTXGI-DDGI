@@ -12,6 +12,14 @@
 #include "UI.h"
 #include "ImageCapture.h"
 
+#if GFX_NVAPI
+#include "nvapi.h"
+#include "nvShaderExtnEnums.h"
+
+#define NV_SHADER_EXTN_SLOT           999999
+#define NV_SHADER_EXTN_REGISTER_SPACE 999999
+#endif
+
 namespace Graphics
 {
     using namespace DirectX;
@@ -45,6 +53,9 @@ namespace Graphics
             return true;
         }
 
+        /**
+         * Convert wide strings to narrow strings.
+         */
         void ConvertWideStringToNarrow(std::wstring& wide, std::string& narrow)
         {
             narrow.resize(wide.size());
@@ -59,11 +70,11 @@ namespace Graphics
         /**
          * Device creation helper.
          */
-        bool CreateDeviceInternal(ID3D12Device6*& device, IDXGIFactory7*& factory, Configs::Config& config)
+        bool CreateDeviceInternal(Globals& d3d, Configs::Config& config)
         {
             // Create the device
             IDXGIAdapter1* adapter = nullptr;
-            for (UINT adapterIndex = 0; DXGI_ERROR_NOT_FOUND != factory->EnumAdapters1(adapterIndex, &adapter); ++adapterIndex)
+            for (UINT adapterIndex = 0; DXGI_ERROR_NOT_FOUND != d3d.factory->EnumAdapters1(adapterIndex, &adapter); ++adapterIndex)
             {
                 DXGI_ADAPTER_DESC1 adapterDesc;
                 adapter->GetDesc1(&adapterDesc);
@@ -72,37 +83,68 @@ namespace Graphics
                     continue;   // Don't select the Basic Render Driver adapter
                 }
 
-                if (SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_0, _uuidof(ID3D12Device6), (void**)&device)))
+                if (SUCCEEDED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_0, _uuidof(ID3D12Device6), (void**)&d3d.device)))
                 {
                     // Check if the device supports ray tracing
-                    D3D12_FEATURE_DATA_D3D12_OPTIONS5 features5;
-                    HRESULT hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &features5, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
+                    D3D12_FEATURE_DATA_D3D12_OPTIONS5 features5 = {};
+                    HRESULT hr = d3d.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &features5, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
                     if (FAILED(hr) || features5.RaytracingTier < D3D12_RAYTRACING_TIER_1_0)
                     {
-                        SAFE_RELEASE(device);
-                        device = nullptr;
+                        SAFE_RELEASE(d3d.device);
+                        d3d.device = nullptr;
                         continue;
                     }
 
                     // Check if the device supports SM6.6
-                    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel;
+                    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = {};
                     shaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_6;
-                    hr = device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(D3D12_FEATURE_DATA_SHADER_MODEL));
+                    hr = d3d.device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(D3D12_FEATURE_DATA_SHADER_MODEL));
                     if (FAILED(hr))
                     {
-                        SAFE_RELEASE(device);
-                        device = nullptr;
+                        SAFE_RELEASE(d3d.device);
+                        d3d.device = nullptr;
                         continue;
                     }
 
                     // Resource binding tier 3 is required for SM6.6 dynamic resources
-                    D3D12_FEATURE_DATA_D3D12_OPTIONS features;
-                    hr = device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &features, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS));
+                    D3D12_FEATURE_DATA_D3D12_OPTIONS features = {};
+                    hr = d3d.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &features, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS));
                     if (FAILED(hr) || features.ResourceBindingTier < D3D12_RESOURCE_BINDING_TIER_3)
                     {
-                        SAFE_RELEASE(device);
-                        device = nullptr;
+                        SAFE_RELEASE(d3d.device);
+                        d3d.device = nullptr;
                         continue;
+                    }
+
+                #if GFX_NVAPI
+                    // Check for SER HLSL extension support
+                    NvAPI_Status status = NvAPI_D3D12_IsNvShaderExtnOpCodeSupported(
+                        d3d.device,
+                        NV_EXTN_OP_HIT_OBJECT_REORDER_THREAD,
+                        &d3d.supportsShaderExecutionReordering);
+
+                    if (status == NVAPI_OK && d3d.supportsShaderExecutionReordering)
+                    {
+                        // Check for SER device support
+                        NVAPI_D3D12_RAYTRACING_THREAD_REORDERING_CAPS ReorderCaps = NVAPI_D3D12_RAYTRACING_THREAD_REORDERING_CAP_NONE;
+                        status = NvAPI_D3D12_GetRaytracingCaps(
+                            d3d.device,
+                            NVAPI_D3D12_RAYTRACING_CAPS_TYPE_THREAD_REORDERING,
+                            &ReorderCaps,
+                            sizeof(ReorderCaps));
+
+                        if (status != NVAPI_OK || ReorderCaps == NVAPI_D3D12_RAYTRACING_THREAD_REORDERING_CAP_NONE)
+                        {
+                            d3d.supportsShaderExecutionReordering = false;
+                        }
+                    }
+                #endif
+
+                    D3D12_FEATURE_DATA_D3D12_OPTIONS1 waveFeatures = {};
+                    hr = d3d.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &waveFeatures, sizeof(waveFeatures));
+                    if (SUCCEEDED(hr))
+                    {
+                        d3d.features.waveLaneCount = waveFeatures.WaveLaneCountMin;
                     }
 
                     // Set the graphics API name
@@ -112,12 +154,12 @@ namespace Graphics
                     std::wstring name(adapterDesc.Description);
                     ConvertWideStringToNarrow(name, config.app.gpuName);
                 #ifdef GFX_NAME_OBJECTS
-                    device->SetName(name.c_str());
+                    d3d.device->SetName(name.c_str());
                 #endif
                     break;
                 }
 
-                if (device == nullptr)
+                if (d3d.device == nullptr)
                 {
                     return false; // Didn't find a device that supports ray tracing
                 }
@@ -426,33 +468,42 @@ namespace Graphics
         }
 
         /**
-         * Create the index buffer for a mesh primitive.
+         * Create the index buffer for a mesh.
+         * Copy the index data to the upload buffer and schedule a copy to the device buffer.
          */
-        bool CreateIndexBuffer(Globals& d3d, const Scenes::MeshPrimitive& primitive, ID3D12Resource** device, ID3D12Resource** upload, D3D12_INDEX_BUFFER_VIEW& view)
+        bool CreateIndexBuffer(Globals& d3d, const Scenes::Mesh& mesh, ID3D12Resource** device, ID3D12Resource** upload, D3D12_INDEX_BUFFER_VIEW& view)
         {
             // Create the index buffer upload resource
-            UINT size = static_cast<UINT>(primitive.indices.size()) * sizeof(UINT);
-            BufferDesc desc = { size, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
+            UINT sizeInBytes = mesh.numIndices * sizeof(UINT);
+            BufferDesc desc = { sizeInBytes, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, upload)) return false;
 
             // Create the index buffer device resource
-            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
+            desc = { sizeInBytes, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, device)) return false;
 
             // Initialize the index buffer view
             view.Format = DXGI_FORMAT_R32_UINT;
-            view.SizeInBytes = size;
+            view.SizeInBytes = sizeInBytes;
             view.BufferLocation = (*device)->GetGPUVirtualAddress();
 
-            // Copy the index data to the upload buffer
+            // Copy the index data of each mesh primitive to the upload buffer
             UINT8* pData = nullptr;
             D3D12_RANGE readRange = {};
             D3DCHECK((*upload)->Map(0, &readRange, reinterpret_cast<void**>(&pData)));
-            memcpy(pData, primitive.indices.data(), size);
+
+            for (UINT primitiveIndex = 0; primitiveIndex < static_cast<UINT>(mesh.primitives.size()); primitiveIndex++)
+            {
+                // Get the mesh primitive and copy its indices to the upload buffer
+                const Scenes::MeshPrimitive& primitive = mesh.primitives[primitiveIndex];
+
+                UINT size = static_cast<UINT>(primitive.indices.size()) * sizeof(UINT);
+                memcpy(pData + primitive.indexByteOffset, primitive.indices.data(), size);
+            }
             (*upload)->Unmap(0, nullptr);
 
             // Schedule a copy of the upload buffer to the device buffer
-            d3d.cmdList->CopyBufferRegion(*device, 0, *upload, 0, size);
+            d3d.cmdList->CopyBufferRegion(*device, 0, *upload, 0, sizeInBytes);
 
             // Transition the default heap resource to generic read after the copy is complete
             D3D12_RESOURCE_BARRIER barrier = {};
@@ -468,34 +519,43 @@ namespace Graphics
         }
 
         /**
-         * Create the vertex buffer for a mesh primitive.
+         * Create the vertex buffer for a mesh.
+         * Copy the vertex data to the upload buffer and schedule a copy to the device buffer.
          */
-        bool CreateVertexBuffer(Globals& d3d, const Scenes::MeshPrimitive& primitive, ID3D12Resource** device, ID3D12Resource** upload, D3D12_VERTEX_BUFFER_VIEW& view)
+        bool CreateVertexBuffer(Globals& d3d, const Scenes::Mesh& mesh, ID3D12Resource** device, ID3D12Resource** upload, D3D12_VERTEX_BUFFER_VIEW& view)
         {
-            // Create the vertex buffer resource
+            // Create the vertex buffer upload resource
             UINT stride = sizeof(Vertex);
-            UINT size = static_cast<UINT>(primitive.vertices.size()) * stride;
-            BufferDesc desc = { size, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
+            UINT sizeInBytes = mesh.numVertices * stride;
+            BufferDesc desc = { sizeInBytes, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, upload)) return false;
 
             // Create the vertex buffer device resource
-            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
+            desc = { sizeInBytes, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, device)) return false;
 
             // Initialize the vertex buffer view
             view.StrideInBytes = stride;
-            view.SizeInBytes = size;
+            view.SizeInBytes = sizeInBytes;
             view.BufferLocation = (*device)->GetGPUVirtualAddress();
 
-            // Copy the vertex data to the upload buffer
+            // Copy the vertex data of each mesh primitive to the upload buffer
             UINT8* pData = nullptr;
             D3D12_RANGE readRange = {};
             D3DCHECK((*upload)->Map(0, &readRange, reinterpret_cast<void**>(&pData)));
-            memcpy(pData, primitive.vertices.data(), size);
+
+            for (UINT primitiveIndex = 0; primitiveIndex < static_cast<UINT>(mesh.primitives.size()); primitiveIndex++)
+            {
+                // Get the mesh primitive and copy its vertices to the upload buffer
+                const Scenes::MeshPrimitive& primitive = mesh.primitives[primitiveIndex];
+
+                UINT size = static_cast<UINT>(primitive.vertices.size()) * stride;
+                memcpy(pData + primitive.vertexByteOffset, primitive.vertices.data(), size);
+            }
             (*upload)->Unmap(0, nullptr);
 
             // Schedule a copy of the upload buffer to the device buffer
-            d3d.cmdList->CopyBufferRegion(*device, 0, *upload, 0, size);
+            d3d.cmdList->CopyBufferRegion(*device, 0, *upload, 0, sizeInBytes);
 
             // Transition the default heap resource to generic read after the copy is complete
             D3D12_RESOURCE_BARRIER barrier = {};
@@ -511,30 +571,40 @@ namespace Graphics
         }
 
         /**
-         * Create a bottom level acceleration structure for a mesh primitive.
+         * Create a bottom level acceleration structure for a mesh.
          */
-        bool CreateBLAS(Globals& d3d, Resources& resources, const Scenes::MeshPrimitive& primitive, const std::string debugName = "")
+        bool CreateBLAS(Globals& d3d, Resources& resources, const Scenes::Mesh& mesh)
         {
-            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+            // Describe the mesh primitives
+            std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> primitives;
 
-            // Describe the mesh primitive geometry
             D3D12_RAYTRACING_GEOMETRY_DESC desc = {};
             desc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-            desc.Triangles.VertexBuffer.StartAddress = resources.sceneVBs[primitive.index]->GetGPUVirtualAddress();
-            desc.Triangles.VertexBuffer.StrideInBytes = resources.sceneVBViews[primitive.index].StrideInBytes;
-            desc.Triangles.VertexCount = static_cast<UINT>(primitive.vertices.size());
-            desc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-            desc.Triangles.IndexBuffer = resources.sceneIBs[primitive.index]->GetGPUVirtualAddress();
-            desc.Triangles.IndexFormat = resources.sceneIBViews[primitive.index].Format;
-            desc.Triangles.IndexCount = static_cast<UINT>(primitive.indices.size());
-            desc.Flags = primitive.opaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+            for (UINT primitiveIndex = 0; primitiveIndex < static_cast<UINT>(mesh.primitives.size()); primitiveIndex++)
+            {
+                // Get the mesh primitive
+                const Scenes::MeshPrimitive& primitive = mesh.primitives[primitiveIndex];
+
+                desc.Triangles.VertexBuffer.StartAddress = resources.sceneVBs[mesh.index]->GetGPUVirtualAddress() + primitive.vertexByteOffset;
+                desc.Triangles.VertexBuffer.StrideInBytes = resources.sceneVBViews[mesh.index].StrideInBytes;
+                desc.Triangles.VertexCount = static_cast<UINT>(primitive.vertices.size());
+                desc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+                desc.Triangles.IndexBuffer = resources.sceneIBs[mesh.index]->GetGPUVirtualAddress() + primitive.indexByteOffset;
+                desc.Triangles.IndexFormat = resources.sceneIBViews[mesh.index].Format;
+                desc.Triangles.IndexCount = static_cast<UINT>(primitive.indices.size());
+                desc.Flags = primitive.opaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+
+                primitives.push_back(desc);
+            }
+
+            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 
             // Describe the bottom level acceleration structure inputs
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS asInputs = {};
             asInputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
             asInputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-            asInputs.NumDescs = 1;
-            asInputs.pGeometryDescs = &desc;
+            asInputs.NumDescs = static_cast<UINT>(primitives.size());
+            asInputs.pGeometryDescs = primitives.data();
             asInputs.Flags = buildFlags;
 
             // Get the size requirements for the BLAS buffer
@@ -552,11 +622,10 @@ namespace Graphics
                 D3D12_RESOURCE_STATE_COMMON,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
             };
-            if (!CreateBuffer(d3d, blasScratchDesc, &resources.blas[primitive.index].scratch)) return false;
+            if (!CreateBuffer(d3d, blasScratchDesc, &resources.blas[mesh.index].scratch)) return false;
         #ifdef GFX_NAME_OBJECTS
-            std::wstring name = std::wstring(debugName.begin(), debugName.end());
-            name.append(L" (scratch)");
-            resources.blas[primitive.index].scratch->SetName(name.c_str());
+            std::wstring name = L"BLAS: " + std::wstring(mesh.name.begin(), mesh.name.end()) + L" (scratch)";
+            resources.blas[mesh.index].scratch->SetName(name.c_str());
         #endif
 
             // Create the BLAS buffer
@@ -568,17 +637,17 @@ namespace Graphics
                 D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
             };
-            if (!CreateBuffer(d3d, blasDesc, &resources.blas[primitive.index].as)) return false;
+            if (!CreateBuffer(d3d, blasDesc, &resources.blas[mesh.index].as)) return false;
         #ifdef GFX_NAME_OBJECTS
-            name = std::wstring(debugName.begin(), debugName.end());
-            resources.blas[primitive.index].as->SetName(name.c_str());
+            name = L"BLAS: " + std::wstring(mesh.name.begin(), mesh.name.end());
+            resources.blas[mesh.index].as->SetName(name.c_str());
         #endif
 
             // Describe and build the BLAS
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
             buildDesc.Inputs = asInputs;
-            buildDesc.ScratchAccelerationStructureData = resources.blas[primitive.index].scratch->GetGPUVirtualAddress();
-            buildDesc.DestAccelerationStructureData = resources.blas[primitive.index].as->GetGPUVirtualAddress();
+            buildDesc.ScratchAccelerationStructureData = resources.blas[mesh.index].scratch->GetGPUVirtualAddress();
+            buildDesc.DestAccelerationStructureData = resources.blas[mesh.index].as->GetGPUVirtualAddress();
 
             d3d.cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
@@ -999,6 +1068,24 @@ namespace Graphics
             }
         #endif
 
+        #if GFX_NVAPI
+            // Fake UAV for NVAPI
+            D3D12_DESCRIPTOR_RANGE nvapiRange = {};
+            nvapiRange.BaseShaderRegister = NV_SHADER_EXTN_SLOT;
+            nvapiRange.NumDescriptors = 1;
+            nvapiRange.RegisterSpace = NV_SHADER_EXTN_REGISTER_SPACE;
+            nvapiRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+            nvapiRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+            // Root Parameter 2 (or 4): NVAPI
+            D3D12_ROOT_PARAMETER param = {};
+            param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            param.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+            param.DescriptorTable.NumDescriptorRanges = 1;
+            param.DescriptorTable.pDescriptorRanges = &nvapiRange;
+            rootParameters.push_back(param);
+        #endif
+
             // Describe the root signature
             D3D12_ROOT_SIGNATURE_DESC desc = {};
             desc.NumParameters = static_cast<UINT>(rootParameters.size());
@@ -1105,11 +1192,13 @@ namespace Graphics
             SAFE_RELEASE(resources.lightsSTB);
             SAFE_RELEASE(resources.lightsSTBUpload);
             SAFE_RELEASE(resources.materialsSTB);
-            SAFE_RELEASE(resources.materialIndicesRB);
+            SAFE_RELEASE(resources.meshOffsetsRB);
+            SAFE_RELEASE(resources.geometryDataRB);
             resources.cameraCBPtr = nullptr;
             resources.lightsSTBPtr = nullptr;
             resources.materialsSTBPtr = nullptr;
-            resources.materialIndicesRBPtr = nullptr;
+            resources.meshOffsetsRBPtr = nullptr;
+            resources.geometryDataRBPtr = nullptr;
 
             // Render Targets
             SAFE_RELEASE(resources.rt.GBufferA);
@@ -1172,6 +1261,10 @@ namespace Graphics
             SAFE_RELEASE(d3d.cmdQueue);
             SAFE_RELEASE(d3d.device);
             SAFE_RELEASE(d3d.factory);
+
+        #if GFX_NVAPI
+            NvAPI_Unload();
+        #endif
         }
 
         //----------------------------------------------------------------------------------------------------------
@@ -1212,7 +1305,7 @@ namespace Graphics
          */
         bool CreateSceneLightsBuffer(Globals& d3d, Resources& resources, const Scenes::Scene& scene)
         {
-            UINT size = ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, Scenes::Light::GetGPUDataSize() * static_cast<UINT>(scene.lights.size()));
+            UINT size = ALIGN(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT, Scenes::Light::GetGPUDataSize() * static_cast<UINT>(scene.lights.size()));
             if (size == 0) return true; // scenes with no lights are valid
 
             // Create the lights upload buffer resource
@@ -1269,12 +1362,12 @@ namespace Graphics
         }
 
         /**
-         * Create the scene materials buffers.
+         * Create the scene materials buffer.
          */
-        bool CreateSceneMaterialsBuffers(Globals& d3d, Resources& resources, const Scenes::Scene& scene)
+        bool CreateSceneMaterialsBuffer(Globals& d3d, Resources& resources, const Scenes::Scene& scene)
         {
             // Create the materials buffer upload resource
-            UINT size = ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, Scenes::Material::GetGPUDataSize() * static_cast<UINT>(scene.materials.size()));
+            UINT size = ALIGN(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT, Scenes::Material::GetGPUDataSize() * static_cast<UINT>(scene.materials.size()));
             BufferDesc desc = { size, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, &resources.materialsSTBUpload)) return false;
         #ifdef GFX_NAME_OBJECTS
@@ -1343,56 +1436,120 @@ namespace Graphics
             handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::STB_MATERIALS * resources.srvDescHeapEntrySize);
             d3d.device->CreateShaderResourceView(resources.materialsSTB, &srvDesc, handle);
 
-            // Material Indices
+            return true;
+        }
 
-            // Create the material indices upload buffer resource
-            size = ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(UINT) * scene.numMeshPrimitives);
-            desc = { size, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
-            if (!CreateBuffer(d3d, desc, &resources.materialIndicesRBUpload)) return false;
+        /**
+         * Create the scene material indexing buffers.
+         */
+        bool CreateSceneMaterialIndexingBuffers(Globals& d3d, Resources& resources, const Scenes::Scene& scene)
+        {
+            // Mesh Offsets
+
+            // Create the mesh offsets upload buffer resource
+            UINT meshOffsetsSize = ALIGN(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT, sizeof(UINT) * static_cast<UINT>(scene.meshes.size()) );
+            BufferDesc desc = { meshOffsetsSize, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
+            if (!CreateBuffer(d3d, desc, &resources.meshOffsetsRBUpload)) return false;
         #ifdef GFX_NAME_OBJECTS
-            resources.materialIndicesRBUpload->SetName(L"Material Indices Upload Raw Buffer");
+            resources.meshOffsetsRBUpload->SetName(L"Mesh Offsets Upload ByteAddressBuffer");
         #endif
 
-            // Create the material indices device buffer resource
-            desc = { size, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
-            if (!CreateBuffer(d3d, desc, &resources.materialIndicesRB)) return false;
+            // Create the mesh offsets device buffer resource
+            desc = { meshOffsetsSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
+            if (!CreateBuffer(d3d, desc, &resources.meshOffsetsRB)) return false;
         #ifdef GFX_NAME_OBJECTS
-            resources.materialIndicesRB->SetName(L"Material Indices Raw Buffer");
+            resources.meshOffsetsRB->SetName(L"Mesh Offsets ByteAddressBuffer");
         #endif
 
-            // Copy the material indices to the upload buffer
-            offset = 0;
-            D3DCHECK(resources.materialIndicesRBUpload->Map(0, &readRange, reinterpret_cast<void**>(&resources.materialIndicesRBPtr)));
+            // Geometry Data
+
+            // Create the geometry (mesh primitive) data upload buffer resource
+            UINT geometryDataSize = ALIGN(D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT, sizeof(GeometryData) * scene.numMeshPrimitives);
+            desc = { geometryDataSize, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
+            if (!CreateBuffer(d3d, desc, &resources.geometryDataRBUpload)) return false;
+        #ifdef GFX_NAME_OBJECTS
+            resources.geometryDataRBUpload->SetName(L"Geometry Data Upload ByteAddressBuffer");
+        #endif
+
+            // Create the geometry (mesh primitive) data device buffer resource
+            desc = { geometryDataSize, 0, EHeapType::DEFAULT, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAG_NONE };
+            if (!CreateBuffer(d3d, desc, &resources.geometryDataRB)) return false;
+        #ifdef GFX_NAME_OBJECTS
+            resources.geometryDataRB->SetName(L"Geometry Data ByteAddressBuffer");
+        #endif
+
+            // Copy the mesh offsets and geometry data to the upload buffers
+            UINT primitiveOffset = 0;
+            D3D12_RANGE readRange = {};
+            D3DCHECK(resources.meshOffsetsRBUpload->Map(0, &readRange, reinterpret_cast<void**>(&resources.meshOffsetsRBPtr)));
+            D3DCHECK(resources.geometryDataRBUpload->Map(0, &readRange, reinterpret_cast<void**>(&resources.geometryDataRBPtr)));
+
+            UINT8* meshOffsetsAddress = resources.meshOffsetsRBPtr;
+            UINT8* geometryDataAddress = resources.geometryDataRBPtr;
             for (UINT meshIndex = 0; meshIndex < static_cast<UINT>(scene.meshes.size()); meshIndex++)
             {
-                const Scenes::Mesh mesh = scene.meshes[meshIndex];
-                for (UINT primitiveIndex = 0; primitiveIndex < static_cast<UINT>(scene.meshes[meshIndex].primitives.size()); primitiveIndex++)
+                // Get the mesh
+                const Scenes::Mesh& mesh = scene.meshes[meshIndex];
+
+                // Copy the mesh offset to the upload buffer
+                UINT meshOffset = primitiveOffset * sizeof(GeometryData);
+                memcpy(meshOffsetsAddress, &meshOffset, sizeof(UINT));
+                meshOffsetsAddress += sizeof(UINT);
+
+                for (UINT primitiveIndex = 0; primitiveIndex < static_cast<UINT>(mesh.primitives.size()); primitiveIndex++)
                 {
-                    const Scenes::MeshPrimitive& primitive = scene.meshes[meshIndex].primitives[primitiveIndex];
-                    memcpy(resources.materialIndicesRBPtr + offset, &primitive.material, sizeof(UINT));
-                    offset += sizeof(UINT);
+                    // Get the mesh primitive and copy its material index to the upload buffer
+                    const Scenes::MeshPrimitive& primitive = mesh.primitives[primitiveIndex];
+
+                    GeometryData data;
+                    data.materialIndex = primitive.material;
+                    data.indexByteAddress = primitive.indexByteOffset;
+                    data.vertexByteAddress = primitive.vertexByteOffset;
+                    memcpy(geometryDataAddress, &data, sizeof(GeometryData));
+
+                    geometryDataAddress += sizeof(GeometryData);
+                    primitiveOffset++;
                 }
             }
-            resources.materialIndicesRBUpload->Unmap(0, nullptr);
+            resources.meshOffsetsRBUpload->Unmap(0, nullptr);
+            resources.geometryDataRBUpload->Unmap(0, nullptr);
 
-            // Schedule a copy of the upload buffer to the device buffer
-            d3d.cmdList->CopyBufferRegion(resources.materialIndicesRB, 0, resources.materialIndicesRBUpload, 0, size);
+            // Schedule a copy of the upload buffers to the device buffers
+            d3d.cmdList->CopyBufferRegion(resources.meshOffsetsRB, 0, resources.meshOffsetsRBUpload, 0, meshOffsetsSize);
+            d3d.cmdList->CopyBufferRegion(resources.geometryDataRB, 0, resources.geometryDataRBUpload, 0, geometryDataSize);
 
-            // Transition the default heap resource to generic read after the copy is complete
-            barrier.Transition.pResource = resources.materialIndicesRB;
+            // Transition the default heap resources to generic read after the copies are complete
+            std::vector<D3D12_RESOURCE_BARRIER> barriers;
 
-            d3d.cmdList->ResourceBarrier(1, &barrier);
+            D3D12_RESOURCE_BARRIER barrier = {};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-            // Add the material indices ByteAddressBuffer SRV to the descriptor heap
-            srvDesc = {};
+            barrier.Transition.pResource = resources.meshOffsetsRB;
+            barriers.push_back(barrier);
+            barrier.Transition.pResource = resources.geometryDataRB;
+            barriers.push_back(barrier);
+
+            d3d.cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+
+            // Add the mesh offsets ByteAddressBuffer SRV to the descriptor heap
+            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
             srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
             srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-            srvDesc.Buffer.NumElements = scene.numMeshPrimitives;
             srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
             srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-            handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_MATERIAL_INDICES * resources.srvDescHeapEntrySize);
-            d3d.device->CreateShaderResourceView(resources.materialIndicesRB, &srvDesc, handle);
+            D3D12_CPU_DESCRIPTOR_HANDLE handle;
+            srvDesc.Buffer.NumElements = static_cast<UINT>(scene.meshes.size());
+            handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_MESH_OFFSETS * resources.srvDescHeapEntrySize);
+            d3d.device->CreateShaderResourceView(resources.meshOffsetsRB, &srvDesc, handle);
+
+            // Add the geometry (mesh primitive) data ByteAddressBuffer SRV to the descriptor heap
+            srvDesc.Buffer.NumElements = scene.numMeshPrimitives * (sizeof(GeometryData) / sizeof(UINT));
+            handle.ptr = resources.srvDescHeapStart.ptr + (DescriptorHeapOffsets::SRV_GEOMETRY_DATA * resources.srvDescHeapEntrySize);
+            d3d.device->CreateShaderResourceView(resources.geometryDataRB, &srvDesc, handle);
 
             return true;
         }
@@ -1403,7 +1560,7 @@ namespace Graphics
         bool CreateSceneInstancesBuffer(Globals& d3d, Resources& resources, const std::vector<D3D12_RAYTRACING_INSTANCE_DESC>& instances)
         {
             // Create the TLAS instance upload buffer resource
-            UINT size = static_cast<UINT>(instances.size()) * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
+            UINT size = ALIGN(D3D12_RAYTRACING_INSTANCE_DESCS_BYTE_ALIGNMENT, static_cast<UINT>(instances.size()) * sizeof(D3D12_RAYTRACING_INSTANCE_DESC));
             BufferDesc desc = { size, 0, EHeapType::UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_FLAG_NONE };
             if (!CreateBuffer(d3d, desc, &resources.tlas.instancesUpload)) return false;
         #ifdef GFX_NAME_OBJECTS
@@ -1453,124 +1610,99 @@ namespace Graphics
         }
 
         /**
-         * Create the scene geometry index buffers.
+         * Create the scene mesh index buffers.
          */
         bool CreateSceneIndexBuffers(Globals& d3d, Resources& resources, const Scenes::Scene& scene)
         {
-            resources.sceneIBs.resize(scene.numMeshPrimitives);
-            resources.sceneIBUploadBuffers.resize(scene.numMeshPrimitives);
-            resources.sceneIBViews.resize(scene.numMeshPrimitives);
-            for (UINT meshIndex = 0; meshIndex < static_cast<UINT>(scene.meshes.size()); meshIndex++)
+            UINT numMeshes = static_cast<UINT>(scene.meshes.size());
+
+            resources.sceneIBs.resize(numMeshes);
+            resources.sceneIBUploadBuffers.resize(numMeshes);
+            resources.sceneIBViews.resize(numMeshes);
+            for (UINT meshIndex = 0; meshIndex < numMeshes; meshIndex++)
             {
                 // Get the mesh
-                const Scenes::Mesh mesh = scene.meshes[meshIndex];
-                for (UINT primitiveIndex = 0; primitiveIndex < static_cast<UINT>(mesh.primitives.size()); primitiveIndex++)
-                {
-                    // Get the mesh primitive
-                    const Scenes::MeshPrimitive primitive = mesh.primitives[primitiveIndex];
+                const Scenes::Mesh& mesh = scene.meshes[meshIndex];
 
-                    // Create the index buffer and copy the data to the GPU
-                    if (!CreateIndexBuffer(d3d, primitive,
-                        &resources.sceneIBs[primitive.index],
-                        &resources.sceneIBUploadBuffers[primitive.index],
-                        resources.sceneIBViews[primitive.index])) return false;
-                #ifdef GFX_NAME_OBJECTS
-                    std::string name = "IB: ";
-                    name.append(mesh.name.c_str());
-                    name.append(", Primitive: ");
-                    name.append(std::to_string(primitiveIndex));
-                    std::wstring n = std::wstring(name.begin(), name.end());
-                    resources.sceneIBs[primitive.index]->SetName(n.c_str());
-                #endif
+                // Create the index buffer and copy the index data to the GPU
+                if (!CreateIndexBuffer(d3d, mesh,
+                    &resources.sceneIBs[meshIndex],
+                    &resources.sceneIBUploadBuffers[meshIndex],
+                    resources.sceneIBViews[meshIndex])) return false;
+            #ifdef GFX_NAME_OBJECTS
+                std::string name = "IB: " + mesh.name;
+                std::wstring n = std::wstring(name.begin(), name.end());
+                resources.sceneIBs[meshIndex]->SetName(n.c_str());
+            #endif
 
-                    // Add the index buffer SRV to the descriptor heap
-                    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-                    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-                    srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-                    srvDesc.Buffer.NumElements = static_cast<UINT>(primitive.indices.size());
-                    srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
-                    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                // Add the index buffer SRV to the descriptor heap
+                D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+                srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+                srvDesc.Buffer.NumElements = mesh.numIndices;
+                srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+                srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-                    D3D12_CPU_DESCRIPTOR_HANDLE handle;
-                    handle.ptr = resources.srvDescHeapStart.ptr + ((DescriptorHeapOffsets::SRV_INDICES + (primitive.index * 2)) * resources.srvDescHeapEntrySize);
-                    d3d.device->CreateShaderResourceView(resources.sceneIBs[primitive.index], &srvDesc, handle);
-                }
+                D3D12_CPU_DESCRIPTOR_HANDLE handle;
+                handle.ptr = resources.srvDescHeapStart.ptr + ((DescriptorHeapOffsets::SRV_INDICES + (meshIndex * 2)) * resources.srvDescHeapEntrySize);
+                d3d.device->CreateShaderResourceView(resources.sceneIBs[meshIndex], &srvDesc, handle);
             }
             return true;
         }
 
         /**
-         * Create the scene geometry vertex buffers.
+         * Create the scene mesh vertex buffers.
          */
         bool CreateSceneVertexBuffers(Globals& d3d, Resources& resources, const Scenes::Scene& scene)
         {
-            resources.sceneVBs.resize(scene.numMeshPrimitives);
-            resources.sceneVBUploadBuffers.resize(scene.numMeshPrimitives);
-            resources.sceneVBViews.resize(scene.numMeshPrimitives);
-            for (UINT meshIndex = 0; meshIndex < static_cast<UINT>(scene.meshes.size()); meshIndex++)
+            UINT numMeshes = static_cast<UINT>(scene.meshes.size());
+
+            resources.sceneVBs.resize(numMeshes);
+            resources.sceneVBUploadBuffers.resize(numMeshes);
+            resources.sceneVBViews.resize(numMeshes);
+            for (UINT meshIndex = 0; meshIndex < numMeshes; meshIndex++)
             {
                 // Get the mesh
-                const Scenes::Mesh mesh = scene.meshes[meshIndex];
-                for (UINT primitiveIndex = 0; primitiveIndex < static_cast<UINT>(mesh.primitives.size()); primitiveIndex++)
-                {
-                    // Get the mesh primitive
-                    const Scenes::MeshPrimitive primitive = mesh.primitives[primitiveIndex];
+                const Scenes::Mesh& mesh = scene.meshes[meshIndex];
 
-                    // Create the vertex buffer and copy the data to the GPU
-                    if (!CreateVertexBuffer(d3d, primitive,
-                        &resources.sceneVBs[primitive.index],
-                        &resources.sceneVBUploadBuffers[primitive.index],
-                        resources.sceneVBViews[primitive.index])) return false;
-                #ifdef GFX_NAME_OBJECTS
-                    std::string name = "VB: ";
-                    name.append(mesh.name.c_str());
-                    name.append(", Primitive: ");
-                    name.append(std::to_string(primitiveIndex));
-                    std::wstring n = std::wstring(name.begin(), name.end());
-                    resources.sceneVBs[primitive.index]->SetName(n.c_str());
-                #endif
+                // Create the vertex buffer and copy the data to the GPU
+                if (!CreateVertexBuffer(d3d, mesh,
+                    &resources.sceneVBs[meshIndex],
+                    &resources.sceneVBUploadBuffers[meshIndex],
+                    resources.sceneVBViews[meshIndex])) return false;
+            #ifdef GFX_NAME_OBJECTS
+                std::string name = "VB: " + mesh.name;
+                std::wstring n = std::wstring(name.begin(), name.end());
+                resources.sceneVBs[meshIndex]->SetName(n.c_str());
+            #endif
 
-                    // Add the vertex buffer SRV to the descriptor heap
-                    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-                    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-                    srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-                    srvDesc.Buffer.NumElements = (sizeof(Vertex) * static_cast<UINT>(primitive.vertices.size())) / 4;
-                    srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
-                    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                // Add the vertex buffer SRV to the descriptor heap
+                D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+                srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+                srvDesc.Buffer.NumElements = (sizeof(Vertex) * mesh.numVertices) / 4;
+                srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+                srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-                    D3D12_CPU_DESCRIPTOR_HANDLE handle;
-                    handle.ptr = resources.srvDescHeapStart.ptr + ((DescriptorHeapOffsets::SRV_VERTICES + (primitive.index * 2)) * resources.srvDescHeapEntrySize);
-                    d3d.device->CreateShaderResourceView(resources.sceneVBs[primitive.index], &srvDesc, handle);
-                }
+                D3D12_CPU_DESCRIPTOR_HANDLE handle;
+                handle.ptr = resources.srvDescHeapStart.ptr + ((DescriptorHeapOffsets::SRV_VERTICES + (meshIndex * 2)) * resources.srvDescHeapEntrySize);
+                d3d.device->CreateShaderResourceView(resources.sceneVBs[meshIndex], &srvDesc, handle);
             }
             return true;
         }
 
         /**
-         * Create the scene's bottom level acceleration structures.
+         * Create the scene's bottom level acceleration structure(s).
          */
         bool CreateSceneBLAS(Globals& d3d, Resources& resources, const Scenes::Scene& scene)
         {
-            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-
-            // Describe the BLAS geometry. Each mesh primitive populates a BLAS.
-            resources.blas.resize(scene.numMeshPrimitives);
+            // Build a BLAS for each mesh
+            resources.blas.resize(scene.meshes.size());
             for (UINT meshIndex = 0; meshIndex < static_cast<UINT>(scene.meshes.size()); meshIndex++)
             {
-                // Get the mesh
+                // Get the mesh and create its BLAS
                 const Scenes::Mesh mesh = scene.meshes[meshIndex];
-                for (UINT primitiveIndex = 0; primitiveIndex < static_cast<UINT>(mesh.primitives.size()); primitiveIndex++)
-                {
-                    // Get the mesh primitive
-                    const Scenes::MeshPrimitive primitive = mesh.primitives[primitiveIndex];
-
-                #ifdef GFX_NAME_OBJECTS
-                    std::string debugName = "BLAS: " + mesh.name + ", Primitive: " + std::to_string(primitiveIndex);
-                    if (!CreateBLAS(d3d, resources, primitive, debugName)) return false;
-                #else
-                    if (!CreateBLAS(d3d, resources, primitive)) return false;
-                #endif
-                }
+                if (!CreateBLAS(d3d, resources, mesh)) return false;
             }
 
             // Wait for the BLAS builds to complete
@@ -1591,32 +1723,23 @@ namespace Graphics
             std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instances;
             for (size_t instanceIndex = 0; instanceIndex < scene.instances.size(); instanceIndex++)
             {
-                const Scenes::MeshInstance instance = scene.instances[instanceIndex];
-                const Scenes::Mesh mesh = scene.meshes[instance.meshIndex];
-                for (size_t primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); primitiveIndex++)
-                {
-                    const Scenes::MeshPrimitive primitive = mesh.primitives[primitiveIndex];
+                // Get the mesh instance
+                const Scenes::MeshInstance& instance = scene.instances[instanceIndex];
 
-                    // Describe the mesh primitive instance
-                    D3D12_RAYTRACING_INSTANCE_DESC desc = {};
-                    desc.InstanceID = primitive.index;          // For indexing into the MeshPrimitives and MaterialIndices arrays. Requires 1 MeshPrimitive per BLAS.
-                    desc.InstanceMask = 0xFF;
-                    desc.AccelerationStructure = resources.blas[primitive.index].as->GetGPUVirtualAddress();
-                #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
-                    desc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE;
-                #endif
+                // Describe the mesh instance
+                D3D12_RAYTRACING_INSTANCE_DESC desc = {};
+                desc.InstanceID = instance.meshIndex; // quantized to 24-bits
+                desc.InstanceMask = 0xFF;
+                desc.AccelerationStructure = resources.blas[instance.meshIndex].as->GetGPUVirtualAddress();
+            #if COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT || COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP
+                desc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE;
+            #endif
+                desc.Flags |= D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
 
-                    // Disable front or back face culling for meshes with double sided materials
-                    if (scene.materials[primitive.material].data.doubleSided)
-                    {
-                        desc.Flags |= D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
-                    }
+                // Write the instance transform
+                memcpy(desc.Transform, instance.transform, sizeof(XMFLOAT4) * 3);
 
-                    // Write the instance transform
-                    memcpy(desc.Transform, instance.transform, sizeof(XMFLOAT4) * 3);
-
-                    instances.push_back(desc);
-                }
+                instances.push_back(desc);
             }
 
             // Create the TLAS instances buffer
@@ -1741,14 +1864,23 @@ namespace Graphics
             // Create a command allocator
             ID3D12CommandAllocator* commandAlloc = nullptr;
             D3DCHECK(d3d.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAlloc)));
+        #ifdef GFX_NAME_OBJECTS
+            d3d.cmdList->SetName(L"WriteResourceToDisk Command Allocator");
+        #endif
 
             // Create a command list
             ID3D12GraphicsCommandList* commandList = nullptr;
             D3DCHECK(d3d.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAlloc, nullptr, IID_PPV_ARGS(&commandList)));
+        #ifdef GFX_NAME_OBJECTS
+            d3d.cmdList->SetName(L"WriteResourceToDisk Command List");
+        #endif
 
             // Create fence
             ID3D12Fence* fence = nullptr;
             D3DCHECK(d3d.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
+        #ifdef GFX_NAME_OBJECTS
+            d3d.cmdList->SetName(L"WriteResourceToDisk Fence");
+        #endif
 
             // Get the resource descriptor
             const D3D12_RESOURCE_DESC desc = pResource->GetDesc();
@@ -1910,7 +2042,7 @@ namespace Graphics
                 glfwSetWindowMonitor(d3d.window, monitor, d3d.x, d3d.y, d3d.windowWidth, d3d.windowHeight, d3d.vsync ? 60 : GLFW_DONT_CARE);
             }
 
-            d3d.fullscreen = !d3d.fullscreen;
+            d3d.fullscreen = ~d3d.fullscreen;
             d3d.fullscreenChanged = false;
             return true;
         }
@@ -1931,6 +2063,10 @@ namespace Graphics
             }
         #endif
 
+        #if GFX_NVAPI
+            NvAPI_Initialize();
+        #endif
+
             // Create a DXGI factory
             if (FAILED(CreateDXGIFactory2(0, IID_PPV_ARGS(&d3d.factory)))) return false;
 
@@ -1938,7 +2074,7 @@ namespace Graphics
             if (!CheckTearingSupport(d3d)) return false;
 
             // Create the device
-            return CreateDeviceInternal(d3d.device, d3d.factory, config);
+            return CreateDeviceInternal(d3d, config);
         }
 
         /**
@@ -1995,6 +2131,10 @@ namespace Graphics
             else if (info.heap == EHeapType::UPLOAD)
             {
                 heapProps = uploadHeapProps;
+            }
+            else if (info.heap == EHeapType::READBACK)
+            {
+                heapProps = readbackHeapProps;
             }
 
             // Create the buffer resource
@@ -2285,11 +2425,24 @@ namespace Graphics
             pipelineDesc.NumSubobjects = static_cast<UINT>(subobjects.size());
             pipelineDesc.pSubobjects = subobjects.data();
 
+        #if GFX_NVAPI
+            // Enable NVAPI extension shader slot
+            NvAPI_Status status = NvAPI_D3D12_SetNvShaderExtnSlotSpace(device, NV_SHADER_EXTN_SLOT, NV_SHADER_EXTN_REGISTER_SPACE);
+            assert(status == NVAPI_OK);
+        #endif
+
             // Create the RT Pipeline State Object (RTPSO)
             D3DCHECK(device->CreateStateObject(&pipelineDesc, IID_PPV_ARGS(rtpso)));
 
             // Get the RT Pipeline State Object properties
             D3DCHECK((*rtpso)->QueryInterface(IID_PPV_ARGS(rtpsoProps)));
+
+        #if GFX_NVAPI
+            // Disable NVAPI extension shader slot after the state object is created
+            status = NvAPI_D3D12_SetNvShaderExtnSlotSpace(device, ~0u, 0);
+            assert(status == NVAPI_OK);
+        #endif
+
             return true;
         }
 
@@ -2333,7 +2486,8 @@ namespace Graphics
             // Create scene specific resources
             CHECK(CreateSceneCameraConstantBuffer(d3d, resources, scene), "create scene camera constant buffer!", log);
             CHECK(CreateSceneLightsBuffer(d3d, resources, scene), "create scene lights structured buffer!", log);
-            CHECK(CreateSceneMaterialsBuffers(d3d, resources, scene), "create scene materials buffers!", log);
+            CHECK(CreateSceneMaterialsBuffer(d3d, resources, scene), "create scene materials buffer!", log);
+            CHECK(CreateSceneMaterialIndexingBuffers(d3d, resources, scene), "create scene material indexing buffers!", log);
             CHECK(CreateSceneIndexBuffers(d3d, resources, scene), "create scene index buffers!", log);
             CHECK(CreateSceneVertexBuffers(d3d, resources, scene), "create scene vertex buffers!", log);
             CHECK(CreateSceneBLAS(d3d, resources, scene), "create scene bottom level acceleration structures!", log);
@@ -2347,7 +2501,8 @@ namespace Graphics
 
             // Release upload buffers
             SAFE_RELEASE(resources.materialsSTBUpload);
-            SAFE_RELEASE(resources.materialIndicesRBUpload);
+            SAFE_RELEASE(resources.meshOffsetsRBUpload);
+            SAFE_RELEASE(resources.geometryDataRBUpload);
             SAFE_RELEASE(resources.tlas.instancesUpload);
 
             // Release scene geometry upload buffers

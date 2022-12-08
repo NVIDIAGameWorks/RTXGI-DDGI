@@ -36,6 +36,8 @@
                 #define RAY_DATA_SPACE 0
                 #if RTXGI_DDGI_BLEND_RADIANCE
                     #define OUTPUT_REGISTER 2
+                    #define PROBE_VARIABILITY_REGISTER 5
+                    #define PROBE_VARIABILITY_SPACE 0
                 #else
                     #define OUTPUT_REGISTER 3
                 #endif
@@ -51,6 +53,8 @@
                 #define RAY_DATA_SPACE space1
                 #if RTXGI_DDGI_BLEND_RADIANCE
                     #define OUTPUT_REGISTER u1
+                    #define PROBE_VARIABILITY_REGISTER u4
+                    #define PROBE_VARIABILITY_SPACE space1
                 #else
                     #define OUTPUT_REGISTER u2
                 #endif
@@ -159,6 +163,24 @@
             #ifndef PROBE_DATA_SPACE
                 #error Required define PROBE_DATA_SPACE is not defined for ProbeBlendingCS.hlsl!
             #endif
+
+
+            #if RTXGI_DDGI_BLEND_RADIANCE
+            // PROBE_VARIABILITY_REGISTER and PROBE_VARIABILITY_SPACE must be passed in as defines at shader compilation time *when not using reflection*
+            // and when probe classification is enabled.
+            // These defines specify the shader register and space used for the DDGIVolume probe data texture.
+            // Ex: PROBE_VARIABILITY_REGISTER u2
+            // Ex: PROBE_VARIABILITY_SPACE space1
+
+            #ifndef PROBE_VARIABILITY_REGISTER
+                #error Required define PROBE_VARIABILITY_REGISTER is not defined for ProbeBlendingCS.hlsl!
+            #endif
+
+            #ifndef PROBE_VARIABILITY_SPACE
+                #error Required define PROBE_VARIABILITY_SPACE is not defined for ProbeBlendingCS.hlsl!
+            #endif
+
+            #endif // RTXGI_DDGI_BLEND_RADIANCE
 
         #endif // RTXGI_DDGI_BINDLESS_RESOURCES
     #endif // !RTXGI_DDGI_SHADER_REFLECTION

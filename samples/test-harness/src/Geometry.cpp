@@ -126,10 +126,14 @@ namespace Geometry
     // Public Functions
     //----------------------------------------------------------------------------------------------------------
 
-    void CreateSphere(uint32_t latitudes, uint32_t longitudes, Scenes::MeshPrimitive& mesh)
+    void CreateSphere(uint32_t latitudes, uint32_t longitudes, Scenes::Mesh& mesh)
     {
-        mesh.vertices = GetSphereVertices(latitudes, longitudes);
-        mesh.indices = GetSphereIndices(latitudes, longitudes, static_cast<uint32_t>(mesh.vertices.size()));
+        Scenes::MeshPrimitive& primitive = mesh.primitives.emplace_back();
+        primitive.vertices = GetSphereVertices(latitudes, longitudes);
+        primitive.indices = GetSphereIndices(latitudes, longitudes, static_cast<uint32_t>(primitive.vertices.size()));
+
+        mesh.numVertices = static_cast<int>(primitive.vertices.size());
+        mesh.numIndices = static_cast<int>(primitive.indices.size());
     }
 
 }

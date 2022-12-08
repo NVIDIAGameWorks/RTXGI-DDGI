@@ -209,7 +209,7 @@ namespace Graphics
         /**
          * Converts a number to formatted text.
          */
-        void AddQuantityText(int value, std::string message)
+        void AddIntQuantityText(int value, std::string message)
         {
             // Format text
             std::string number = std::to_string(value);
@@ -222,12 +222,27 @@ namespace Graphics
             ImGui::Text("%s", message.c_str());
         }
 
+        void AddFloatQuantityText(float value, std::string message)
+        {
+            // Format text
+            std::string number = std::to_string(value);
+
+            ImGui::Text("%s", std::string(number).c_str());
+            ImGui::SameLine();
+            ImGui::Text("%s", message.c_str());
+        }
+
         /**
          * Creates the main debug window.
          */
         void CreateDebugWindow(Graphics::Globals& gfx, Configs::Config& config, Inputs::Input& input, Scenes::Scene& scene, std::vector<DDGIVolumeBase*>& volumes)
         {
             SetupStyle();
+
+            bool skyChanged = false;
+            bool anyLightChanged = false;
+            std::vector<bool> volumeChanged;
+            volumeChanged.resize(volumes.size());
 
             // Size the debug window based on the application height
             ImGui::SetNextWindowSize(ImVec2(debugWindowWidth, gfx.height - 40.f));
@@ -381,11 +396,11 @@ namespace Graphics
             if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_CollapsingHeader))
             {
                 ImGui::Text("%s", scene.name.c_str());
-                AddQuantityText(static_cast<int>(scene.materials.size()), "Materials");
-                AddQuantityText(static_cast<int>(scene.meshes.size()), "Mesh");
-                AddQuantityText(static_cast<int>(scene.numMeshPrimitives), "Mesh Primitives");
-                AddQuantityText(static_cast<int>(scene.instances.size()), "Mesh Instances");
-                AddQuantityText(static_cast<int>(scene.numTriangles), "Triangles (unique, not instanced)");
+                AddIntQuantityText(static_cast<int>(scene.materials.size()), "Materials");
+                AddIntQuantityText(static_cast<int>(scene.meshes.size()), "Mesh");
+                AddIntQuantityText(static_cast<int>(scene.numMeshPrimitives), "Mesh Primitives");
+                AddIntQuantityText(static_cast<int>(scene.instances.size()), "Mesh Instances");
+                AddIntQuantityText(static_cast<int>(scene.numTriangles), "Triangles (unique, not instanced)");
             }
             PopColorStyle();
 
@@ -441,10 +456,11 @@ namespace Graphics
                 float3 skyColor = { config.scene.skyColor.x, config.scene.skyColor.y, config.scene.skyColor.z };
                 if (AddColorSlider(skyColor, "##skyColor", "Adjust the color of the sky"))
                 {
+                    skyChanged = true;
                     config.scene.skyColor = { skyColor.x, skyColor.y, skyColor.z };
                 }
 
-                AddSlider(config.scene.skyIntensity, 0.f, 8.f, 0.1f, "##sceneSkyIntensity", "Sky Intensity", "Adjust the intensity of the sky light spot light");
+                skyChanged |= AddSlider(config.scene.skyIntensity, 0.f, 8.f, 0.1f, "##sceneSkyIntensity", "Sky Intensity", "Adjust the intensity of the sky light spot light");
             }
             PopColorStyle();
 
@@ -487,6 +503,7 @@ namespace Graphics
                                 scene.lights[0].dirty = true;
                                 scene.lights[0].data.power = light.power;
                             }
+                            anyLightChanged = anyLightChanged || scene.lights[0].dirty;
                         }
                         else
                         {
@@ -570,6 +587,7 @@ namespace Graphics
                                 scene.lights[currentItem].dirty = true;
                                 scene.lights[currentItem].data.penumbraAngle = light.penumbraAngle;
                             }
+                            anyLightChanged = anyLightChanged || scene.lights[currentItem].dirty;
                         }
                         else
                         {
@@ -612,7 +630,7 @@ namespace Graphics
                             }
 
                             // Color
-                             if (AddColorSlider(light.color, "##pointLightColor", "Adjust the color of the point light"))
+                            if (AddColorSlider(light.color, "##pointLightColor", "Adjust the color of the point light"))
                             {
                                 scene.lights[currentItem].dirty = true;
                                 scene.lights[currentItem].data.color = light.color;
@@ -631,6 +649,8 @@ namespace Graphics
                                 scene.lights[currentItem].dirty = true;
                                 scene.lights[currentItem].data.power = light.power;
                             }
+
+                            anyLightChanged = anyLightChanged || scene.lights[currentItem].dirty;
                         }
                         else
                         {
@@ -641,6 +661,7 @@ namespace Graphics
                     ImGui::Dummy(ImVec2(0, 3.f));
                     ImGui::EndTabBar();
                 }
+
             }
             PopColorStyle();
 
@@ -662,6 +683,15 @@ namespace Graphics
 
                     ImGui::PushItemWidth(ImGui::GetWindowWidth());
 
+                    ImGui::Checkbox("Antialiasing", &config.pathTrace.antialiasing);
+                    ImGui::SameLine(); AddQuestionMark("Enable or disable antialiasing");
+
+                    if (gfx.supportsShaderExecutionReordering)
+                    {
+                        ImGui::Checkbox("Shader Execution Reordering", &config.pathTrace.shaderExecutionReordering);
+                        ImGui::SameLine(); AddQuestionMark("Enable or disable shader execution reordering (RTX 4000 series)");
+                    }
+
                     ImGui::DragFloat("##ptNormalBias", &config.pathTrace.rayNormalBias, 0.0001f, 0.f, 10.f, "Ray Normal Bias: %.4f");
                     AddHoverToolTip("A world-space distance along the surface normal, used to avoid self intersection");
 
@@ -673,9 +703,6 @@ namespace Graphics
 
                     ImGui::DragInt("##ptNumBounces", &numBounces, 1, 1, 20, "Bounces Per Path: %.i");
                     AddHoverToolTip("The maximum number of bounces allowed per path");
-
-                    ImGui::Checkbox("Antialiasing", &config.pathTrace.antialiasing);
-                    ImGui::SameLine(); AddQuestionMark("Enable or disable antialiasing");
 
                     config.pathTrace.numBounces = static_cast<uint32_t>(numBounces);
                     config.pathTrace.samplesPerPixel = static_cast<uint32_t>(numPaths);
@@ -714,6 +741,12 @@ namespace Graphics
                     }
                     ImGui::SameLine(); AddQuestionMark("Toggle inserting DDGI performance markers in the graphics command list.");
 
+                    if (gfx.supportsShaderExecutionReordering)
+                    {
+                        ImGui::Checkbox("Shader Execution Reordering", &config.ddgi.shaderExecutionReordering);
+                        ImGui::SameLine(); AddQuestionMark("Enable or disable shader execution reordering (RTX 4000 series)");
+                    }
+
                     ImGui::Checkbox("Show Indirect Lighting", &config.ddgi.showIndirect);
                     ImGui::SameLine(); AddQuestionMark("Show only the indirect lighting contribution. Press '2' on the keyboard for a shortcut.");
 
@@ -733,6 +766,7 @@ namespace Graphics
 
                         AddSlider(selectedVolumeConfig.probeIrradianceScale, 0.f, 10.f, 0.1f, "##irradianceTextureScale", "Irradiance Texture Scale", "Adjust the display size of the volume's irradiance texture data");
                         AddSlider(selectedVolumeConfig.probeDistanceScale, 0.f, 10.f, 0.1f, "##distanceTextureScale", "Distance Texture Scale", "Adjust the display size of the volume's distance texture data");
+                        AddSlider(selectedVolumeConfig.probeVariabilityScale, 0.f, 10.f, 0.1f, "##variTextureScale", "Variability Texture Scale", "Adjust the display size of the volume's variability texture data");
 
                         if (selectedVolumeConfig.probeClassificationEnabled)
                         {
@@ -770,18 +804,23 @@ namespace Graphics
 
                     std::stringstream msg;
                     msg << "Probes (" << std::to_string(desc.probeCounts.x) << ", " << std::to_string(desc.probeCounts.y) << ", " << std::to_string(desc.probeCounts.z) << ")";
-                    AddQuantityText(volume->GetNumProbes(), msg.str());
-                    AddQuantityText(desc.probeNumRays, "Rays Per Probe");
-                    AddQuantityText(desc.probeNumRays * volume->GetNumProbes(), "Probe Rays Per Frame (max)");
-                    AddQuantityText(desc.probeNumRays * volume->GetNumProbes() * 2, "Rays Per Frame (max) - includes shadow rays");
+                    AddIntQuantityText(volume->GetNumProbes(), msg.str());
+                    AddIntQuantityText(desc.probeNumRays, "Rays Per Probe");
+                    AddIntQuantityText(desc.probeNumRays * volume->GetNumProbes(), "Probe Rays Per Frame (max)");
+                    AddIntQuantityText(desc.probeNumRays * volume->GetNumProbes() * 2, "Rays Per Frame (max) - includes shadow rays");
+                    if (volume->GetProbeVariabilityEnabled())
+                    {
+                        AddFloatQuantityText(volume->GetVolumeAverageVariability(), "Probe Variability Average");
+                    }
 
                     int memory = (int)ceil((float)volume->GetGPUMemoryUsedInBytes() / 1024.f);
-                    AddQuantityText(memory, "KiB of GPU memory used");
+                    AddIntQuantityText(memory, "KiB of GPU memory used");
 
                     // Clear probes button
                     if (ImGui::Button("Clear Probes"))
                     {
                         config.ddgi.volumes[config.ddgi.selectedVolume].clearProbes = 1;
+                        volumeChanged[config.ddgi.selectedVolume] = true;
                     }
 
                     if (ImGui::Checkbox("Insert Performance Markers##ddgivolume-perf-markers", &config.ddgi.volumes[config.ddgi.selectedVolume].insertPerfMarkers))
@@ -909,19 +948,27 @@ namespace Graphics
                         ImGui::Unindent(20.f);
                     }
 
+                    // Probe Variability options
+                    {
+                        if (ImGui::Checkbox("Probe Variability", &config.ddgi.volumes[config.ddgi.selectedVolume].probeVariabilityEnabled))
+                        {
+                            volume->SetProbeVariabilityEnabled(config.ddgi.volumes[config.ddgi.selectedVolume].probeVariabilityEnabled);
+                        }
+                        ImGui::SameLine(); AddQuestionMark("Probe variability tracks the coefficient of variation of the volume over time. Users can use this value as a proxy for how converged a volume is.");
+                        
+                        if (config.ddgi.volumes[config.ddgi.selectedVolume].probeVariabilityEnabled)
+                        {
+                            AddSlider(config.ddgi.volumes[config.ddgi.selectedVolume].probeVariabilityThreshold, 0.f, 1.f, 0.001f, "##variTextureThreshold", "Variability Threshold", "Variability threshold below which the volume is considered converged and will stop updates.");
+                        }
+                    }
+
                     // Infinite Scrolling options
                     {
-                        bool value = (volume->GetMovementType() == EDDGIVolumeMovementType::Scrolling);
-                        if (ImGui::Checkbox("Infinite Scrolling Volume", &value))
+                        bool type = (volume->GetMovementType() == EDDGIVolumeMovementType::Scrolling);
+                        if (ImGui::Checkbox("Infinite Scrolling Volume", &type))
                         {
-                            if (value)
-                            {
-                                volume->SetMovementType(EDDGIVolumeMovementType::Scrolling);
-                            }
-                            else
-                            {
-                                volume->SetMovementType(EDDGIVolumeMovementType::Default);
-                            }
+                            if (type) volume->SetMovementType(EDDGIVolumeMovementType::Scrolling);
+                            else volume->SetMovementType(EDDGIVolumeMovementType::Default);
                         }
                         ImGui::SameLine(); AddQuestionMark("Infinite scrolling volumes reuse probes as the volume moves by moving \"planes\" of probes from one side of the volume to the other, in the direction of movement. This method keeps all probes stationary for as long as possible to maximize irradiance stability.");
 
@@ -945,6 +992,7 @@ namespace Graphics
                         if (AddFloat3Slider(desc.origin, step, -max, max, "##volumeOrigin", "Origin", "Adjust the world-space position of the DDGIVolume's origin"))
                         {
                             volume->SetOrigin(desc.origin);
+                            volumeChanged[config.ddgi.selectedVolume] = true;
                         }
 
                         // Rotation
@@ -955,6 +1003,7 @@ namespace Graphics
                             desc.eulerAngles.y = rtxgi::DegreesToRadians(degrees.y);
                             desc.eulerAngles.z = rtxgi::DegreesToRadians(degrees.z);
                             volume->SetEulerAngles(desc.eulerAngles);
+                            volumeChanged[config.ddgi.selectedVolume] = true;
                         }
                     }
                     else if(volume->GetMovementType() == EDDGIVolumeMovementType::Scrolling)
@@ -964,6 +1013,7 @@ namespace Graphics
                         if (AddFloat3Slider(anchor, step, -10000.f, 10000.f, "##volumeScrollingAnchor", "Scrolling Anchor", "The world-space position of the infinite scrolling volume tries to move its origin to"))
                         {
                             volume->SetScrollAnchor({ anchor.x, anchor.y, anchor.z });
+                            volumeChanged[config.ddgi.selectedVolume] = true;
                         }
                     }
 
@@ -971,6 +1021,7 @@ namespace Graphics
                     if (AddFloat3Slider(desc.probeSpacing, step, 0.f, max, "##volumeProbeSpacing", "Probe Spacing", "Adjust the world-space distance between probes"))
                     {
                         volume->SetProbeSpacing(desc.probeSpacing);
+                        volumeChanged[config.ddgi.selectedVolume] = true;
                     }
 
                     AddTextSeparator();
@@ -1040,6 +1091,18 @@ namespace Graphics
                 }
             }
             PopColorStyle();
+
+
+            // If the sky changed, any light changed, or the volume changed, probe variability data is no longer valid and should be cleared
+            for (uint32_t volumeIndex = 0; volumeIndex < static_cast<uint32_t>(config.ddgi.volumes.size()); volumeIndex++)
+            {
+                Configs::DDGIVolume& volume = config.ddgi.volumes[volumeIndex];
+                if (volume.probeVariabilityEnabled)
+                {
+                    volume.clearProbeVariability = (skyChanged || anyLightChanged || volumeChanged[volumeIndex]);
+                }
+            }
+
 
             // RTAO Options
             PushColorStyle(90, 60, 70);

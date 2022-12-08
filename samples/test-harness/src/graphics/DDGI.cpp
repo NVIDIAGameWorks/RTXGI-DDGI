@@ -51,6 +51,9 @@ namespace Graphics
                     Shaders::AddDefine(shader, L"RTXGI_PUSH_CONSTS_STRUCT_NAME", L"GlobalConstants");                    // specify the struct name of the application's push constants
                     Shaders::AddDefine(shader, L"RTXGI_PUSH_CONSTS_VARIABLE_NAME", L"GlobalConst");                      // specify the variable name of the application's push constants
                     Shaders::AddDefine(shader, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME", L"ddgi_volumeIndex");  // specify the name of the DDGIVolume index field in the application's push constants struct
+                    Shaders::AddDefine(shader, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_X_NAME", L"ddgi_reductionInputSizeX");  // specify the name of the DDGIVolume reduction pass input size fields the application's push constants struct
+                    Shaders::AddDefine(shader, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Y_NAME", L"ddgi_reductionInputSizeY");
+                    Shaders::AddDefine(shader, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME", L"ddgi_reductionInputSizeZ");
                     Shaders::AddDefine(shader, L"VOLUME_CONSTS_REGISTER", L"5");
                     Shaders::AddDefine(shader, L"VOLUME_CONSTS_SPACE", L"0");
                     Shaders::AddDefine(shader, L"VOLUME_RESOURCES_REGISTER", L"6");
@@ -68,6 +71,9 @@ namespace Graphics
                     Shaders::AddDefine(shader, L"OUTPUT_SPACE", L"0");
                     Shaders::AddDefine(shader, L"PROBE_DATA_REGISTER", L"4");
                     Shaders::AddDefine(shader, L"PROBE_DATA_SPACE", L"0");
+                    Shaders::AddDefine(shader, L"PROBE_VARIABILITY_SPACE", L"0");
+                    Shaders::AddDefine(shader, L"PROBE_VARIABILITY_REGISTER", L"5");
+                    Shaders::AddDefine(shader, L"PROBE_VARIABILITY_AVERAGE_REGISTER", L"6");
                 #endif
                 }
                 else // DXIL
@@ -92,6 +98,9 @@ namespace Graphics
                     Shaders::AddDefine(shader, L"OUTPUT_SPACE", L"space1");
                     Shaders::AddDefine(shader, L"PROBE_DATA_REGISTER", L"u3");
                     Shaders::AddDefine(shader, L"PROBE_DATA_SPACE", L"space1");
+                    Shaders::AddDefine(shader, L"PROBE_VARIABILITY_SPACE", L"space1");
+                    Shaders::AddDefine(shader, L"PROBE_VARIABILITY_REGISTER", L"u4");
+                    Shaders::AddDefine(shader, L"PROBE_VARIABILITY_AVERAGE_REGISTER", L"u5");
                 #endif
                 }
             #endif
@@ -121,6 +130,7 @@ namespace Graphics
             std::wstring numIrradianceInteriorTexels = std::to_wstring(volumeDesc.probeNumIrradianceInteriorTexels);
             std::wstring numDistanceTexels = std::to_wstring(volumeDesc.probeNumDistanceTexels);
             std::wstring numDistanceInteriorTexels = std::to_wstring(volumeDesc.probeNumDistanceInteriorTexels);
+            std::wstring waveLaneCount = std::to_wstring(gfx.features.waveLaneCount);
 
             std::wstring root = std::wstring(gfx.shaderCompiler.rtxgi.begin(), gfx.shaderCompiler.rtxgi.end());
 
@@ -236,6 +246,40 @@ namespace Graphics
                 AddCommonShaderDefines(shader2, volumeDesc, spirv);
 
                 CHECK(Shaders::Compile(gfx.shaderCompiler, shader2, true), "load and compile the RTXGI probe classification reset compute shader!\n", log);
+            }
+
+            // Probe variability reduction
+            {
+                Shaders::ShaderProgram& shader = volumeShaders.emplace_back();
+                shader.filepath = root + L"shaders/ddgi/ReductionCS.hlsl";
+                shader.entryPoint = L"DDGIReductionCS";
+                shader.targetProfile = L"cs_6_6";
+                if (spirv) shader.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+
+                // Add common shader defines
+                AddCommonShaderDefines(shader, volumeDesc, spirv);
+
+                // Add shader specific defines
+                Shaders::AddDefine(shader, L"RTXGI_DDGI_PROBE_NUM_INTERIOR_TEXELS", numIrradianceInteriorTexels.c_str());
+                Shaders::AddDefine(shader, L"RTXGI_DDGI_WAVE_LANE_COUNT", waveLaneCount);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader, true), "load and compile the RTXGI reduction compute shader!\n", log);
+            }
+
+            // Extra reduction passes
+            {
+                Shaders::ShaderProgram& shader = volumeShaders.emplace_back();
+                shader.filepath = root + L"shaders/ddgi/ReductionCS.hlsl";
+                shader.entryPoint = L"DDGIExtraReductionCS";
+                shader.targetProfile = L"cs_6_6";
+                if (spirv) shader.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+
+                // Add common shader defines
+                AddCommonShaderDefines(shader, volumeDesc, spirv);
+
+                // Add shader specific defines
+                Shaders::AddDefine(shader, L"RTXGI_DDGI_PROBE_NUM_INTERIOR_TEXELS", numIrradianceInteriorTexels.c_str());
+                Shaders::AddDefine(shader, L"RTXGI_DDGI_WAVE_LANE_COUNT", waveLaneCount);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader, true), "load and compile the RTXGI extra reduction compute shader!\n", log);
             }
 
             log << "done.\n";

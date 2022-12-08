@@ -30,15 +30,47 @@ float3 TracePath(RayDesc ray, uint seed)
     {
         // Trace the ray
         PackedPayload packedPayload = (PackedPayload)0;
+
+    #if GFX_NVAPI
+        if (GetPTShaderExecutionReordering())
+        {
+            NvHitObject hit;
+            NvTraceRayHitObject(
+                SceneTLAS,
+                RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
+                0xFF,
+                0,
+                0,
+                0,
+                ray,
+                packedPayload,
+                hit);
+            NvReorderThread(hit, 0, 0);
+            NvInvokeHitObject(SceneTLAS, hit, packedPayload);
+        }
+        else
+        {
+            TraceRay(
+                SceneTLAS,
+                RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
+                0xFF,
+                0,
+                0,
+                0,
+                ray,
+                packedPayload);
+        }
+    #else
         TraceRay(
             SceneTLAS,
             RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
             0xFF,
             0,
-            1,
+            0,
             0,
             ray,
             packedPayload);
+    #endif
 
         // Unpack the payload
         Payload payload = UnpackPayload(packedPayload);

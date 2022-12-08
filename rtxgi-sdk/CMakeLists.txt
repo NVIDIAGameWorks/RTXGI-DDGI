@@ -27,7 +27,7 @@ endif()
 
 set(RTXGI_SDK_VERSION_MAJOR 1)
 set(RTXGI_SDK_VERSION_MINOR 3)
-set(RTXGI_SDK_VERSION_REVISION 0)
+set(RTXGI_SDK_VERSION_REVISION 5)
 
 # Only 64-bit platforms are supported
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4" )
@@ -128,6 +128,7 @@ file(GLOB DDGI_SHADER_INCLUDE_VALIDATION
     "shaders/ddgi/include/validation/ProbeBlendingDefines.hlsl"
     "shaders/ddgi/include/validation/ProbeClassificationDefines.hlsl"
     "shaders/ddgi/include/validation/ProbeRelocationDefines.hlsl"
+    "shaders/ddgi/include/validation/ReductionDefines.hlsl"
 )
 
 file(GLOB DDGI_SHADER_SOURCE
@@ -135,6 +136,7 @@ file(GLOB DDGI_SHADER_SOURCE
     "shaders/ddgi/ProbeBlendingCS.hlsl"
     "shaders/ddgi/ProbeClassificationCS.hlsl"
     "shaders/ddgi/ProbeRelocationCS.hlsl"
+    "shaders/ddgi/ReductionCS.hlsl"
 )
 
 # Shaders do not participate in the build

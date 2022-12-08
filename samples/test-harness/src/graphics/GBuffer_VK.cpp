@@ -330,9 +330,10 @@ namespace Graphics
                 descriptor->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
                 descriptor->pImageInfo = tex2D.data();
 
-                // 13: ByteAddressBuffer SRVs (material indices, index & vertex buffers)
+                // 13: ByteAddressBuffer SRVs (mesh offsets, geometry data, index & vertex buffers)
                 std::vector<VkDescriptorBufferInfo> byteAddressBuffers;
-                byteAddressBuffers.push_back({ vkResources.materialIndicesRB, 0, VK_WHOLE_SIZE }); // material indices
+                byteAddressBuffers.push_back({ vkResources.meshOffsetsRB, 0, VK_WHOLE_SIZE }); // mesh offsets
+                byteAddressBuffers.push_back({ vkResources.geometryDataRB, 0, VK_WHOLE_SIZE }); // geometry data
 
                 // Scene index and vertex buffers
                 for (uint32_t bufferIndex = 0; bufferIndex < static_cast<uint32_t>(vkResources.sceneIBs.size()); bufferIndex++)

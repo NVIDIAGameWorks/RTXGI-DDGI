@@ -83,16 +83,47 @@ void RayGen()
     // Get the acceleration structure
     RaytracingAccelerationStructure SceneTLAS = GetAccelerationStructure(SCENE_TLAS_INDEX);
 
+#if GFX_NVAPI
+    if (GetPTShaderExecutionReordering())
+    {
+        NvHitObject hit;
+        NvTraceRayHitObject(
+            SceneTLAS,
+            RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
+            0xFF,
+            0,
+            0,
+            0,
+            ray,
+            packedPayload,
+            hit);
+        NvReorderThread(hit, 0, 0);
+        NvInvokeHitObject(SceneTLAS, hit, packedPayload);
+    }
+    else
+    {
+        TraceRay(
+            SceneTLAS,
+            RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
+            0xFF,
+            0,
+            0,
+            0,
+            ray,
+            packedPayload);
+    }
+#else
     // Trace the Probe Ray
     TraceRay(
         SceneTLAS,
         RAY_FLAG_NONE,
         0xFF,
         0,
-        1,
+        0,
         0,
         ray,
         packedPayload);
+#endif
 
     // Get the ray data texture array
     RWTexture2DArray<float4> RayData = GetRWTex2DArray(resourceIndices.rayDataUAVIndex);

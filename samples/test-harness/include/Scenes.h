@@ -24,6 +24,8 @@ namespace Scenes
         int                           material = -1;
         bool                          opaque = true;
         bool                          doubleSided = false;
+        uint32_t                      vertexByteOffset = 0;
+        uint32_t                      indexByteOffset = 0;
         rtxgi::AABB                   boundingBox; // not instanced transformed
         std::vector<Graphics::Vertex> vertices;
         std::vector<uint32_t>         indices;
@@ -31,7 +33,10 @@ namespace Scenes
 
     struct Mesh
     {
+        int index = -1;
         std::string name = "";
+        uint32_t numIndices = 0;
+        uint32_t numVertices = 0;
         rtxgi::AABB boundingBox; // not instance transformed
         std::vector<MeshPrimitive> primitives;
     };

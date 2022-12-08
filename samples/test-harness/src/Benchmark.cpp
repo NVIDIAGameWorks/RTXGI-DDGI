@@ -33,7 +33,7 @@ namespace Benchmark
         config.app.benchmarkRunning = true;
     }
 
-    void UpdateBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx, std::ofstream& log)
+    bool UpdateBenchmark(BenchmarkRun& benchmarkRun, Instrumentation::Performance& perf, Configs::Config& config, Graphics::Globals& gfx, std::ofstream& log)
     {
         config.app.benchmarkProgress = (uint32_t)(((float)benchmarkRun.numFramesBenched / (float)NumBenchmarkFrames) * 100.f);
 
@@ -119,8 +119,10 @@ namespace Benchmark
             }
 
             config.app.benchmarkRunning = false;
+            return true;
         }
 
         benchmarkRun.numFramesBenched++;
+        return false;
     }
 }

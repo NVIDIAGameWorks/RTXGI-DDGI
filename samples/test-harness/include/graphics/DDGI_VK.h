@@ -54,6 +54,7 @@ namespace Graphics
                 VkDeviceAddress                 shaderTableHitGroupTableStartAddress = 0;
 
                 // DDGI
+                std::vector<rtxgi::DDGIVolumeDesc> volumeDescs;
                 std::vector<rtxgi::DDGIVolumeBase*> volumes;
                 std::vector<rtxgi::vulkan::DDGIVolume*> selectedVolumes;
 
@@ -75,6 +76,9 @@ namespace Graphics
                 VkDeviceMemory                  volumeConstantsSTBUploadMemory = nullptr;
                 uint64_t                        volumeConstantsSTBSizeInBytes = 0;
 
+                // Variability Tracking
+                std::vector<uint32_t>           numVolumeVariabilitySamples;
+
                 Instrumentation::Stat*          cpuStat = nullptr;
                 Instrumentation::Stat*          gpuStat = nullptr;
 
@@ -83,6 +87,7 @@ namespace Graphics
                 Instrumentation::Stat*          blendStat = nullptr;
                 Instrumentation::Stat*          relocateStat = nullptr;
                 Instrumentation::Stat*          lightingStat = nullptr;
+                Instrumentation::Stat*          variabilityStat = nullptr;
 
                 bool                            enabled = false;
             };

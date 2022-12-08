@@ -11,6 +11,13 @@
 #ifndef PLATFORM_HLSL
 #define PLATFORM_HLSL
 
+#if GFX_NVAPI
+#define NV_SHADER_EXTN_SLOT           u999999
+#define NV_SHADER_EXTN_REGISTER_SPACE space999999
+#define NV_HITOBJECT_USE_MACRO_API
+#include "nvapi/nvHLSLExtns.h"
+#endif
+
 #ifdef __spirv__
 #define VK_BINDING(x, y)    [[vk::binding(x, y)]]
 #define VK_PUSH_CONST       [[vk::push_constant]]

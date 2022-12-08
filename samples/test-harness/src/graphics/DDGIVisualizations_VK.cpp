@@ -144,6 +144,8 @@ namespace Graphics
                             tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeIrradianceView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
                             tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeDistanceView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
                             tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeDataView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+                            tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeVariabilityView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+                            tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeVariabilityAverageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
                         }
 
                         descriptor = &descriptors.emplace_back();
@@ -519,6 +521,9 @@ namespace Graphics
                         Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_STRUCT_NAME", L"GlobalConstants");                            // specify the struct name of the application's push constants
                         Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_VARIABLE_NAME", L"GlobalConst");                              // specify the variable name of the application's push constants
                         Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME", L"ddgi_volumeIndex");          // specify the name of the DDGIVolume index field in the application's push constants struct
+                        Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_X_NAME", L"ddgi_reductionInputSizeX");  // specify the name of the DDGIVolume reduction pass input size fields the application's push constants struct
+                        Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Y_NAME", L"ddgi_reductionInputSizeY");
+                        Shaders::AddDefine(resources.textureVisCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME", L"ddgi_reductionInputSizeZ");
                         Shaders::AddDefine(resources.textureVisCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         Shaders::AddDefine(resources.textureVisCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
                         Shaders::AddDefine(resources.textureVisCS, L"THGP_DIM_X", L"8");
@@ -536,6 +541,9 @@ namespace Graphics
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_STRUCT_NAME", L"GlobalConstants");                            // specify the struct name of the application's push constants
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_VARIABLE_NAME", L"GlobalConst");                              // specify the variable name of the application's push constants
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME", L"ddgi_volumeIndex");          // specify the name of the DDGIVolume index field in the application's push constants struct
+                        Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_X_NAME", L"ddgi_reductionInputSizeX");  // specify the name of the DDGIVolume reduction pass input size fields the application's push constants struct
+                        Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Y_NAME", L"ddgi_reductionInputSizeY");
+                        Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME", L"ddgi_reductionInputSizeZ");
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
                         CHECK(Shaders::Compile(vk.shaderCompiler, resources.updateTlasCS, true), "compile DDGI Visualizations probes update compute shader!\n", log);
@@ -766,29 +774,20 @@ namespace Graphics
 
                 bool CreateBLAS(Globals& vk, Resources& resources)
                 {
-                    VkBuildAccelerationStructureFlagBitsKHR buildFlags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
-
-                    uint32_t primitiveCount = static_cast<uint32_t>(resources.probe.indices.size()) / 3;
-
                     // Describe the BLAS geometries
-                    VkAccelerationStructureGeometryTrianglesDataKHR asTriangleData = {};
-                    asTriangleData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-                    asTriangleData.vertexData = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, resources.probeVB) };
-                    asTriangleData.vertexStride = sizeof(Vertex);
-                    asTriangleData.maxVertex = static_cast<uint32_t>(resources.probe.vertices.size());
-                    asTriangleData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-                    asTriangleData.indexData = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, resources.probeIB) };
-                    asTriangleData.indexType = VK_INDEX_TYPE_UINT32;
+                    VkAccelerationStructureGeometryKHR geometryDesc = {};
+                    geometryDesc.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+                    geometryDesc.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+                    geometryDesc.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+                    geometryDesc.geometry.triangles.vertexData = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, resources.probeVB) };
+                    geometryDesc.geometry.triangles.vertexStride = sizeof(Vertex);
+                    geometryDesc.geometry.triangles.maxVertex = resources.probe.numVertices;
+                    geometryDesc.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+                    geometryDesc.geometry.triangles.indexData = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, resources.probeIB) };
+                    geometryDesc.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
+                    geometryDesc.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
 
-                    // Describe the mesh primitive geometry
-                    VkAccelerationStructureGeometryDataKHR asGeometryData = {};
-                    asGeometryData.triangles = asTriangleData;
-
-                    VkAccelerationStructureGeometryKHR asGeometry = {};
-                    asGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-                    asGeometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-                    asGeometry.geometry = asGeometryData;
-                    if (resources.probe.opaque) asGeometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+                    VkBuildAccelerationStructureFlagBitsKHR buildFlags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
 
                     // Describe the bottom level acceleration structure inputs
                     VkAccelerationStructureBuildGeometryInfoKHR asInputs = {};
@@ -796,29 +795,30 @@ namespace Graphics
                     asInputs.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
                     asInputs.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
                     asInputs.geometryCount = 1;
-                    asInputs.pGeometries = &asGeometry;
+                    asInputs.pGeometries = &geometryDesc;
                     asInputs.flags = buildFlags;
 
                     // Get the size requirements for the BLAS buffer
+                    uint32_t primitiveCount = resources.probe.numIndices / 3;
                     VkAccelerationStructureBuildSizesInfoKHR asPreBuildInfo = {};
                     asPreBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
                     vkGetAccelerationStructureBuildSizesKHR(vk.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &asInputs, &primitiveCount, &asPreBuildInfo);
 
-                    // Create the acceleration structure buffer, allocate and bind device memory
-                    BufferDesc desc = { asPreBuildInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
-                    if (!CreateBuffer(vk, desc, &resources.blas.asBuffer, &resources.blas.asMemory)) return false;
-                #ifdef GFX_NAME_OBJECTS
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.blas.asBuffer), "BLAS: Probe Sphere, Primitive 0", VK_OBJECT_TYPE_BUFFER);
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.blas.asMemory), "BLAS Memory: Probe Sphere, Primitive 0", VK_OBJECT_TYPE_DEVICE_MEMORY);
-                #endif
-
-                    // Create the scratch buffer, allocate and bind device memory
-                    desc = { asPreBuildInfo.buildScratchSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
-                    if (!CreateBuffer(vk, desc, &resources.blas.scratch, &resources.blas.scratchMemory)) return false;
+                    // Create the BLAS scratch buffer, allocate and bind device memory
+                    BufferDesc blasScratchDesc = { asPreBuildInfo.buildScratchSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
+                    if (!CreateBuffer(vk, blasScratchDesc, &resources.blas.scratch, &resources.blas.scratchMemory)) return false;
                     asInputs.scratchData = VkDeviceOrHostAddressKHR{ GetBufferDeviceAddress(vk.device, resources.blas.scratch) };
                 #ifdef GFX_NAME_OBJECTS
                     SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.blas.scratch), "BLAS Scratch: Probe Sphere, Primitive 0", VK_OBJECT_TYPE_BUFFER);
                     SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.blas.scratchMemory), "BLAS Scratch Memory: Probe Sphere, Primitive 0", VK_OBJECT_TYPE_DEVICE_MEMORY);
+                #endif
+
+                    // Create the BLAS buffer, allocate and bind device memory
+                    BufferDesc blasDesc = { asPreBuildInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
+                    if (!CreateBuffer(vk, blasDesc, &resources.blas.asBuffer, &resources.blas.asMemory)) return false;
+                #ifdef GFX_NAME_OBJECTS
+                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.blas.asBuffer), "BLAS: Probe Sphere, Primitive 0", VK_OBJECT_TYPE_BUFFER);
+                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.blas.asMemory), "BLAS Memory: Probe Sphere, Primitive 0", VK_OBJECT_TYPE_DEVICE_MEMORY);
                 #endif
 
                     // Describe the BLAS acceleration structure
@@ -1079,6 +1079,8 @@ namespace Graphics
                             vkResources.constants.ddgivis.irradianceTextureScale = volume.probeIrradianceScale;
                             vkResources.constants.ddgivis.distanceTextureScale = volume.probeDistanceScale;
                             vkResources.constants.ddgivis.probeDataTextureScale = volume.probeDataScale;
+                            vkResources.constants.ddgivis.probeVariabilityTextureScale = volume.probeVariabilityScale;
+                            vkResources.constants.ddgivis.probeVariabilityTextureThreshold = volume.probeVariabilityThreshold;
                         }
                     }
                     CPU_TIMESTAMP_END(resources.cpuStat);

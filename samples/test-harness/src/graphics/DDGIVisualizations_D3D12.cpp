@@ -504,12 +504,12 @@ namespace Graphics
                     // Create the probe sphere's vertex and index buffers
                     CHECK(CreateIndexBuffer(d3d, resources.probe, &resources.probeIB, &resources.probeIBUpload, resources.probeIBView), "create probe index buffer!", log);
                 #ifdef GFX_NAME_OBJECTS
-                    resources.probeIB->SetName(L"IB: Probe Sphere, Primitive 0");
+                    resources.probeIB->SetName(L"IB: DDGI Probe Sphere");
                 #endif
 
                     CHECK(CreateVertexBuffer(d3d, resources.probe, &resources.probeVB, &resources.probeVBUpload, resources.probeVBView), "create probe vertex buffer!", log);
                 #ifdef GFX_NAME_OBJECTS
-                    resources.probeVB->SetName(L"VB: DDGI Probe Sphere, Primitive 0");
+                    resources.probeVB->SetName(L"VB: DDGI Probe Sphere");
                 #endif
 
                     // Add the index buffer SRV to the descriptor heap
@@ -811,6 +811,8 @@ namespace Graphics
                             d3dResources.constants.ddgivis.irradianceTextureScale = volume.probeIrradianceScale;
                             d3dResources.constants.ddgivis.distanceTextureScale = volume.probeDistanceScale;
                             d3dResources.constants.ddgivis.probeDataTextureScale = volume.probeDataScale;
+                            d3dResources.constants.ddgivis.probeVariabilityTextureScale = volume.probeVariabilityScale;
+                            d3dResources.constants.ddgivis.probeVariabilityTextureThreshold = volume.probeVariabilityThreshold;
                         }
                     }
                     CPU_TIMESTAMP_END(resources.cpuStat);

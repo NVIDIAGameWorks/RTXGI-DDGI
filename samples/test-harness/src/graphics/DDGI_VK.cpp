@@ -29,8 +29,8 @@ namespace Graphics
             const char* GetResourceName(std::string input, std::string& output, VkObjectType objType)
             {
                 output = input;
-                if(objType = VK_OBJECT_TYPE_DEVICE_MEMORY) output.append(" Memory");
-                else if(objType = VK_OBJECT_TYPE_IMAGE_VIEW) output.append(" View");
+                if(objType == VK_OBJECT_TYPE_DEVICE_MEMORY) output.append(" Memory");
+                else if(objType == VK_OBJECT_TYPE_IMAGE_VIEW) output.append(" View");
                 return output.c_str();
             }
 
@@ -133,6 +133,8 @@ namespace Graphics
                         { VK_NULL_HANDLE, volume->GetProbeIrradianceView(), VK_IMAGE_LAYOUT_GENERAL },
                         { VK_NULL_HANDLE, volume->GetProbeDistanceView(), VK_IMAGE_LAYOUT_GENERAL },
                         { VK_NULL_HANDLE, volume->GetProbeDataView(), VK_IMAGE_LAYOUT_GENERAL }
+                        { VK_NULL_HANDLE, volume->GetProbeVariabilityView(), VK_IMAGE_LAYOUT_GENERAL }
+                        { VK_NULL_HANDLE, volume->GetProbeVariabilityAverageView(), VK_IMAGE_LAYOUT_GENERAL }
                     };
 
                     descriptor = &descriptors.emplace_back();
@@ -167,6 +169,8 @@ namespace Graphics
                 std::flush(log);
 
                 uint32_t arraySize = 0;
+                // need to save averaging texture array size separately because it will be smaller for this texture, and arraySize is used below for barriers
+                uint32_t variabilityAverageArraySize = 0;
 
                 // Create the texture arrays
                 {
@@ -229,13 +233,55 @@ namespace Graphics
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, volumeDesc.probeDataFormat);
 
                         TextureDesc desc = { width, height, arraySize, 1, format, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
-                        CHECK(CreateTexture(vk, desc, &volumeResources.unmanaged.probeData, &volumeResources.unmanaged.probeDataMemory, &volumeResources.unmanaged.probeDataView), "", log);
+                        CHECK(CreateTexture(vk, desc, &volumeResources.unmanaged.probeData, &volumeResources.unmanaged.probeDataMemory, &volumeResources.unmanaged.probeDataView), "create DDGIVolume probe data texture!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::string n = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Data";
                         std::string o = "";
                         SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeData), n.c_str(), VK_OBJECT_TYPE_IMAGE);
                         SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeDataMemory), GetResourceName(n, o, VK_OBJECT_TYPE_DEVICE_MEMORY), VK_OBJECT_TYPE_DEVICE_MEMORY);
                         SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeDataView), GetResourceName(n, o, VK_OBJECT_TYPE_IMAGE_VIEW), VK_OBJECT_TYPE_IMAGE_VIEW);
+                    #endif
+                    }
+
+                    // Probe variability texture
+                    {
+                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Variability, width, height, arraySize);
+                        if (width <= 0 || height <= 0) return false;
+                        format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Variability, volumeDesc.probeVariabilityFormat);
+
+                        TextureDesc desc = { width, height, arraySize, 1, format, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+                        CHECK(CreateTexture(vk, desc, &volumeResources.unmanaged.probeVariability, &volumeResources.unmanaged.probeVariabilityMemory, &volumeResources.unmanaged.probeVariabilityView), "create DDGIVolume Probe variability texture!", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        std::string n = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Variability";
+                        std::string o = "";
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariability), n.c_str(), VK_OBJECT_TYPE_IMAGE);
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityMemory), GetResourceName(n, o, VK_OBJECT_TYPE_DEVICE_MEMORY), VK_OBJECT_TYPE_DEVICE_MEMORY);
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityView), GetResourceName(n, o, VK_OBJECT_TYPE_IMAGE_VIEW), VK_OBJECT_TYPE_IMAGE_VIEW);
+                    #endif
+                    }
+
+                    // Probe variability average
+                    {
+                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::VariabilityAverage, width, height, variabilityAverageArraySize);
+                        if (width <= 0 || height <= 0) return false;
+                        format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::VariabilityAverage, volumeDesc.probeVariabilityFormat);
+
+                        TextureDesc desc = { width, height, variabilityAverageArraySize, 1, format, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
+                        CHECK(CreateTexture(vk, desc, &volumeResources.unmanaged.probeVariabilityAverage, &volumeResources.unmanaged.probeVariabilityAverageMemory, &volumeResources.unmanaged.probeVariabilityAverageView), "create DDGIVolume Probe variability average texture!", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        std::string n = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Variability Average";
+                        std::string o = "";
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityAverage), n.c_str(), VK_OBJECT_TYPE_IMAGE);
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityAverageMemory), GetResourceName(n, o, VK_OBJECT_TYPE_DEVICE_MEMORY), VK_OBJECT_TYPE_DEVICE_MEMORY);
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityAverageView), GetResourceName(n, o, VK_OBJECT_TYPE_IMAGE_VIEW), VK_OBJECT_TYPE_IMAGE_VIEW);
+                    #endif
+                        BufferDesc readbackDesc = { sizeof(float)*2, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT };
+                        CHECK(CreateBuffer(vk, readbackDesc, &volumeResources.unmanaged.probeVariabilityReadback, &volumeResources.unmanaged.probeVariabilityReadbackMemory), "create DDGIVolume Probe variability readback buffer!", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        n = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Variability Readback";
+                        o = "";
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityReadback), n.c_str(), VK_OBJECT_TYPE_BUFFER);
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityReadbackMemory), GetResourceName(n, o, VK_OBJECT_TYPE_DEVICE_MEMORY), VK_OBJECT_TYPE_DEVICE_MEMORY);
                     #endif
                     }
                 }
@@ -255,6 +301,9 @@ namespace Graphics
                     SetImageLayoutBarrier(vk.cmdBuffer[vk.frameIndex], volumeResources.unmanaged.probeIrradiance, barrier);
                     SetImageLayoutBarrier(vk.cmdBuffer[vk.frameIndex], volumeResources.unmanaged.probeDistance, barrier);
                     SetImageLayoutBarrier(vk.cmdBuffer[vk.frameIndex], volumeResources.unmanaged.probeData, barrier);
+                    SetImageLayoutBarrier(vk.cmdBuffer[vk.frameIndex], volumeResources.unmanaged.probeVariability, barrier);
+                    barrier.subresourceRange.layerCount = variabilityAverageArraySize;
+                    SetImageLayoutBarrier(vk.cmdBuffer[vk.frameIndex], volumeResources.unmanaged.probeVariabilityAverage, barrier);
                 }
 
                 // Set the pipeline layout and descriptor set
@@ -412,6 +461,54 @@ namespace Graphics
                         name = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Classification Reset Pipeline";
                         SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeClassification.resetPipeline), name.c_str(), VK_OBJECT_TYPE_PIPELINE);
                     #endif
+
+                        shaderIndex++;
+                    }
+
+                    // Probe Variability Reduction Pipeline
+                    {
+                        // Create the shader module
+                        CHECK(CreateShaderModule(vk.device, volumeShaders[shaderIndex], &volumeResources.unmanaged.probeVariabilityPipelines.reductionModule), "create probe variability reduction module!", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        std::string name = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Variability Reduction Shader Module";
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityPipelines.reductionModule), name.c_str(), VK_OBJECT_TYPE_SHADER_MODULE);
+                    #endif
+
+                        // Create the pipeline
+                        CHECK(CreateComputePipeline(
+                            vk.device,
+                            volumeResources.unmanaged.pipelineLayout,
+                            volumeShaders[shaderIndex],
+                            volumeResources.unmanaged.probeVariabilityPipelines.reductionModule,
+                            &volumeResources.unmanaged.probeVariabilityPipelines.reductionPipeline), "", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        name = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Variability Reduction Pipeline";
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityPipelines.reductionPipeline), name.c_str(), VK_OBJECT_TYPE_PIPELINE);
+                    #endif
+
+                        shaderIndex++;
+                    }
+
+                    // Probe Variability Extra Reduction Pipeline
+                    {
+                        // Create the shader module
+                        CHECK(CreateShaderModule(vk.device, volumeShaders[shaderIndex], &volumeResources.unmanaged.probeVariabilityPipelines.extraReductionModule), "create probe variability extra reduction module!", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        std::string name = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Variability Extra Reduction Shader Module";
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityPipelines.reductionModule), name.c_str(), VK_OBJECT_TYPE_SHADER_MODULE);
+                    #endif
+
+                        // Create the pipeline
+                        CHECK(CreateComputePipeline(
+                            vk.device,
+                            volumeResources.unmanaged.pipelineLayout,
+                            volumeShaders[shaderIndex],
+                            volumeResources.unmanaged.probeVariabilityPipelines.extraReductionModule,
+                            &volumeResources.unmanaged.probeVariabilityPipelines.extraReductionPipeline), "", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        name = "DDGIVolume[" + std::to_string(volumeDesc.index) + "], Probe Variability Extra Reduction Pipeline";
+                        SetObjectName(vk.device, reinterpret_cast<uint64_t>(volumeResources.unmanaged.probeVariabilityPipelines.extraReductionPipeline), name.c_str(), VK_OBJECT_TYPE_PIPELINE);
+                    #endif
                     }
                 }
 
@@ -433,18 +530,26 @@ namespace Graphics
                 vkDestroyImage(device, volume->GetProbeIrradiance(), nullptr);
                 vkDestroyImage(device, volume->GetProbeDistance(), nullptr);
                 vkDestroyImage(device, volume->GetProbeData(), nullptr);
+                vkDestroyImage(device, volume->GetProbeVariability(), nullptr);
+                vkDestroyImage(device, volume->GetProbeVariabilityAverage(), nullptr);
+                vkDestroyBuffer(device, volume->GetProbeVariabilityReadback(), nullptr);
 
                 // Texture Array Memory
                 vkFreeMemory(device, volume->GetProbeRayDataMemory(), nullptr);
                 vkFreeMemory(device, volume->GetProbeIrradianceMemory(), nullptr);
                 vkFreeMemory(device, volume->GetProbeDistanceMemory(), nullptr);
                 vkFreeMemory(device, volume->GetProbeDataMemory(), nullptr);
+                vkFreeMemory(device, volume->GetProbeVariabilityMemory(), nullptr);
+                vkFreeMemory(device, volume->GetProbeVariabilityAverageMemory(), nullptr);
+                vkFreeMemory(device, volume->GetProbeVariabilityReadbackMemory(), nullptr);
 
                 // Texture Array Views
                 vkDestroyImageView(device, volume->GetProbeRayDataView(), nullptr);
                 vkDestroyImageView(device, volume->GetProbeIrradianceView(), nullptr);
                 vkDestroyImageView(device, volume->GetProbeDistanceView(), nullptr);
                 vkDestroyImageView(device, volume->GetProbeDataView(), nullptr);
+                vkDestroyImageView(device, volume->GetProbeVariabilityView(), nullptr);
+                vkDestroyImageView(device, volume->GetProbeVariabilityAverageView(), nullptr);
 
                 // Shader Modules
                 vkDestroyShaderModule(device, volume->GetProbeBlendingIrradianceModule(), nullptr);
@@ -454,6 +559,9 @@ namespace Graphics
                 vkDestroyShaderModule(device, volume->GetProbeClassificationModule(), nullptr);
                 vkDestroyShaderModule(device, volume->GetProbeClassificationResetModule(), nullptr);
 
+                vkDestroyShaderModule(device, volume->GetProbeVariabilityReductionModule(), nullptr);
+                vkDestroyShaderModule(device, volume->GetProbeVariabilityExtraReductionModule(), nullptr);
+
                 // Pipelines
                 vkDestroyPipeline(device, volume->GetProbeBlendingIrradiancePipeline(), nullptr);
                 vkDestroyPipeline(device, volume->GetProbeBlendingDistancePipeline(), nullptr);
@@ -461,6 +569,9 @@ namespace Graphics
                 vkDestroyPipeline(device, volume->GetProbeRelocationResetPipeline(), nullptr);
                 vkDestroyPipeline(device, volume->GetProbeClassificationPipeline(), nullptr);
                 vkDestroyPipeline(device, volume->GetProbeClassificationResetPipeline(), nullptr);
+
+                vkDestroyPipeline(device, volume->GetProbeVariabilityReductionPipeline(), nullptr);
+                vkDestroyPipeline(device, volume->GetProbeVariabilityExtraReductionPipeline(), nullptr);
 
                 // Clear pointers
                 volume->Destroy();
@@ -476,7 +587,11 @@ namespace Graphics
              */
             void GetDDGIVolumeDesc(const Configs::DDGIVolume& config, DDGIVolumeDesc& volumeDesc)
             {
-                volumeDesc.name = config.name.c_str();
+                size_t size = config.name.size();
+                volumeDesc.name = new char[size + 1];
+                memset(volumeDesc.name, 0, size + 1);
+                memcpy(volumeDesc.name, config.name.c_str(), size);
+
                 volumeDesc.index = config.index;
                 volumeDesc.rngSeed = config.rngSeed;
                 volumeDesc.origin = { config.origin.x, config.origin.y, config.origin.z };
@@ -502,11 +617,12 @@ namespace Graphics
                 volumeDesc.probeIrradianceFormat = config.textureFormats.irradianceFormat;
                 volumeDesc.probeDistanceFormat = config.textureFormats.distanceFormat;
                 volumeDesc.probeDataFormat = config.textureFormats.dataFormat;
+                volumeDesc.probeVariabilityFormat = config.textureFormats.variabilityFormat;
 
                 volumeDesc.probeRelocationEnabled = config.probeRelocationEnabled;
                 volumeDesc.probeMinFrontfaceDistance = config.probeMinFrontfaceDistance;
-
                 volumeDesc.probeClassificationEnabled = config.probeClassificationEnabled;
+                volumeDesc.probeVariabilityEnabled = config.probeVariabilityEnabled;
 
                 if (config.infiniteScrollingEnabled) volumeDesc.movementType = EDDGIVolumeMovementType::Scrolling;
                 else volumeDesc.movementType = EDDGIVolumeMovementType::Default;
@@ -563,6 +679,10 @@ namespace Graphics
                 resourceIndices.probeDistanceSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 2;
                 resourceIndices.probeDataUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
                 resourceIndices.probeDataSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
+                resourceIndices.probeVariabilityUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 4;
+                resourceIndices.probeVariabilitySRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 4;
+                resourceIndices.probeVariabilityAverageUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 5;
+                resourceIndices.probeVariabilityAverageSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 5;
 
             #if RTXGI_DDGI_RESOURCE_MANAGEMENT
                 // Enable "Managed Mode", the RTXGI SDK creates graphics objects
@@ -583,9 +703,13 @@ namespace Graphics
                 volumeResources.managed.probeRelocation.updateCS = { volumeShaders[2].bytecode->GetBufferPointer(), volumeShaders[2].bytecode->GetBufferSize() };
                 volumeResources.managed.probeRelocation.resetCS = { volumeShaders[3].bytecode->GetBufferPointer(), volumeShaders[3].bytecode->GetBufferSize() };
 
-                assert(volumeShaders.size() == 6);
+                assert(volumeShaders.size() >= 6);
                 volumeResources.managed.probeClassification.updateCS = { volumeShaders[4].bytecode->GetBufferPointer(), volumeShaders[4].bytecode->GetBufferSize() };
                 volumeResources.managed.probeClassification.resetCS = { volumeShaders[5].bytecode->GetBufferPointer(), volumeShaders[5].bytecode->GetBufferSize() };
+
+                assert(volumeShaders.size() == 8);
+                volumeResources.managed.probeVariability.reductionCS = { volumeShaders[6].bytecode->GetBufferPointer(), volumeShaders[6].bytecode->GetBufferSize() };
+                volumeResources.managed.probeVariability.extraReductionCS = { volumeShaders[7].bytecode->GetBufferPointer(), volumeShaders[7].bytecode->GetBufferSize() };
             #else
                 // Enable "Unmanaged Mode", the application creates graphics objects
                 volumeResources.unmanaged.enabled = true;
@@ -618,17 +742,20 @@ namespace Graphics
                     #else
                         DestroyDDGIVolumeResources(vk.device, resources, volumeConfig.index);
                     #endif
-                        delete resources.volumes[volumeConfig.index];
-                        resources.volumes[volumeConfig.index] = nullptr;
+                        SAFE_DELETE(resources.volumeDescs[volumeConfig.index].name);
+                        SAFE_DELETE(resources.volumes[volumeConfig.index]);
+                        resources.numVolumeVariabilitySamples[volumeConfig.index] = 0;
                     }
                 }
                 else
                 {
+                    resources.volumeDescs.emplace_back();
                     resources.volumes.emplace_back();
+                    resources.numVolumeVariabilitySamples.emplace_back();
                 }
 
                 // Describe the DDGIVolume's properties
-                DDGIVolumeDesc volumeDesc;
+                DDGIVolumeDesc& volumeDesc = resources.volumeDescs[volumeConfig.index];
                 GetDDGIVolumeDesc(volumeConfig, volumeDesc);
 
                 // Describe the DDGIVolume's resources and shaders
@@ -776,6 +903,9 @@ namespace Graphics
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_STRUCT_NAME", L"GlobalConstants");                            // specify the struct name of the application's push constants
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_VARIABLE_NAME", L"GlobalConst");                              // specify the variable name of the application's push constants
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME", L"ddgi_volumeIndex");          // specify the name of the DDGIVolume index field in the application's push constants struct
+                    Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_X_NAME", L"ddgi_reductionInputSizeX");  // specify the name of the DDGIVolume reduction pass input size fields the application's push constants struct
+                    Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Y_NAME", L"ddgi_reductionInputSizeY");
+                    Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME", L"ddgi_reductionInputSizeZ");
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
                     CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.rgs, true), "compile DDGI probe tracing ray generation shader!\n", log);
@@ -830,6 +960,9 @@ namespace Graphics
                     Shaders::AddDefine(resources.indirectCS, L"RTXGI_PUSH_CONSTS_STRUCT_NAME", L"GlobalConstants");                            // specify the struct name of the application's push constants
                     Shaders::AddDefine(resources.indirectCS, L"RTXGI_PUSH_CONSTS_VARIABLE_NAME", L"GlobalConst");                              // specify the variable name of the application's push constants
                     Shaders::AddDefine(resources.indirectCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME", L"ddgi_volumeIndex");          // specify the name of the DDGIVolume index field in the application's push constants struct
+                    Shaders::AddDefine(resources.indirectCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_X_NAME", L"ddgi_reductionInputSizeX");  // specify the name of the DDGIVolume reduction pass input size fields the application's push constants struct
+                    Shaders::AddDefine(resources.indirectCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Y_NAME", L"ddgi_reductionInputSizeY");
+                    Shaders::AddDefine(resources.indirectCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME", L"ddgi_reductionInputSizeZ");
                     Shaders::AddDefine(resources.indirectCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                     Shaders::AddDefine(resources.indirectCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
                     Shaders::AddDefine(resources.indirectCS, L"RTXGI_DDGI_NUM_VOLUMES", std::to_wstring(numVolumes));
@@ -1120,6 +1253,8 @@ namespace Graphics
                         rwTex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeIrradianceView(), VK_IMAGE_LAYOUT_GENERAL });
                         rwTex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeDistanceView(), VK_IMAGE_LAYOUT_GENERAL });
                         rwTex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeDataView(), VK_IMAGE_LAYOUT_GENERAL });
+                        rwTex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeVariabilityView(), VK_IMAGE_LAYOUT_GENERAL });
+                        rwTex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeVariabilityAverageView(), VK_IMAGE_LAYOUT_GENERAL });
                     }
 
                     descriptor = &descriptors.emplace_back();
@@ -1179,6 +1314,8 @@ namespace Graphics
                         tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeIrradianceView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
                         tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeDistanceView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
                         tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeDataView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+                        tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeVariabilityView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+                        tex2DArray.push_back({ VK_NULL_HANDLE, volume->GetProbeVariabilityAverageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
                     }
 
                     descriptor = &descriptors.emplace_back();
@@ -1191,9 +1328,10 @@ namespace Graphics
                     descriptor->pImageInfo = tex2DArray.data();
                 }
 
-                // 13: ByteAddressBuffer SRVs (material indices, index & vertex buffers)
+                // 13: ByteAddressBuffer SRVs (mesh offsets, geometry data, index & vertex buffers)
                 std::vector<VkDescriptorBufferInfo> byteAddressBuffers;
-                byteAddressBuffers.push_back({ vkResources.materialIndicesRB, 0, VK_WHOLE_SIZE }); // material indices
+                byteAddressBuffers.push_back({ vkResources.meshOffsetsRB, 0, VK_WHOLE_SIZE }); // mesh offsets
+                byteAddressBuffers.push_back({ vkResources.geometryDataRB, 0, VK_WHOLE_SIZE }); // geometry data
 
                 // Scene index and vertex buffers
                 for (uint32_t bufferIndex = 0; bufferIndex < static_cast<uint32_t>(vkResources.sceneIBs.size()); bufferIndex++)
@@ -1297,14 +1435,17 @@ namespace Graphics
                 }
 
                 // Wait for the ray traces to complete
-                vkCmdPipelineBarrier(
-                    vk.cmdBuffer[vk.frameIndex],
-                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                    0,
-                    0, nullptr,
-                    0, nullptr,
-                    static_cast<uint32_t>(barriers.size()), barriers.data());
+                if (!barriers.empty())
+                {
+                    vkCmdPipelineBarrier(
+                        vk.cmdBuffer[vk.frameIndex],
+                        VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                        VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                        0,
+                        0, nullptr,
+                        0, nullptr,
+                        static_cast<uint32_t>(barriers.size()), barriers.data());
+                }
 
             #ifdef GFX_PERF_MARKERS
                 vkCmdEndDebugUtilsLabelEXT(vk.cmdBuffer[vk.frameIndex]);
@@ -1349,8 +1490,8 @@ namespace Graphics
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
                 assert(RTXGI_VERSION::minor == 3);
-                assert(RTXGI_VERSION::revision == 0);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.3.0") == 0);
+                assert(RTXGI_VERSION::revision == 5);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.3.5") == 0);
 
                 // Reset the command list before initialization
                 CHECK(ResetCmdList(vk), "reset command list!", log);
@@ -1407,6 +1548,7 @@ namespace Graphics
                 resources.relocateStat = perf.AddGPUStat("  Relocate");
                 resources.classifyStat = perf.AddGPUStat("  Classify");
                 resources.lightingStat = perf.AddGPUStat("  Lighting");
+                resources.variabilityStat = perf.AddGPUStat("  Variability");
 
                 // Execute GPU work to finish initialization
                 VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
@@ -1485,6 +1627,7 @@ namespace Graphics
                         volume->ClearProbes(vk.cmdBuffer[vk.frameIndex]);
 
                         config.ddgi.volumes[config.ddgi.selectedVolume].clearProbes = 0;
+                        resources.numVolumeVariabilitySamples[config.ddgi.selectedVolume] = 0;
                     }
 
                     // Select the active volumes
@@ -1492,13 +1635,27 @@ namespace Graphics
                     for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.volumes.size()); volumeIndex++)
                     {
                         // TODO: processing to determine which volumes are in-frustum, active, and prioritized for update / render
-                        // For now, just select all volumes
+
+                        // Get the volume
                         DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes[volumeIndex]);
-                        resources.selectedVolumes.push_back(volume);
+
+                        // If the scene's lights, skylight, or geometry have changed *or* the volume moves *or the probes are reset, reset variability
+                        if (config.ddgi.volumes[volumeIndex].clearProbeVariability) resources.numVolumeVariabilitySamples[volumeIndex] = 0;
+
+                        // Skip volumes whose variability measurement is low enough to be considered converged
+                        // Enforce a minimum of 16 samples to filter out early outliers
+                        const uint32_t MinimumVariabilitySamples = 16;
+                        float volumeAverageVariability = volume->GetVolumeAverageVariability();
+                        bool isConverged = volume->GetProbeVariabilityEnabled()
+                                                && (resources.numVolumeVariabilitySamples[volumeIndex]++ > MinimumVariabilitySamples)
+                                                && (volumeAverageVariability < config.ddgi.volumes[config.ddgi.selectedVolume].probeVariabilityThreshold);
+                        
+                        // Add the volume to the list of volumes to update (it hasn't converged)
+                        if (!isConverged) resources.selectedVolumes.push_back(volume);
                     }
 
                     // Update the DDGIVolume constants
-                    for (uint32_t volumeIndex = 0; volumeIndex < static_cast<uint32_t>(resources.volumes.size()); volumeIndex++)
+                    for (uint32_t volumeIndex = 0; volumeIndex < static_cast<uint32_t>(resources.selectedVolumes.size()); volumeIndex++)
                     {
                         resources.selectedVolumes[volumeIndex]->Update();
                     }
@@ -1543,6 +1700,13 @@ namespace Graphics
                     GPU_TIMESTAMP_BEGIN(resources.classifyStat->GetGPUQueryBeginIndex());
                     rtxgi::vulkan::ClassifyDDGIVolumeProbes(vk.cmdBuffer[vk.frameIndex], numVolumes, resources.selectedVolumes.data());
                     GPU_TIMESTAMP_END(resources.classifyStat->GetGPUQueryEndIndex());
+
+                    // Calculate variability
+                    GPU_TIMESTAMP_BEGIN(resources.variabilityStat->GetGPUQueryBeginIndex());
+                    rtxgi::vulkan::CalculateDDGIVolumeVariability(vk.cmdBuffer[vk.frameIndex], numVolumes, resources.selectedVolumes.data());
+                    // The readback happens immediately, not recorded on the command list, so will return a value from a previous update
+                    rtxgi::vulkan::ReadbackDDGIVolumeVariability(vk.device, numVolumes, resources.selectedVolumes.data());
+                    GPU_TIMESTAMP_END(resources.variabilityStat->GetGPUQueryEndIndex());
 
                     // Render the indirect lighting to screen-space
                     GPU_TIMESTAMP_BEGIN(resources.lightingStat->GetGPUQueryBeginIndex());
@@ -1619,9 +1783,9 @@ namespace Graphics
                 #if !RTXGI_DDGI_RESOURCE_MANAGEMENT
                     DestroyDDGIVolumeResources(device, resources, volumeIndex);
                 #endif
+                    SAFE_DELETE(resources.volumeDescs[volumeIndex].name);
                     resources.volumes[volumeIndex]->Destroy();
-                    delete resources.volumes[volumeIndex];
-                    resources.volumes[volumeIndex] = nullptr;
+                    SAFE_DELETE(resources.volumes[volumeIndex]);
                 }
             }
 
@@ -1659,6 +1823,19 @@ namespace Graphics
                         GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Data, width, height, arraySize);
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, desc.probeDataFormat);
                         success &= WriteResourceToDisk(vk, filename, volume->GetProbeData(), width, height, arraySize, format, VK_IMAGE_LAYOUT_GENERAL);
+                    }
+
+                    // Write probe variability
+                    if (volume->GetProbeVariabilityEnabled())
+                    {
+                        filename = baseName + "-Probe-Variability";
+                        GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Variability, width, height, arraySize);
+                        format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Variability, desc.probeVariabilityFormat);
+                        success &= WriteResourceToDisk(vk, filename, volume->GetProbeVariability(), width, height, arraySize, format, VK_IMAGE_LAYOUT_GENERAL);
+                        filename = baseName + "-Probe-Variability-Average";
+                        GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::VariabilityAverage, width, height, arraySize);
+                        format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::VariabilityAverage, desc.probeVariabilityFormat);
+                        success &= WriteResourceToDisk(vk, filename, volume->GetProbeVariabilityAverage(), width, height, arraySize, format, VK_IMAGE_LAYOUT_GENERAL);
                     }
                 }
                 return success;

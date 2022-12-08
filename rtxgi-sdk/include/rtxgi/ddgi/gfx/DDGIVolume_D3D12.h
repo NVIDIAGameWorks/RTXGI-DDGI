@@ -33,6 +33,14 @@ namespace rtxgi
             COUNT
         };
 
+        enum class EDDGIExecutionStage
+        {
+            POST_PROBE_TRACE = 0,
+            PRE_GATHER_CS,
+            PRE_GATHER_PS,
+            POST_GATHER_PS,
+        };
+
         //------------------------------------------------------------------------
         // Managed Resource Mode (SDK manages volume resources)
         //------------------------------------------------------------------------
@@ -49,6 +57,12 @@ namespace rtxgi
             ShaderBytecode              resetCS;                                            // Probe classification reset compute shader bytecode
         };
 
+        struct ProbeVariabilityByteCode
+        {
+            ShaderBytecode               reductionCS;                                       // Probe variability reduction compute shader bytecode
+            ShaderBytecode               extraReductionCS;                                  // Probe variability reduction extra passes compute shader bytecode
+        };
+
         struct DDGIVolumeManagedResourcesDesc
         {
             bool                         enabled = false;                                    // Enable or disable managed resources mode
@@ -58,8 +72,10 @@ namespace rtxgi
             // Shader bytecode
             ShaderBytecode               probeBlendingIrradianceCS;                          // Probe blending (irradiance) compute shader bytecode
             ShaderBytecode               probeBlendingDistanceCS;                            // Probe blending (distance) compute shader bytecode
-            ProbeRelocationBytecode      probeRelocation;                                    // [Optional] Probe Relocation bytecode
-            ProbeClassificationBytecode  probeClassification;                                // [Optional] Probe Classification bytecode
+
+            ProbeRelocationBytecode      probeRelocation;                                    // Probe Relocation bytecode
+            ProbeClassificationBytecode  probeClassification;                                // Probe Classification bytecode
+            ProbeVariabilityByteCode     probeVariability;                                   // Probe Classification bytecode
         };
 
         //------------------------------------------------------------------------
@@ -76,6 +92,12 @@ namespace rtxgi
         {
             ID3D12PipelineState*        updatePSO = nullptr;                                // Probe classification compute PSO
             ID3D12PipelineState*        resetPSO = nullptr;                                 // Probe classification reset compute PSO
+        };
+
+        struct ProbeVariabilityPSO
+        {
+            ID3D12PipelineState*        reductionPSO = nullptr;                             // Probe variability averaging PSO
+            ID3D12PipelineState*        extraReductionPSO = nullptr;                        // Probe variability extra reduction PSO
         };
 
         struct DDGIVolumeUnmanagedResourcesDesc
@@ -96,12 +118,17 @@ namespace rtxgi
             ID3D12Resource*             probeIrradiance = nullptr;                          // Probe irradiance texture array - RGB irradiance, encoded with a high gamma curve
             ID3D12Resource*             probeDistance = nullptr;                            // Probe distance texture array - R: mean distance | G: mean distance^2
             ID3D12Resource*             probeData = nullptr;                                // Probe data texture array - XYZ: world-space relocation offsets | W: classification state
+            ID3D12Resource*             probeVariability = nullptr;                         // Probe variability texture array
+            ID3D12Resource*             probeVariabilityAverage = nullptr;                  // Average of Probe variability for whole volume
+            ID3D12Resource*             probeVariabilityReadback = nullptr;                 // CPU-readable resource containing final Probe variability average
 
             // Pipeline State Objects
             ID3D12PipelineState*        probeBlendingIrradiancePSO = nullptr;               // Probe blending (irradiance) compute PSO
             ID3D12PipelineState*        probeBlendingDistancePSO = nullptr;                 // Probe blending (distance) compute PSO
-            ProbeRelocationPSO          probeRelocation;                                    // [Optional] Probe Relocation PSOs
-            ProbeClassificationPSO      probeClassification;                                // [Optional] Probe Classification PSOs
+
+            ProbeRelocationPSO          probeRelocation;                                    // Probe Relocation PSOs
+            ProbeClassificationPSO      probeClassification;                                // Probe Classification PSOs
+            ProbeVariabilityPSO         probeVariabilityPSOs;                               // Probe Variability PSOs
         };
 
         //------------------------------------------------------------------------
@@ -194,6 +221,11 @@ namespace rtxgi
             ERTXGIStatus ClearProbes(ID3D12GraphicsCommandList* cmdList);
 
             /**
+             * Transitions volume resources to the appropriate state(s) for the given execution stage
+             */
+            void TransitionResources(ID3D12GraphicsCommandList* cmdList, EDDGIExecutionStage stage) const;
+
+            /**
              * Releases resources owned by the volume
              */
             void Destroy();
@@ -210,7 +242,7 @@ namespace rtxgi
             UINT GetRootParamSlotRootConstants() const { return m_rootParamSlotRootConstants; };
             UINT GetRootParamSlotResourceDescriptorTable() const { return m_rootParamSlotResourceDescriptorTable; }
             UINT GetRootParamSlotSamplerDescriptorTable() const { return m_rootParamSlotSamplerDescriptorTable; }
-            DDGIRootConstants GetRootConstants() const { return { m_desc.index, m_descriptorHeapDesc.constantsIndex, m_descriptorHeapDesc.resourceIndicesIndex, 0 }; };
+            DDGIRootConstants GetRootConstants() const { return { m_desc.index, m_descriptorHeapDesc.constantsIndex, m_descriptorHeapDesc.resourceIndicesIndex, 0, 0, 0, 0 }; };
             bool GetBindlessEnabled() const { return m_bindlessResources.enabled; }
             EBindlessType GetBindlessType() const { return m_bindlessResources.type; }
 
@@ -237,12 +269,16 @@ namespace rtxgi
             EDDGIVolumeTextureFormat GetIrradianceFormat() const { return m_desc.probeIrradianceFormat; }
             EDDGIVolumeTextureFormat GetDistanceFormat() const { return m_desc.probeDistanceFormat; }
             EDDGIVolumeTextureFormat GetProbeDataFormat() const { return m_desc.probeDataFormat; }
+            EDDGIVolumeTextureFormat GetProbeVariabilityFormat() const { return m_desc.probeVariabilityFormat; }
 
             // Texture Arrays
             ID3D12Resource* GetProbeRayData() const { return m_probeRayData; }
             ID3D12Resource* GetProbeIrradiance() const { return m_probeIrradiance; }
             ID3D12Resource* GetProbeDistance() const { return m_probeDistance; }
             ID3D12Resource* GetProbeData() const { return m_probeData; }
+            ID3D12Resource* GetProbeVariability() const { return m_probeVariability; }
+            ID3D12Resource* GetProbeVariabilityAverage() const { return m_probeVariabilityAverage; }
+            ID3D12Resource* GetProbeVariabilityReadback() const { return m_probeVariabilityReadback; }
 
             // Pipeline State Objects
             ID3D12PipelineState* GetProbeBlendingIrradiancePSO() const { return m_probeBlendingIrradiancePSO; }
@@ -251,6 +287,8 @@ namespace rtxgi
             ID3D12PipelineState* GetProbeRelocationResetPSO() const { return m_probeRelocationResetPSO; }
             ID3D12PipelineState* GetProbeClassificationPSO() const { return m_probeClassificationPSO; }
             ID3D12PipelineState* GetProbeClassificationResetPSO() const { return m_probeClassificationResetPSO; }
+            ID3D12PipelineState* GetProbeVariabilityReductionPSO() const { return m_probeVariabilityReductionPSO; }
+            ID3D12PipelineState* GetProbeVariabilityExtraReductionPSO() const { return m_probeVariabilityExtraReductionPSO; }
 
             //------------------------------------------------------------------------
             // Resource Setters
@@ -286,12 +324,15 @@ namespace rtxgi
             void SetIrradianceFormat(EDDGIVolumeTextureFormat format) { m_desc.probeIrradianceFormat = format; }
             void SetDistanceFormat(EDDGIVolumeTextureFormat format) { m_desc.probeDistanceFormat = format; }
             void SetProbeDataFormat(EDDGIVolumeTextureFormat format) { m_desc.probeDataFormat = format; }
+            void SetProbeVariabilityFormat(EDDGIVolumeTextureFormat format) { m_desc.probeVariabilityFormat = format; }
 
         #if !RTXGI_DDGI_RESOURCE_MANAGEMENT
             void SetProbeRayData(ID3D12Resource* ptr) { m_probeRayData = ptr; }
             void SetProbeIrradiance(ID3D12Resource* ptr) { m_probeIrradiance = ptr; }
             void SetProbeDistance(ID3D12Resource* ptr) { m_probeDistance = ptr; }
             void SetProbeData(ID3D12Resource* ptr) { m_probeData = ptr; }
+            void SetProbeVariability(ID3D12Resource* ptr) { m_probeVariability = ptr; }
+            void SetProbeVariabilityAverage(ID3D12Resource* ptr) { m_probeVariabilityAverage = ptr; }
         #endif
 
         private:
@@ -310,6 +351,9 @@ namespace rtxgi
             ID3D12Resource*                 m_probeIrradiance = nullptr;                        // Probe irradiance texture array - RGB: irradiance, encoded with a high gamma curve
             ID3D12Resource*                 m_probeDistance = nullptr;                          // Probe distance texture array - R: mean distance | G: mean distance^2
             ID3D12Resource*                 m_probeData = nullptr;                              // Probe data texture array - XYZ: world-space relocation offsets | W: classification state
+            ID3D12Resource*                 m_probeVariability = nullptr;                       // Probe luminance difference from previous update
+            ID3D12Resource*                 m_probeVariabilityAverage = nullptr;                // Average Probe variability for whole volume
+            ID3D12Resource*                 m_probeVariabilityReadback = nullptr;               // CPU-readable buffer with average Probe variability
 
             // Render Target Views
             D3D12_CPU_DESCRIPTOR_HANDLE     m_probeIrradianceRTV = { 0 };                       // Probe irradiance render target view
@@ -334,6 +378,8 @@ namespace rtxgi
             ID3D12PipelineState*            m_probeRelocationResetPSO = nullptr;                // Probe relocation reset compute shader pipeline state object
             ID3D12PipelineState*            m_probeClassificationPSO = nullptr;                 // Probe classification compute shader pipeline state object
             ID3D12PipelineState*            m_probeClassificationResetPSO = nullptr;            // Probe classification reset compute shader pipeline state object
+            ID3D12PipelineState*            m_probeVariabilityReductionPSO = nullptr;           // Probe variability reduction
+            ID3D12PipelineState*            m_probeVariabilityExtraReductionPSO = nullptr;      // Probe variability extra reduction pass
 
         #if RTXGI_DDGI_RESOURCE_MANAGEMENT
             ID3D12DescriptorHeap*           m_rtvDescriptorHeap = nullptr;                      // Descriptor heap for render target views
@@ -349,6 +395,8 @@ namespace rtxgi
             bool CreateProbeIrradiance(const DDGIVolumeDesc& desc);
             bool CreateProbeDistance(const DDGIVolumeDesc& desc);
             bool CreateProbeData(const DDGIVolumeDesc& desc);
+            bool CreateProbeVariability(const DDGIVolumeDesc& desc);
+            bool CreateProbeVariabilityAverage(const DDGIVolumeDesc& desc);
 
             bool IsDeviceChanged(const DDGIVolumeManagedResourcesDesc& desc)
             {
@@ -380,20 +428,32 @@ namespace rtxgi
         /**
          * Updates one or more volume's probes using data in the volume's radiance texture.
          * Probe blending and border update workloads are batched together for better performance.
+         * Volume resources are expected to be in the D3D12_RESOURCE_STATE_UNORDERED_ACCESS state.
          */
         RTXGI_API ERTXGIStatus UpdateDDGIVolumeProbes(ID3D12GraphicsCommandList* cmdList, UINT numVolumes, DDGIVolume** volumes);
 
         /**
          * Adjusts one or more volume's world-space probe positions to avoid them being too close to or inside of geometry.
          * If a volume has the reset flag set, all probe relocation offsets are set to zero before relocation occurs.
+         * Volume resources are expected to be in the D3D12_RESOURCE_STATE_UNORDERED_ACCESS state.
          */
         RTXGI_API ERTXGIStatus RelocateDDGIVolumeProbes(ID3D12GraphicsCommandList* cmdList, UINT numVolumes, DDGIVolume** volumes);
 
         /**
          * Classifies one or more volume's probes as active or inactive based on the hit distance data in the ray data texture.
          * If a volume has the reset flag set, all probes are set to active before classification occurs.
+         * Volume resources are expected to be in the D3D12_RESOURCE_STATE_UNORDERED_ACCESS state.
          */
         RTXGI_API ERTXGIStatus ClassifyDDGIVolumeProbes(ID3D12GraphicsCommandList* cmdList, UINT numVolumes, DDGIVolume** volumes);
 
+        /**
+         * Calculates average variability for all probes in each provided volume
+         */
+        RTXGI_API ERTXGIStatus CalculateDDGIVolumeVariability(ID3D12GraphicsCommandList* cmdList, UINT numVolumes, DDGIVolume** volumes);
+
+        /**
+         * Reads back average variability for each provided volume, at the time of the call
+         */
+        RTXGI_API ERTXGIStatus ReadbackDDGIVolumeVariability(UINT numVolumes, DDGIVolume** volumes);
     } // namespace d3d12
 } // namespace rtxgi

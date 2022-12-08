@@ -1,5 +1,39 @@
 # RTXGI SDK Change Log
 
+## 1.3.5
+
+### SDK
+- **Improvements**
+  - Adds the new **Probe Variability** feature to the ```DDGIVolume```
+    - This is an optional feature that tracks the [coefficient of variation](https://en.wikipedia.org/wiki/Coefficient_of_variation) of a ```DDGIVolume```
+    - This can be used to estimate of how converged the probes of the volume are. When the coefficient settles around a small value, it is likely the probes contain representative irradiance values and ray tracing and probe updates can be disabled until an event occurs that invalidates the light field
+    - See [Probe Variability](docs/DDGIVolume.md#probe-variability) in the documentation for more details
+  - Adds changes to ```DDGIVolume``` D3D12 resource transitions based on feedback from GitHub Issue #68 (thanks!)
+    - ```UpdateDDGIVolumes()``` can now be safely used on direct *and* compute command lists
+    - Irradiance, Distance, and Probe Data resources are now expected to be in the ```D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE``` state by default
+    - These resources can be transitioned to the required states for each workload using the new ```DDGIVolume::TransitionResources(...)``` function where appropriate (also see ```EDDGIExecutionStage```)
+
+### Test Harness
+- **Improvements**
+  - Adds support for the SDK's new [Probe Variability](docs/DDGIVolume.md#probe-variability) feature, including buffer visualization, UI toggles, and checks to disable/enable probe traces based on volume variability
+  - Adds support for Shader Execution Reordering in DDGI probe ray tracing and the reference Path Tracer (D3D12 only). Requires an RTX 4000 series (Ada) GPU.
+  - Adds NVAPI as a new dependency (Test Harness only)
+  - Improves acceleration structure organization
+    - Reorganizes how BLAS are created from GLTF2 Mesh and MeshPrimitives
+      - MeshPrimitives are now geometries of the same BLAS (instead of individual BLAS)
+      - This prevents bad traversal characteristics when MeshPrimitives create substantially overlapping BLAS and increases trace performance up to 2x
+    - Adds the GeometryData and MeshOffsets indirection buffers for looking up MeshPrimitive information
+      - Updates RGS and Hit Shaders to look up MeshPrimitive information using DXR 1.1 GeometryIndex() and the new indirection buffers
+  - Updates Closest Hit shaders to conform with the [GLTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#metallic-roughness-material) for how albedo values sampled from texture should be combined with ```baseColorFactor```. Fixes GitHub Issue #67.
+  - Updates scene cache serialization/deserialization
+    - Stores new information and now stores a scene cache file for .glb scenes too
+- **Bug Fixes**
+  - Updates DXC binaries to v1.7.2207 (on Windows) to fix a shader compilation issue
+  - Fixes issues with ```DDGIVolume``` name strings not being handled properly
+  - Fixes D3D12 resource state problems caught by the debug layer
+  - Fixes a handful of other minor issues
+
+
 ## 1.3.0
 
 ### SDK

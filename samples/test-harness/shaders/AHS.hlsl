@@ -14,18 +14,22 @@
 [shader("anyhit")]
 void AHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttributes attrib)
 {
+    // Load the intersected mesh geometry's data
+    GeometryData geometry;
+    GetGeometryData(InstanceID(), GeometryIndex(), geometry);
+
     // Load the material
-    Material material = GetMaterial(GetMaterialIndex(InstanceID()));
+    Material material = GetMaterial(geometry);
 
     float alpha = material.opacity;
     if (material.alphaMode == 2)
     {
         // Load and interpolate the triangle's texture coordinates
         float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
-        float2 uv0 = LoadAndInterpolateUV0(InstanceID(), PrimitiveIndex(), barycentrics);
+        float2 uv0 = LoadAndInterpolateUV0(InstanceID(), PrimitiveIndex(), geometry, barycentrics);
         if (material.albedoTexIdx > -1)
         {
-            alpha = GetTex2D(material.albedoTexIdx).SampleLevel(GetBilinearWrapSampler(), uv0, 0).a;
+            alpha *= GetTex2D(material.albedoTexIdx).SampleLevel(GetBilinearWrapSampler(), uv0, 0).a;
         }
     }
 
@@ -35,15 +39,19 @@ void AHS_LOD0(inout PackedPayload packedPayload, BuiltInTriangleIntersectionAttr
 [shader("anyhit")]
 void AHS_PRIMARY(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes attrib)
 {
+    // Load the intersected mesh geometry's data
+    GeometryData geometry;
+    GetGeometryData(InstanceID(), GeometryIndex(), geometry);
+
     // Load the material
-    Material material = GetMaterial(GetMaterialIndex(InstanceID()));
+    Material material = GetMaterial(geometry);
 
     float alpha = material.opacity;
     if (material.alphaMode == 2)
     {
         // Load the vertices
         Vertex vertices[3];
-        LoadVerticesPosUV0(InstanceID(), PrimitiveIndex(), vertices);
+        LoadVerticesPosUV0(InstanceID(), PrimitiveIndex(), geometry, vertices);
 
         // Compute texture coordinate differentials
         float2 dUVdx, dUVdy;
@@ -60,7 +68,7 @@ void AHS_PRIMARY(inout PackedPayload payload, BuiltInTriangleIntersectionAttribu
         // Sample the texture
         if (material.albedoTexIdx > -1)
         {
-            alpha = GetTex2D(material.albedoTexIdx).SampleGrad(GetAnisoWrapSampler(), v.uv0, dUVdx, dUVdy).a;
+            alpha *= GetTex2D(material.albedoTexIdx).SampleGrad(GetAnisoWrapSampler(), v.uv0, dUVdx, dUVdy).a;
         }
     }
 
@@ -70,15 +78,19 @@ void AHS_PRIMARY(inout PackedPayload payload, BuiltInTriangleIntersectionAttribu
 [shader("anyhit")]
 void AHS_GI(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes attrib)
 {
+    // Load the intersected mesh geometry's data
+    GeometryData geometry;
+    GetGeometryData(InstanceID(), GeometryIndex(), geometry);
+
     // Load the surface material
-    Material material = GetMaterial(GetMaterialIndex(InstanceID()));
+    Material material = GetMaterial(geometry);
 
     float alpha = material.opacity;
     if (material.alphaMode == 2)
     {
         // Load the vertices
         Vertex vertices[3];
-        LoadVerticesPosUV0(InstanceID(), PrimitiveIndex(), vertices);
+        LoadVerticesPosUV0(InstanceID(), PrimitiveIndex(), geometry, vertices);
 
         // Interpolate the triangle's texture coordinates
         float3 barycentrics = float3((1.f - attrib.barycentrics.x - attrib.barycentrics.y), attrib.barycentrics.x, attrib.barycentrics.y);
@@ -92,7 +104,7 @@ void AHS_GI(inout PackedPayload payload, BuiltInTriangleIntersectionAttributes a
             GetTex2D(material.albedoTexIdx).GetDimensions(0, width, height, numLevels);
 
             // Sample the texture
-            alpha = GetTex2D(material.albedoTexIdx).SampleLevel(GetBilinearWrapSampler(), v.uv0, numLevels * 0.6667f).a;
+            alpha *= GetTex2D(material.albedoTexIdx).SampleLevel(GetBilinearWrapSampler(), v.uv0, numLevels * 0.6667f).a;
         }
     }
 

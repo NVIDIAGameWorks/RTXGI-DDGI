@@ -33,6 +33,11 @@ struct DDGIVolumeResourceIndices
     uint     probeDataUAVIndex;                  // Index of the probe data UAV on the descriptor heap or in a RWTexture2DArray resource array
     uint     probeDataSRVIndex;                  // Index of the probe data SRV on the descriptor heap or in a Texture2DArray resource array
     //------------------------------------------------- 32B
+    uint     probeVariabilityUAVIndex;           // Index of the probe variability UAV on the descriptor heap or in a RWTexture2DArray resource Array
+    uint     probeVariabilitySRVIndex;           // Index of the probe variability SRV on the descriptor heap or in a Texture2DArray resource array
+    uint     probeVariabilityAverageUAVIndex;    // Index of the probe variability average UAV on the descriptor heap or in a RWTexture2DArray resource Array
+    uint     probeVariabilityAverageSRVIndex;    // Index of the probe variability average SRV on the descriptor heap or in a Texture2DArray resource array
+    //------------------------------------------------- 48B
 };
 
 /**
@@ -116,6 +121,7 @@ struct DDGIVolumeDescGPU
     uint     probeIrradianceFormat;              // texture format of the irradiance texture (EDDGIVolumeTextureFormat)
     bool     probeRelocationEnabled;             // whether probe relocation is enabled for this volume
     bool     probeClassificationEnabled;         // whether probe classification is enabled for this volume
+    bool     probeVariabilityEnabled;            // whether probe variability is enabled for this volume
 };
 
 #ifndef HLSL // CPU only
@@ -164,15 +170,15 @@ static inline rtxgi::DDGIVolumeDescGPUPacked PackDDGIVolumeDescGPU(const rtxgi::
     output.packed4 = (output.packed4 & ~0x700000)   | (input.probeIrradianceFormat << 20);
     output.packed4 = (output.packed4 & ~0x800000)   | (input.probeRelocationEnabled << 23);
     output.packed4 = (output.packed4 & ~0x1000000)  | (input.probeClassificationEnabled << 24);
+    output.packed4 = (output.packed4 & ~0x2000000)  | (input.probeVariabilityEnabled << 25);
 
-    output.packed4 = (output.packed4 & ~0x2000000)  | (input.probeScrollClear[0] << 25);
-    output.packed4 = (output.packed4 & ~0x4000000)  | (input.probeScrollClear[1] << 26);
-    output.packed4 = (output.packed4 & ~0x8000000)  | (input.probeScrollClear[2] << 27);
+    output.packed4 = (output.packed4 & ~0x4000000)  | (input.probeScrollClear[0] << 26);
+    output.packed4 = (output.packed4 & ~0x8000000)  | (input.probeScrollClear[1] << 27);
+    output.packed4 = (output.packed4 & ~0x10000000)  | (input.probeScrollClear[2] << 28);
 
-    output.packed4 = (output.packed4 & ~0x10000000) | (input.probeScrollDirections[0] << 28);
-    output.packed4 = (output.packed4 & ~0x20000000) | (input.probeScrollDirections[1] << 29);
-    output.packed4 = (output.packed4 & ~0x40000000) | (input.probeScrollDirections[2] << 30);
-  //output.packed4, 1 bit unused
+    output.packed4 = (output.packed4 & ~0x20000000) | (input.probeScrollDirections[0] << 29);
+    output.packed4 = (output.packed4 & ~0x40000000) | (input.probeScrollDirections[1] << 30);
+    output.packed4 = (output.packed4 & ~0x80000000) | (input.probeScrollDirections[2] << 31);
 
     return output;
 }
@@ -230,12 +236,13 @@ DDGIVolumeDescGPU UnpackDDGIVolumeDescGPU(DDGIVolumeDescGPUPacked input)
     output.probeIrradianceFormat = (uint)((input.packed4 >> 20) & 0x00000007);
     output.probeRelocationEnabled = (bool)((input.packed4 >> 23) & 0x00000001);
     output.probeClassificationEnabled = (bool)((input.packed4 >> 24) & 0x00000001);
-    output.probeScrollClear[0] = (bool)((input.packed4 >> 25) & 0x00000001);
-    output.probeScrollClear[1] = (bool)((input.packed4 >> 26) & 0x00000001);
-    output.probeScrollClear[2] = (bool)((input.packed4 >> 27) & 0x00000001);
-    output.probeScrollDirections[0] = (bool)((input.packed4 >> 28) & 0x00000001);
-    output.probeScrollDirections[1] = (bool)((input.packed4 >> 29) & 0x00000001);
-    output.probeScrollDirections[2] = (bool)((input.packed4 >> 30) & 0x00000001);
+    output.probeVariabilityEnabled = (bool)((input.packed4 >> 25) & 0x00000001);
+    output.probeScrollClear[0] = (bool)((input.packed4 >> 26) & 0x00000001);
+    output.probeScrollClear[1] = (bool)((input.packed4 >> 27) & 0x00000001);
+    output.probeScrollClear[2] = (bool)((input.packed4 >> 28) & 0x00000001);
+    output.probeScrollDirections[0] = (bool)((input.packed4 >> 29) & 0x00000001);
+    output.probeScrollDirections[1] = (bool)((input.packed4 >> 30) & 0x00000001);
+    output.probeScrollDirections[2] = (bool)((input.packed4 >> 31) & 0x00000001);
 
     return output;
 }

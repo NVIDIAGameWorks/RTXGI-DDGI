@@ -49,6 +49,7 @@ namespace Graphics
                 std::flush(log);
 
                 UINT arraySize = 0;
+                UINT variabilityAverageArraySize = 0;
 
                 // Create the texture arrays
                 {
@@ -74,7 +75,7 @@ namespace Graphics
                         GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Irradiance, width, height, arraySize);
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Irradiance, volumeDesc.probeIrradianceFormat);
 
-                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET };
+                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET };
                         CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeIrradiance), "create DDGIVolume probe irradiance texture array!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Irradiance";
@@ -87,7 +88,7 @@ namespace Graphics
                         GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Distance, width, height, arraySize);
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Distance, volumeDesc.probeDistanceFormat);
 
-                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET };
+                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET };
                         CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeDistance), "create DDGIVolume probe distance texture array!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Distance";
@@ -101,11 +102,45 @@ namespace Graphics
                         if (width <= 0 || height <= 0) return false;
                         format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, volumeDesc.probeDataFormat);
 
-                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
                         CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeData), "create DDGIVolume probe data texture array!", log);
                     #ifdef GFX_NAME_OBJECTS
                         std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Data";
                         volumeResources.unmanaged.probeData->SetName(name.c_str());
+                    #endif
+                    }
+
+                    // Probe variability texture
+                    {
+                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::Variability, width, height, arraySize);
+                        if (width <= 0 || height <= 0) return false;
+                        format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Variability, volumeDesc.probeVariabilityFormat);
+
+                        TextureDesc desc = { width, height, arraySize, 1, format, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeVariability), "create DDGIVolume Probe variability texture!", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Variability";
+                        volumeResources.unmanaged.probeVariability->SetName(name.c_str());
+                    #endif
+                    }
+
+                    // Probe variability average
+                    {
+                        GetDDGIVolumeTextureDimensions(volumeDesc, EDDGIVolumeTextureType::VariabilityAverage, width, height, variabilityAverageArraySize);
+                        if (width <= 0 || height <= 0) return false;
+                        format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::VariabilityAverage, volumeDesc.probeVariabilityFormat);
+
+                        TextureDesc desc = { width, height, variabilityAverageArraySize, 1, format, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS };
+                        CHECK(CreateTexture(d3d, desc, &volumeResources.unmanaged.probeVariabilityAverage), "create DDGIVolume Probe variability average texture!", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Variability Average";
+                        volumeResources.unmanaged.probeVariabilityAverage->SetName(name.c_str());
+                    #endif
+                        BufferDesc readbackDesc = { sizeof(float)*2, 0, EHeapType::READBACK, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE };
+                        CHECK(CreateBuffer(d3d, readbackDesc, &volumeResources.unmanaged.probeVariabilityReadback), "create DDGIVolume Probe variability readback buffer!", log);
+                    #ifdef GFX_NAME_OBJECTS
+                        name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Variability Readback";
+                        volumeResources.unmanaged.probeVariabilityReadback->SetName(name.c_str());
                     #endif
                     }
                 }
@@ -181,6 +216,27 @@ namespace Graphics
                         srvDesc.Format = uavDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, volumeDesc.probeDataFormat);
                         d3d.device->CreateUnorderedAccessView(volumeResources.unmanaged.probeData, nullptr, &uavDesc, uavHandle);
                         d3d.device->CreateShaderResourceView(volumeResources.unmanaged.probeData, &srvDesc, srvHandle);
+                    }
+
+                    // Probe variability texture descriptors
+                    {
+                        uavHandle.ptr = heapStart.ptr + (resourceIndices.probeVariabilityUAVIndex * heapDesc.entrySize);
+                        srvHandle.ptr = heapStart.ptr + (resourceIndices.probeVariabilitySRVIndex * heapDesc.entrySize);
+
+                        srvDesc.Format = uavDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Variability, volumeDesc.probeVariabilityFormat);
+                        d3d.device->CreateUnorderedAccessView(volumeResources.unmanaged.probeVariability, nullptr, &uavDesc, uavHandle);
+                        d3d.device->CreateShaderResourceView(volumeResources.unmanaged.probeVariability, &srvDesc, srvHandle);
+                    }
+
+                    // Probe variability average texture descriptors
+                    {
+                        uavHandle.ptr = heapStart.ptr + (resourceIndices.probeVariabilityAverageUAVIndex * heapDesc.entrySize);
+                        srvHandle.ptr = heapStart.ptr + (resourceIndices.probeVariabilityAverageSRVIndex * heapDesc.entrySize);
+
+                        srvDesc.Format = uavDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::VariabilityAverage, volumeDesc.probeVariabilityFormat);
+                        srvDesc.Texture2DArray.ArraySize = uavDesc.Texture2DArray.ArraySize = variabilityAverageArraySize;
+                        d3d.device->CreateUnorderedAccessView(volumeResources.unmanaged.probeVariabilityAverage, nullptr, &uavDesc, uavHandle);
+                        d3d.device->CreateShaderResourceView(volumeResources.unmanaged.probeVariabilityAverage, &srvDesc, srvHandle);
                     }
                 }
 
@@ -279,6 +335,31 @@ namespace Graphics
                         std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Classification Reset PSO";
                         volumeResources.unmanaged.probeClassification.resetPSO->SetName(name.c_str());
                     #endif
+                        shaderIndex++;
+                    }
+
+                    // Probe Variability Reduction PSO
+                    {
+                        desc.CS.BytecodeLength = shaders[shaderIndex].bytecode->GetBufferSize();
+                        desc.CS.pShaderBytecode = shaders[shaderIndex].bytecode->GetBufferPointer();
+                        D3DCHECK(d3d.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&volumeResources.unmanaged.probeVariabilityPSOs.reductionPSO)));
+                    #ifdef GFX_NAME_OBJECTS
+                        std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Variability Reduction PSO";
+                        volumeResources.unmanaged.probeVariabilityPSOs.reductionPSO->SetName(name.c_str());
+                    #endif
+                        shaderIndex++;
+
+                    }
+
+                    // Probe Variability Extra Reduction PSO
+                    {
+                        desc.CS.BytecodeLength = shaders[shaderIndex].bytecode->GetBufferSize();
+                        desc.CS.pShaderBytecode = shaders[shaderIndex].bytecode->GetBufferPointer();
+                        D3DCHECK(d3d.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&volumeResources.unmanaged.probeVariabilityPSOs.extraReductionPSO)));
+                    #ifdef GFX_NAME_OBJECTS
+                        std::wstring name = L"DDGIVolume[" + std::to_wstring(volumeDesc.index) + L"], Probe Variability Extra Reduction PSO";
+                        volumeResources.unmanaged.probeVariabilityPSOs.extraReductionPSO->SetName(name.c_str());
+                    #endif
                     }
                 }
 
@@ -304,6 +385,9 @@ namespace Graphics
                 if (volume->GetProbeIrradiance()) volume->GetProbeIrradiance()->Release();
                 if (volume->GetProbeDistance()) volume->GetProbeDistance()->Release();
                 if (volume->GetProbeData()) volume->GetProbeData()->Release();
+                if (volume->GetProbeVariability()) volume->GetProbeVariability()->Release();
+                if (volume->GetProbeVariabilityAverage()) volume->GetProbeVariabilityAverage()->Release();
+                if (volume->GetProbeVariabilityReadback()) volume->GetProbeVariabilityReadback()->Release();
 
                 // Release PSOs
                 if (volume->GetProbeBlendingIrradiancePSO()) volume->GetProbeBlendingIrradiancePSO()->Release();
@@ -312,6 +396,8 @@ namespace Graphics
                 if (volume->GetProbeRelocationResetPSO()) volume->GetProbeRelocationResetPSO()->Release();
                 if (volume->GetProbeClassificationPSO()) volume->GetProbeClassificationPSO()->Release();
                 if (volume->GetProbeClassificationResetPSO()) volume->GetProbeClassificationResetPSO()->Release();
+                if (volume->GetProbeVariabilityReductionPSO()) volume->GetProbeVariabilityReductionPSO()->Release();
+                if (volume->GetProbeVariabilityExtraReductionPSO()) volume->GetProbeVariabilityExtraReductionPSO()->Release();
 
                 // Clear pointers
                 volume->Destroy();
@@ -327,7 +413,11 @@ namespace Graphics
              */
             void GetDDGIVolumeDesc(const Configs::DDGIVolume& config, DDGIVolumeDesc& volumeDesc)
             {
-                volumeDesc.name = config.name.c_str();
+                size_t size = config.name.size();
+                volumeDesc.name = new char[size + 1];
+                memset(volumeDesc.name, 0, size + 1);
+                memcpy(volumeDesc.name, config.name.c_str(), size);
+
                 volumeDesc.index = config.index;
                 volumeDesc.rngSeed = config.rngSeed;
                 volumeDesc.origin = { config.origin.x, config.origin.y, config.origin.z };
@@ -353,11 +443,12 @@ namespace Graphics
                 volumeDesc.probeIrradianceFormat = config.textureFormats.irradianceFormat;
                 volumeDesc.probeDistanceFormat = config.textureFormats.distanceFormat;
                 volumeDesc.probeDataFormat = config.textureFormats.dataFormat;
+                volumeDesc.probeVariabilityFormat = config.textureFormats.variabilityFormat;
 
                 volumeDesc.probeRelocationEnabled = config.probeRelocationEnabled;
                 volumeDesc.probeMinFrontfaceDistance = config.probeMinFrontfaceDistance;
-
                 volumeDesc.probeClassificationEnabled = config.probeClassificationEnabled;
+                volumeDesc.probeVariabilityEnabled = config.probeVariabilityEnabled;
 
                 if (config.infiniteScrollingEnabled) volumeDesc.movementType = EDDGIVolumeMovementType::Scrolling;
                 else volumeDesc.movementType = EDDGIVolumeMovementType::Default;
@@ -402,6 +493,10 @@ namespace Graphics
                 descHeap.resourceIndices.probeDistanceSRVIndex = DescriptorHeapOffsets::SRV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 2;
                 descHeap.resourceIndices.probeDataUAVIndex = DescriptorHeapOffsets::UAV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
                 descHeap.resourceIndices.probeDataSRVIndex = DescriptorHeapOffsets::SRV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
+                descHeap.resourceIndices.probeVariabilityUAVIndex = DescriptorHeapOffsets::UAV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 4;
+                descHeap.resourceIndices.probeVariabilitySRVIndex = DescriptorHeapOffsets::SRV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 4;
+                descHeap.resourceIndices.probeVariabilityAverageUAVIndex = DescriptorHeapOffsets::UAV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 5;
+                descHeap.resourceIndices.probeVariabilityAverageSRVIndex = DescriptorHeapOffsets::SRV_DDGI_VOLUME_TEX2DARRAY + (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 5;
 
                 // Set the volume constants structured buffer pointers and size
                 volumeResources.constantsBuffer = resources.volumeConstantsSTB;
@@ -435,6 +530,10 @@ namespace Graphics
                 resourceIndices.probeDistanceSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 2;
                 resourceIndices.probeDataUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
                 resourceIndices.probeDataSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 3;
+                resourceIndices.probeVariabilityUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 4;
+                resourceIndices.probeVariabilitySRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 4;
+                resourceIndices.probeVariabilityAverageUAVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 5;
+                resourceIndices.probeVariabilityAverageSRVIndex = (volumeDesc.index * rtxgi::GetDDGIVolumeNumTex2DArrayDescriptors()) + 5;
 
             #if RTXGI_DDGI_RESOURCE_MANAGEMENT
                 // Enable "Managed Mode", the RTXGI SDK creates graphics objects
@@ -452,9 +551,13 @@ namespace Graphics
                 volumeResources.managed.probeRelocation.updateCS = { volumeShaders[2].bytecode->GetBufferPointer(), volumeShaders[2].bytecode->GetBufferSize() };
                 volumeResources.managed.probeRelocation.resetCS = { volumeShaders[3].bytecode->GetBufferPointer(), volumeShaders[3].bytecode->GetBufferSize() };
 
-                assert(volumeShaders.size() == 6);
+                assert(volumeShaders.size() >= 6);
                 volumeResources.managed.probeClassification.updateCS = { volumeShaders[4].bytecode->GetBufferPointer(), volumeShaders[4].bytecode->GetBufferSize() };
                 volumeResources.managed.probeClassification.resetCS = { volumeShaders[5].bytecode->GetBufferPointer(), volumeShaders[5].bytecode->GetBufferSize() };
+
+                assert(volumeShaders.size() == 8);
+                volumeResources.managed.probeVariability.reductionCS = { volumeShaders[6].bytecode->GetBufferPointer(), volumeShaders[6].bytecode->GetBufferSize() };
+                volumeResources.managed.probeVariability.extraReductionCS = { volumeShaders[7].bytecode->GetBufferPointer(), volumeShaders[7].bytecode->GetBufferSize() };
             #else
                 // Enable "Unmanaged Mode", the application creates graphics objects
                 volumeResources.unmanaged.enabled = true;
@@ -500,17 +603,20 @@ namespace Graphics
                     #else
                         DestroyDDGIVolumeResources(resources, volumeConfig.index);
                     #endif
-                        delete resources.volumes[volumeConfig.index];
-                        resources.volumes[volumeConfig.index] = nullptr;
+                        SAFE_DELETE(resources.volumeDescs[volumeConfig.index].name);
+                        SAFE_DELETE(resources.volumes[volumeConfig.index]);
+                        resources.numVolumeVariabilitySamples[volumeConfig.index] = 0;
                     }
                 }
                 else
                 {
+                    resources.volumeDescs.emplace_back();
                     resources.volumes.emplace_back();
+                    resources.numVolumeVariabilitySamples.emplace_back();
                 }
 
                 // Describe the DDGIVolume's properties
-                DDGIVolumeDesc volumeDesc;
+                DDGIVolumeDesc& volumeDesc = resources.volumeDescs[volumeConfig.index];
                 GetDDGIVolumeDesc(volumeConfig, volumeDesc);
 
                 // Describe the DDGIVolume's resources and shaders
@@ -678,6 +784,7 @@ namespace Graphics
                     resources.rtShaders.rgs.filepath = root + L"shaders/ddgi/ProbeTraceRGS.hlsl";
                     resources.rtShaders.rgs.entryPoint = L"RayGen";
                     resources.rtShaders.rgs.exportName = L"DDGIProbeTraceRGS";
+                    Shaders::AddDefine(resources.rtShaders.rgs, L"GFX_NVAPI", std::to_wstring(1));
                     Shaders::AddDefine(resources.rtShaders.rgs, L"CONSTS_REGISTER", L"b0");   // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
                     Shaders::AddDefine(resources.rtShaders.rgs, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
@@ -932,13 +1039,19 @@ namespace Graphics
                     // Dispatch the rays
                     d3d.cmdList->DispatchRays(&desc);
 
+                    // Transition the volume's irradiance, distance, and probe data texture arrays from read-only (non-pixel shader) to read-write (UAV)
+                    volume->TransitionResources(d3d.cmdList, EDDGIExecutionStage::POST_PROBE_TRACE);
+
                     // Barrier(s)
                     barrier.UAV.pResource = volume->GetProbeRayData();
                     barriers.push_back(barrier);
                 }
 
                 // Wait for the ray traces to complete
-                d3d.cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+                if (!barriers.empty())
+                {
+                    d3d.cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+                }
 
             #ifdef GFX_PERF_MARKERS
                 PIXEndEvent(d3d.cmdList);
@@ -950,6 +1063,14 @@ namespace Graphics
             #ifdef GFX_PERF_MARKERS
                 PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "Indirect Lighting");
             #endif
+
+                // Transition the selected volume's irradiance, distance, and data texture arrays from read-write (UAV) to read-only (non-pixel shader)
+                // Note: use PRE_GATHER_PS if using the pixel shader (instead of compute) to gather indirect light
+                for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.selectedVolumes.size()); volumeIndex++)
+                {
+                    const DDGIVolume* volume = resources.selectedVolumes[volumeIndex];
+                    volume->TransitionResources(d3d.cmdList, EDDGIExecutionStage::PRE_GATHER_CS);
+                }
 
                 // Set the descriptor heaps
                 ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
@@ -971,6 +1092,14 @@ namespace Graphics
                 UINT groupsX = DivRoundUp(d3d.width, 8);
                 UINT groupsY = DivRoundUp(d3d.height, 4);
                 d3d.cmdList->Dispatch(groupsX, groupsY, 1);
+
+                // Note: if using the pixel shader (instead of compute) to gather indirect light, transition
+                // the selected volume's resources to D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+              //for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.selectedVolumes.size()); volumeIndex++)
+              //{
+              //    const DDGIVolume* volume = resources.selectedVolumes[volumeIndex];
+              //    volume->TransitionResources(d3d.cmdList, EDDGIExecutionStage::POST_GATHER_PS);
+              //}
 
                 // Wait for the compute pass to finish
                 D3D12_RESOURCE_BARRIER barrier = {};
@@ -995,8 +1124,8 @@ namespace Graphics
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
                 assert(RTXGI_VERSION::minor == 3);
-                assert(RTXGI_VERSION::revision == 0);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.3.0") == 0);
+                assert(RTXGI_VERSION::revision == 5);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.3.5") == 0);
 
                 UINT numVolumes = static_cast<UINT>(config.ddgi.volumes.size());
 
@@ -1033,6 +1162,7 @@ namespace Graphics
                 resources.relocateStat = perf.AddGPUStat("  Relocate");
                 resources.classifyStat = perf.AddGPUStat("  Classify");
                 resources.lightingStat = perf.AddGPUStat("  Lighting");
+                resources.variabilityStat = perf.AddGPUStat("  Variability");
 
                 return true;
             }
@@ -1051,12 +1181,7 @@ namespace Graphics
                 for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.volumes.size()); volumeIndex++)
                 {
                     Configs::DDGIVolume volumeConfig = config.ddgi.volumes[volumeIndex];
-                    if (!CreateDDGIVolume(
-                        d3d,
-                        d3dResources,
-                        resources,
-                        volumeConfig,
-                        log)) return false;
+                    if (!CreateDDGIVolume(d3d, d3dResources, resources, volumeConfig, log)) return false;
                 }
                 log << "done.\n";
                 log << std::flush;
@@ -1088,6 +1213,8 @@ namespace Graphics
                     // Path Trace constants
                     d3dResources.constants.pt.rayNormalBias = config.pathTrace.rayNormalBias;
                     d3dResources.constants.pt.rayViewBias = config.pathTrace.rayViewBias;
+                    d3dResources.constants.pt.samplesPerPixel = config.pathTrace.samplesPerPixel;
+                    d3dResources.constants.pt.SetShaderExecutionReordering(config.ddgi.shaderExecutionReordering);
 
                     // Clear the selected volume, if necessary
                     if (config.ddgi.volumes[config.ddgi.selectedVolume].clearProbes)
@@ -1096,6 +1223,7 @@ namespace Graphics
                         volume->ClearProbes(d3d.cmdList);
 
                         config.ddgi.volumes[config.ddgi.selectedVolume].clearProbes = 0;
+                        resources.numVolumeVariabilitySamples[config.ddgi.selectedVolume] = 0;
                     }
 
                     // Select the active volumes
@@ -1103,9 +1231,23 @@ namespace Graphics
                     for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.volumes.size()); volumeIndex++)
                     {
                         // TODO: processing to determine which volumes are in-frustum, active, and prioritized for update / render
-                        // For now, just select all volumes
+
+                        // Get the volume
                         DDGIVolume* volume = static_cast<DDGIVolume*>(resources.volumes[volumeIndex]);
-                        resources.selectedVolumes.push_back(volume);
+
+                        // If the scene's lights, skylight, or geometry have changed *or* the volume moves *or* the probes are reset, reset the variability
+                        if (config.ddgi.volumes[volumeIndex].clearProbeVariability) resources.numVolumeVariabilitySamples[volumeIndex] = 0;
+
+                        // Don't update volumes whose variability measurement is low enough to be considered converged
+                        // Enforce a minimum of 16 samples to filter out early outliers
+                        const uint32_t MinimumVariabilitySamples = 16;
+                        float volumeAverageVariability = volume->GetVolumeAverageVariability();
+                        bool isConverged = volume->GetProbeVariabilityEnabled()
+                                                && (resources.numVolumeVariabilitySamples[volumeIndex]++ > MinimumVariabilitySamples)
+                                                && (volumeAverageVariability < config.ddgi.volumes[config.ddgi.selectedVolume].probeVariabilityThreshold);
+
+                        // Add the volume to the list of volumes to update (it hasn't converged)
+                        if (!isConverged) resources.selectedVolumes.push_back(volume);
                     }
 
                     // Update the constants for the selected DDGIVolumes
@@ -1156,6 +1298,13 @@ namespace Graphics
                     rtxgi::d3d12::ClassifyDDGIVolumeProbes(d3d.cmdList, numVolumes, resources.selectedVolumes.data());
                     GPU_TIMESTAMP_END(resources.classifyStat->GetGPUQueryEndIndex());
 
+                    // Calculate variability
+                    GPU_TIMESTAMP_BEGIN(resources.variabilityStat->GetGPUQueryBeginIndex());
+                    rtxgi::d3d12::CalculateDDGIVolumeVariability(d3d.cmdList, numVolumes, resources.selectedVolumes.data());
+                    // The readback happens immediately, not recorded on the command list, so will return a value from a previous update
+                    rtxgi::d3d12::ReadbackDDGIVolumeVariability(numVolumes, resources.selectedVolumes.data());
+                    GPU_TIMESTAMP_END(resources.variabilityStat->GetGPUQueryEndIndex());
+
                     // Gather indirect lighting in screen-space
                     GPU_TIMESTAMP_BEGIN(resources.lightingStat->GetGPUQueryBeginIndex());
                     GatherIndirectLighting(d3d, d3dResources, resources);
@@ -1197,8 +1346,11 @@ namespace Graphics
                 SAFE_RELEASE(resources.rtvDescriptorHeap);
                 SAFE_RELEASE(resources.volumeResourceIndicesSTB);
                 SAFE_RELEASE(resources.volumeResourceIndicesSTBUpload);
+
+                resources.volumeResourceIndicesSTBSizeInBytes = 0;
                 SAFE_RELEASE(resources.volumeConstantsSTB);
                 SAFE_RELEASE(resources.volumeConstantsSTBUpload);
+                resources.volumeConstantsSTBSizeInBytes = 0;
 
                 // Release volumes
                 for (size_t volumeIndex = 0; volumeIndex < resources.volumes.size(); volumeIndex++)
@@ -1206,10 +1358,13 @@ namespace Graphics
                 #if !RTXGI_DDGI_RESOURCE_MANAGEMENT
                     DestroyDDGIVolumeResources(resources, volumeIndex);
                 #endif
+                    SAFE_DELETE(resources.volumeDescs[volumeIndex].name);
                     resources.volumes[volumeIndex]->Destroy();
-                    delete resources.volumes[volumeIndex];
-                    resources.volumes[volumeIndex] = nullptr;
+                    SAFE_DELETE(resources.volumes[volumeIndex]);
                 }
+                resources.volumeDescs.clear();
+                resources.volumes.clear();
+                resources.selectedVolumes.clear();
             }
 
             /**
@@ -1230,13 +1385,22 @@ namespace Graphics
 
                     // Write probe irradiance
                     std::string filename = baseName + "-Irradiance";
-                    success &= WriteResourceToDisk(d3d, filename, volume->GetProbeIrradiance(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                    success &= WriteResourceToDisk(d3d, filename, volume->GetProbeIrradiance(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
                     // Write probe data
                     if(volume->GetProbeRelocationEnabled() || volume->GetProbeClassificationEnabled())
                     {
                         filename = baseName + "-Probe-Data";
-                        success &= WriteResourceToDisk(d3d, filename, volume->GetProbeData(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                        success &= WriteResourceToDisk(d3d, filename, volume->GetProbeData(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                    }
+
+                    // Write probe variability
+                    if (volume->GetProbeVariabilityEnabled())
+                    {
+                        filename = baseName + "-Probe-Variability";
+                        success &= WriteResourceToDisk(d3d, filename, volume->GetProbeVariability(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                        filename = baseName + "-Probe-Variability-Average";
+                        success &= WriteResourceToDisk(d3d, filename, volume->GetProbeVariabilityAverage(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                     }
                 }
                 return success;

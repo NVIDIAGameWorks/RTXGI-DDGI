@@ -69,6 +69,7 @@ namespace Graphics
                 resources.shaders.rgs.exportName = L"PathTraceRGS";
                 resources.shaders.rgs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2"};\
                 Shaders::AddDefine(resources.shaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
+                Shaders::AddDefine(resources.shaders.rgs, L"GFX_NVAPI", std::to_wstring(0));
                 CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.rgs, true), "compile path tracing ray generation shader!\n", log);
 
                 // Load and compile the miss shader
@@ -359,9 +360,10 @@ namespace Graphics
                 descriptor->descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
                 descriptor->pImageInfo = tex2D.data();
 
-                // 13: ByteAddressBuffer SRVs (material indices, index & vertex buffers)
+                // 13: ByteAddressBuffer SRVs (mesh offsets, geometry data, index & vertex buffers)
                 std::vector<VkDescriptorBufferInfo> byteAddressBuffers;
-                byteAddressBuffers.push_back({ vkResources.materialIndicesRB, 0, VK_WHOLE_SIZE }); // material indices
+                byteAddressBuffers.push_back({ vkResources.meshOffsetsRB, 0, VK_WHOLE_SIZE }); // mesh offsets
+                byteAddressBuffers.push_back({ vkResources.geometryDataRB, 0, VK_WHOLE_SIZE }); // geometry data
 
                 // Scene index and vertex buffers
                 for (uint32_t bufferIndex = 0; bufferIndex < static_cast<uint32_t>(vkResources.sceneIBs.size()); bufferIndex++)
@@ -475,6 +477,7 @@ namespace Graphics
                 vkResources.constants.pt.numBounces = config.pathTrace.numBounces;
                 vkResources.constants.pt.samplesPerPixel = config.pathTrace.samplesPerPixel;
                 vkResources.constants.pt.SetAntialiasing(config.pathTrace.antialiasing);
+                vkResources.constants.pt.SetShaderExecutionReordering(false);
 
                 // Post Process constants
                vkResources.constants.post.useFlags = POSTPROCESS_FLAG_USE_NONE;

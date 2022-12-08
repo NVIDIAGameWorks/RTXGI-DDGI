@@ -62,7 +62,7 @@ namespace Graphics
                     ID3D12Resource*                             probeIBUpload = nullptr;
                     D3D12_INDEX_BUFFER_VIEW                     probeIBView;
 
-                    Scenes::MeshPrimitive                       probe;
+                    Scenes::Mesh                                probe;
                     AccelerationStructure                       blas;
                     AccelerationStructure                       tlas;
 

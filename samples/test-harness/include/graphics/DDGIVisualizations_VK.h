@@ -75,7 +75,7 @@ namespace Graphics
                     VkBuffer                                        probeIBUpload = nullptr;
                     VkDeviceMemory                                  probeIBUploadMemory = nullptr;
 
-                    Scenes::MeshPrimitive                           probe;
+                    Scenes::Mesh                                    probe;
                     AccelerationStructure                           blas;
                     AccelerationStructure                           tlas;
 

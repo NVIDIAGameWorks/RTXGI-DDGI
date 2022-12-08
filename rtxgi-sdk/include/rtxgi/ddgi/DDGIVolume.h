@@ -35,17 +35,21 @@ namespace rtxgi
         Irradiance,
         Distance,
         Data,
+        Variability,
+        VariabilityAverage,
         Count
     };
 
     enum class EDDGIVolumeTextureFormat
     {
         U32   = 0,  // 32-bits per texel unsigned normalized integer format. 4 channels, 10-bits per RGB and 2 bits for alpha. Used with Irradiance.
-        F16x2 = 1,  // 32-bits per texel half precision float format. 2 channels, 16-bits per channel. Used with Distance.
-        F16x4 = 2,  // 64-bits per texel half precision float format. 4 channels, 16-bits per channel. Used with Irradiance, Distance, and Data.
-        F32x2 = 3,  // 64-bits per texel float format. 2 channels, 32-bits per channel. Used with RayData and Distance.
-        F32x4 = 4,  // 128-bits per texel float format. 4 channels, 32-bits per channel. Used with RayData, Irradiance, and Data.
-        Count = 5
+        F16   = 1,  // 16-bits per texel half precision float format. 1 channel,  16-bits per channel. Used with Variability.
+        F16x2 = 2,  // 32-bits per texel half precision float format. 2 channels, 16-bits per channel. Used with Distance.
+        F16x4 = 3,  // 64-bits per texel half precision float format. 4 channels, 16-bits per channel. Used with Irradiance, Distance, and Data.
+        F32   = 4,  // 32-bits per texel float format. 1 channel,  32-bits per channel. Used with Variability.
+        F32x2 = 5,  // 64-bits per texel float format. 2 channels, 32-bits per channel. Used with RayData and Distance.
+        F32x4 = 6,  // 128-bits per texel float format. 4 channels, 32-bits per channel. Used with RayData, Irradiance, and Data.
+        Count = 7
     };
 
     enum class EDDGIVolumeMovementType
@@ -77,7 +81,7 @@ namespace rtxgi
      */
     struct DDGIVolumeDesc
     {
-        const char*     name;                                   // Name of the volume
+        char*           name = nullptr;                         // Name of the volume
         uint32_t        index = 0;                              // Index of the volume in the constants structured buffer
         uint32_t        rngSeed = 0;                            // A seed for the random number generator (optional). A non-zero value manually initializes the seed used for rotation generation. Leave as zero to use the default (based on system time).
 
@@ -135,6 +139,7 @@ namespace rtxgi
         EDDGIVolumeTextureFormat probeIrradianceFormat;         // Texel format for the irradiance texture, used with GetDDGIVolumeTextureFormat()
         EDDGIVolumeTextureFormat probeDistanceFormat;           // Texel format for the distance texture, used with GetDDGIVolumeTextureFormat()
         EDDGIVolumeTextureFormat probeDataFormat;               // Texel format for the probe data texture, used with GetDDGIVolumeTextureFormat()
+        EDDGIVolumeTextureFormat probeVariabilityFormat;        // Texel format index for the probe variability texture, used with GetDDGIVolumeTextureFormat()
 
         // Using shared memory for scroll tests in probe blending can be a performance win on some hardware by reducing the compute workload
         bool            probeBlendingUseScrollSharedMemory = false;
@@ -149,6 +154,9 @@ namespace rtxgi
         // Probe classification marks probes with states to reduce the ray tracing and blending workloads
         bool            probeClassificationEnabled = false;
         bool            probeClassificationNeedsReset = false;
+
+        // Probe variability tracks the change in probes between updates as a proxy for convergence
+        bool            probeVariabilityEnabled = false;
 
         // The type of movement the volume supports
         EDDGIVolumeMovementType movementType = EDDGIVolumeMovementType::Default;
@@ -226,14 +234,16 @@ namespace rtxgi
         // Releases resources owned by the volume
         virtual void Destroy() = 0;
 
+    #if _DEBUG
         // Packed constant data validation
         void ValidatePackedData(const DDGIVolumeDescGPUPacked packed) const;
+    #endif
 
         //------------------------------------------------------------------------
         // Setters
         //------------------------------------------------------------------------
 
-        void SetName(const char* name) { m_desc.name = name; }
+        void SetName(char* name) { m_desc.name = name; }
 
         void SetIndex(uint32_t index) { m_desc.index = index; }
 
@@ -284,6 +294,11 @@ namespace rtxgi
         void SetProbeClassificationEnabled(bool value) { m_desc.probeClassificationEnabled = value; }
 
         void SetProbeClassificationNeedsReset(bool value) { m_desc.probeClassificationNeedsReset = value; }
+
+        // Probe Variability Setters
+        void SetProbeVariabilityEnabled(bool value) { m_desc.probeVariabilityEnabled = value; }
+
+        void SetVolumeAverageVariability(float value) { m_averageVariability = value; };
 
         //------------------------------------------------------------------------
         // Getters
@@ -367,6 +382,11 @@ namespace rtxgi
 
         bool GetProbeClassificationNeedsReset() const { return m_desc.probeClassificationNeedsReset; }
 
+        // Probe Variability Getters
+        bool GetProbeVariabilityEnabled() const { return m_desc.probeVariabilityEnabled; }
+
+        float GetVolumeAverageVariability() const { return m_averageVariability; };
+
     protected:
 
         void ComputeRandomRotation();
@@ -395,6 +415,8 @@ namespace rtxgi
         int3           m_probeScrollOffsets = { 0, 0, 0 };                     // Grid-space space offsets for scrolling movement
         int3           m_probeScrollDirections = { 0, 0, 0 };                  // Direction of scrolling movement
         bool           m_probeScrollClear[3] = { 0, 0, 0 };                    // If probes of a plane need to be cleared due to scrolling movement
+
+        float          m_averageVariability = 0;                               // Average variability for last update's probe irradiance values
 
         bool           m_insertPerfMarkers = false;                            // Toggles whether the volume will insert performance markers in the graphics command list.
 

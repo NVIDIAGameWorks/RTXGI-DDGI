@@ -33,7 +33,9 @@ At Render-Time
     - *Tip:* use the SDK's ```RelocateDDGIVolumeProbes()``` function
 5. [**Classify Probes (optional)**](DDGIVolume.md#probe-classification) within relevant, active ```DDGIVolume```s to deactivate tracing and blending operations for probes that do not contribute to the final result
     - *Tip:* use the SDK's ```ClassifyDDGIVolumeProbes()``` function
-6. [**Query Irradiance**](#querying-irradiance-with-a-ddgivolume) from relevant, active ```DDGIVolume```s to gather indirect lighting in screen-space
+6. [**Calculate Variability (optional)**](DDGIVolume.md#probe-variability) within relevant, active ```DDGIVolume```s to generate variability measurements for the current update, then use these values to determine if the volume should remain active or not
+    - *Tip:* use the SDK's ```CalculateDDGIVolumeVariability()``` and ```ReadbackDDGIVolumeVariability()``` functions
+7. [**Query Irradiance**](#querying-irradiance-with-a-ddgivolume) from relevant, active ```DDGIVolume```s to gather indirect lighting in screen-space
 
 ### Implementation Details
 

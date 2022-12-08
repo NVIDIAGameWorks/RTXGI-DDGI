@@ -138,6 +138,10 @@ struct DDGIVolumeResourceIndices
     uint probeDistanceSRVIndex;
     uint probeDataUAVIndex;
     uint probeDataSRVIndex;
+    uint probeVariabilityUAVIndex;
+    uint probeVariabilitySRVIndex;
+    uint probeVariabilityAverageUAVIndex;
+    uint probeVariabilityAverageSRVIndex;
 };
 ```
 
@@ -222,6 +226,7 @@ The main workloads executed by a ```DDGIVolume``` are implemented in three shade
  * ProbeBlendingCS.hlsl
  * ProbeRelocationCS.hlsl
  * ProbeClassificationCS.hlsl
+ * ReductionCS.hlsl
 
  To make it possible to directly use the SDK's shader files in your codebase (with or without the RTXGI SDK), shader functionality is configured through shader compiler defines. All shaders support both traditionally bound and bindless resource access methods.
 
@@ -334,6 +339,10 @@ The following defines provide SDK shaders with the information necessary to unde
   * *D3D12:* the UAV shader register ```X``` and space ```Y``` of the DDGIVolume probe data texture array.
   * *Vulkan:* the binding slot ```X``` and descriptor set index ```Y``` of the DDGIVolume probe data texture array.
 
+```PROBE_VARIABILITY_REGISTER [uX|X]``` <br> ```PROBE_VARIABILITY_SPACE [spaceY|Y]```
+  * *D3D12:* the UAV shader register ```X``` and space ```Y``` of the DDGIVolume probe variability texture array.
+  * *Vulkan:* the binding slot ```X``` and descriptor set index ```Y``` of the DDGIVolume probe variability texture array.
+
 ---
 
 ### [```ProbeBlendingCS.hlsl```](../rtxgi-sdk/shaders/ddgi/ProbeBlendingCS.hlsl)
@@ -438,14 +447,40 @@ struct ProbeRelocationBytecode
 
 ---
 
+### [```ReductionCS.hlsl```](../rtxgi-sdk/shaders/ddgi/ReductionCS.hlsl)
+
+This file contains compute shader code that reduces the probe variability texture down to a single value. See [Probe Variability](#probe-variability) for more information.
+
+This shader is used by the ```rtxgi::[d3d12|vulkan]::CalculateDDGIVolumeVariability(...)``` function.
+
+**Compilation Instructions**
+
+This shader file provides two entry points:
+ - ```DDGIReductionCS()``` - performs initial reduction pass on per-probe-texel variability data.
+ - ```DDGIExtraReductionCS()``` - if the probe variability texture is too large to reduce down to one value in a single pass, this shader will perform additional reductions and can be run repeatedly until the output reaches a single value.
+
+Pass compiled shader bytecode or pipeline state objects to the  `ProbeVariabilityBytecode` or `ProbeVariability[PSO|Pipeline]` structs that corresponds to the entry points in the shader file (see below).
+
+```C++
+struct ProbeVariabilityBytecode
+{
+    ShaderBytecode reductionCS;      // DDGIReductionCS() entry point
+    ShaderBytecode extraReductionCS; // DDGIExtraReductionCS() entry point
+};
+```
+
+---
+
 ## Texture Layout
 
-The ```DDGIVolume``` uses four texture arrays to store its data:
+The ```DDGIVolume``` uses six texture arrays to store its data:
 
  1. Probe Ray Data
  2. Probe Irradiance
  3. Probe Distance
  4. Probe Data
+ 5. Probe Variability
+ 6. Probe Variability Average
 
 ### Probe Ray Data
 
@@ -512,6 +547,32 @@ Within a texel:
 <figure>
 <img src="images/ddgivolume-textures-probedata.jpg" width=800px></img>
 <figcaption><b>Figure 7: A visualization of the Probe Data texture (zoomed) for the Crytek Sponza scene</b></figcaption>
+</figure>
+
+### Probe Variability
+
+This texture array stores the [coefficient of variation](https://en.wikipedia.org/wiki/Coefficient_of_variation) for all probe irradiance texels in a volume used by [Probe Variability](#probe-variability). The texture dimensions and layout are the same as the irradiance texture array ***with probe border texels omitted***. This texture array has a single channel that stores the scalar coefficient of variation value.
+
+Below is a visualization of the texture array. The visualization defines a threshold value, then marks inactive probes in blue, below-threshold values in red, and above-threshold values in green.
+
+<figure>
+<img src="images/ddgivolume-textures-probevariability.jpg" width=800px></img>
+<figcaption><b>Figure 8: A visualization of the Probe Variability texture array for the Cornell Box scene</b></figcaption>
+</figure>
+
+### Probe Variability Average
+
+[Probe Variability](#probe-variability) averages the coefficient of variation of all probes in a volume to generate a single variability value. This texture array stores the intermediate values used in the averaging process. The final average variability value is stored in texel (0, 0) when the reduction passes complete.
+
+This texture array has two channels:
+  - The averaged coefficient of variation is stored in the R channel
+  - A weight the reduction shader uses to average contributions from all probes is stored in the G channel
+
+Below is a visualization of the texture array. The visualization defines a threshold value, then marks inactive probes in blue, below-threshold values in red, and above-threshold values in green.
+
+<figure>
+<img src="images/ddgivolume-textures-probevariability-avg.jpg" width=400px></img>
+<figcaption><b>Figure 9: A visualization of the Probe Variability Average texture for the Cornell Box scene</b></figcaption>
 </figure>
 
 ### Probe Count Limits
@@ -636,7 +697,7 @@ Critically, instead of adjusting the position of all probes when the active area
 
 <figure>
 <img src="images/ddgivolume-movement-isv.gif" width="700px"></img>
-<figcaption><b>Figure 8: Infinite Scrolling Volume Movement</b></figcaption>
+<figcaption><b>Figure 10: Infinite Scrolling Volume Movement</b></figcaption>
 </figure>
 
 ISVs are also useful when dynamic indirect lighting is desired around the camera view or a player character. Anchor the infinite scrolling volume to the camera view or a player character and use the camera or player's movement to drive the volume's scrolling of the active area.
@@ -661,7 +722,7 @@ Any regular grid of sampling points will struggle to robustly handle all content
 <figure>
 <img src="images/ddgivolume-relocation-off.jpg" width=49%></img>
 <img src="images/ddgivolume-relocation-on.jpg" width=49%></img>
-<figcaption><b>Figure 9: (Left) Probes falling inside wall geometry without probe relocation. (Right) Probes adjusted to a more useful locations with probe relocation enabled.</b></figcaption>
+<figcaption><b>Figure 11: (Left) Probes falling inside wall geometry without probe relocation. (Right) Probes adjusted to a more useful locations with probe relocation enabled.</b></figcaption>
 </figure>
 
 To use Probe Relocation:
@@ -692,7 +753,7 @@ Classification is executed in two phases:
 <figure>
 <img src="images/ddgivolume-classification-01.jpg" width=49%></img>
 <img src="images/ddgivolume-classification-02.jpg" width=49%></img>
-<figcaption><b>Figure 10: Disabled probes are highlighted with red outlines. Probes inside of geometry or with no surrounding geometry are disabled.</b></figcaption>
+<figcaption><b>Figure 12: Disabled probes are highlighted with red outlines. Probes inside of geometry or with no surrounding geometry are disabled.</b></figcaption>
 </figure>
 
 
@@ -707,8 +768,18 @@ The number of fixed rays is specified by the ```RTXGI_DDGI_NUM_FIXED_RAYS``` def
 
 <figure>
 <img src="images/ddgivolume-fixedRays.gif"></img>
-<figcaption><b>Figure 11: The default fixed rays distribution used in probe relocation and classification.</b></figcaption>
+<figcaption><b>Figure 13: The default fixed rays distribution used in probe relocation and classification.</b></figcaption>
 </figure>
+
+# Probe Variability
+
+It is often the case that the irradiance estimates stored in ```DDGIVolume``` probes contain a non-zero level of variance (per octahedral texel), even after a substantial quantity of samples have been accumulated. In fact, it is possible that **some (or even all) texels of a given probe may never fully converge**. This results in a continuous amount of low frequency noise in indirect lighting estimates computed from a ```DDGIVolume```. While this is not a problem (visually) in a single frame (i.e. the estimate is still reasonable), the low frequency noise *changes randomly* each frame. This produces objectionable temporal artifacts.
+
+To address this problem, ```DDGIVolume``` are now able to track probe variability. Probe Variability measures an average [coefficient of variation](https://en.wikipedia.org/wiki/Coefficient_of_variation) across the volume's probes. This serves as an estimate of how voliatile the volume's estimate of the light field is from one update to the next. As more samples are blended in and probe irradiance estimates improve, the measured variability will decrease towards zero. 
+
+Importantly, the **variability value may not ever reach zero**. Instead, probe irradiance estimates eventually settle in a state where the variability stays within a given range. At this point, probes are converged 'enough' and the objectionable low frequency noise can be avoided by pausing probe ray tracing and blending updates for the ```DDGIVolume```. When an event that triggers a change to the volume's light field occurs (e.g. a light or object moves, an explosion occurs, weather changes, etc) ray tracing and blending updates should be re-enabled until the variability measure settles again.
+
+The range and stability of probe variability values depends on several factors including: the extent of the ```DDGIVolume```, the distribution of probes, the number of rays traced per probe, and the light transport characteristics of the scene. As a result, the SDK exposes the measured variability and expects the application to make decisions to handle variability ranges and updates.
 
 # Rules of Thumb
 

@@ -309,32 +309,38 @@ namespace Scenes
 
             Mesh mesh;
             mesh.name = gltfMesh.name;
+            mesh.numVertices = 0;
+            mesh.numIndices = 0;
             if (mesh.name.compare("") == 0) mesh.name = "Mesh_" + std::to_string(meshIndex);
 
             // Initialize the mesh bounding box
             mesh.boundingBox.min = { FLT_MAX, FLT_MAX, FLT_MAX };
             mesh.boundingBox.max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
+            uint32_t vertexByteOffset = 0;
+            uint32_t indexByteOffset = 0;
             for (uint32_t primitiveIndex = 0; primitiveIndex < static_cast<uint32_t>(gltfMesh.primitives.size()); primitiveIndex++)
             {
                 // Get a reference to the mesh primitive
                 const tinygltf::Primitive& p = gltfMesh.primitives[primitiveIndex];
 
-                MeshPrimitive m;
-                m.index = geometryIndex;
-                m.material = p.material;
+                MeshPrimitive mp;
+                mp.index = geometryIndex;
+                mp.material = p.material;
+                mp.vertexByteOffset = vertexByteOffset;
+                mp.indexByteOffset = indexByteOffset;
 
                 // Initialize the mesh primitive bounding box
-                m.boundingBox.min = { FLT_MAX, FLT_MAX, FLT_MAX };
-                m.boundingBox.max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+                mp.boundingBox.min = { FLT_MAX, FLT_MAX, FLT_MAX };
+                mp.boundingBox.max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
                 // Set the mesh primitive's material to the default material if one is not assigned or if no materials exist in the GLTF
-                if (m.material == -1) m.material = 0;
+                if (mp.material == -1) mp.material = 0;
 
                 // Get a reference to the mesh primitive's material
                 // If the mesh primitive material is blended or masked, it is not opaque
-                const Material& mat = scene.materials[m.material];
-                if (mat.data.alphaMode != 0) m.opaque = false;
+                const Material& mat = scene.materials[mp.material];
+                if (mat.data.alphaMode != 0) mp.opaque = false;
 
                 // Get data indices
                 int indicesIndex = p.indices;
@@ -377,7 +383,7 @@ namespace Scenes
                 const tinygltf::Buffer& indexBuffer = gltfData.buffers[indexBufferView.buffer];
                 const uint8_t* indexBufferAddress = indexBuffer.data.data();
                 int indexStride = tinygltf::GetComponentSizeInBytes(indexAccessor.componentType) * tinygltf::GetNumComponentsInType(indexAccessor.type);
-                m.indices.resize(indexAccessor.count);
+                mp.indices.resize(indexAccessor.count);
 
                 // Vertex normals
                 tinygltf::Accessor normalAccessor;
@@ -493,10 +499,11 @@ namespace Scenes
                     }
 
                     // Update the mesh primitive's bounding box
-                    m.boundingBox.min = rtxgi::Min(m.boundingBox.min, v.position);
-                    m.boundingBox.max = rtxgi::Max(m.boundingBox.max, v.position);
+                    mp.boundingBox.min = rtxgi::Min(mp.boundingBox.min, v.position);
+                    mp.boundingBox.max = rtxgi::Max(mp.boundingBox.max, v.position);
 
-                    m.vertices.push_back(v);
+                    mp.vertices.push_back(v);
+                    mesh.numVertices++;
                 }
 
                 // Get the index data
@@ -513,7 +520,7 @@ namespace Scenes
                     // Convert quarter precision indices to full precision
                     for (size_t i = 0; i < indexAccessor.count; i++)
                     {
-                        m.indices[i] = quarter[i];
+                        mp.indices[i] = quarter[i];
                     }
                 }
                 else if (indexStride == 2)
@@ -526,27 +533,33 @@ namespace Scenes
                     // Convert half precision indices to full precision
                     for (size_t i = 0; i < indexAccessor.count; i++)
                     {
-                        m.indices[i] = half[i];
+                        mp.indices[i] = half[i];
                     }
                 }
                 else
                 {
-                    memcpy(m.indices.data(), baseAddress, (indexAccessor.count * indexStride));
+                    memcpy(mp.indices.data(), baseAddress, (indexAccessor.count * indexStride));
                 }
 
+                // Update byte offsets
+                vertexByteOffset += static_cast<uint32_t>(mp.vertices.size()) * sizeof(Graphics::Vertex);
+                indexByteOffset += static_cast<uint32_t>(mp.indices.size()) * sizeof(UINT);
+
                 // Increment the triangle count
-                scene.numTriangles += static_cast<uint32_t>(indexAccessor.count) / 3;
+                mesh.numIndices += static_cast<int>(indexAccessor.count);
+                scene.numTriangles += mesh.numIndices / 3;
 
                 // Update the mesh's bounding box
-                mesh.boundingBox.min = rtxgi::Min(mesh.boundingBox.min, m.boundingBox.min);
-                mesh.boundingBox.max = rtxgi::Max(mesh.boundingBox.max, m.boundingBox.max);
+                mesh.boundingBox.min = rtxgi::Min(mesh.boundingBox.min, mp.boundingBox.min);
+                mesh.boundingBox.max = rtxgi::Max(mesh.boundingBox.max, mp.boundingBox.max);
 
                 // Add the mesh primitive
-                mesh.primitives.push_back(m);
+                mesh.primitives.push_back(mp);
 
                 geometryIndex++;
             }
 
+            mesh.index = static_cast<int>(scene.meshes.size());
             scene.meshes.push_back(mesh);
         }
 

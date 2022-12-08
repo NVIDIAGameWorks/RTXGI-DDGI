@@ -27,10 +27,12 @@
 
 // Texture formats (matches EDDGIVolumeTextureFormat)
 #define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_U32 0
-#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F16x2 1
-#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F16x4 2
-#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F32x2 3
-#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F32x4 4
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F16 1
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F16x2 2
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F16x4 3
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F32 4
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F32x2 5
+#define RTXGI_DDGI_VOLUME_TEXTURE_FORMAT_F32x4 6
 
 // The number of fixed rays that are used by probe relocation and classification.
 // These rays directions are always the same to produce temporally stable results.

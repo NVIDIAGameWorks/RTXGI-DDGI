@@ -66,6 +66,7 @@ namespace Graphics
                 resources.shaders.rgs.entryPoint = L"RayGen";
                 resources.shaders.rgs.exportName = L"PathTraceRGS";
                 Shaders::AddDefine(resources.shaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
+                Shaders::AddDefine(resources.shaders.rgs, L"GFX_NVAPI", std::to_wstring(1));
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.rgs, true), "compile path tracing ray generation shader!\n", log);
 
                 // Load and compile the miss shader
@@ -283,6 +284,7 @@ namespace Graphics
                 d3dResources.constants.pt.numBounces = config.pathTrace.numBounces;
                 d3dResources.constants.pt.samplesPerPixel = config.pathTrace.samplesPerPixel;
                 d3dResources.constants.pt.SetAntialiasing(config.pathTrace.antialiasing);
+                d3dResources.constants.pt.SetShaderExecutionReordering(config.pathTrace.shaderExecutionReordering);
 
                 // Post Process constants
                 d3dResources.constants.post.useFlags = POSTPROCESS_FLAG_USE_NONE;

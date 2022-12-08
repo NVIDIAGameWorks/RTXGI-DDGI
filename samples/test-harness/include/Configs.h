@@ -28,6 +28,7 @@ namespace Configs
         rtxgi::EDDGIVolumeTextureFormat irradianceFormat;
         rtxgi::EDDGIVolumeTextureFormat distanceFormat;
         rtxgi::EDDGIVolumeTextureFormat dataFormat;
+        rtxgi::EDDGIVolumeTextureFormat variabilityFormat;
     };
 
     struct DDGIVolume
@@ -41,7 +42,9 @@ namespace Configs
         bool               clearProbes = false;
         bool               probeRelocationEnabled = false;
         bool               probeClassificationEnabled = false;
+        bool               probeVariabilityEnabled = false;
         bool               infiniteScrollingEnabled = false;
+        bool               clearProbeVariability = false;
 
         DirectX::XMFLOAT3  origin = { 0.f, 0.f, 0.f };
         DirectX::XMFLOAT3  eulerAngles = { 0.f, 0.f, 0.f };
@@ -59,6 +62,7 @@ namespace Configs
         float              probeViewBias = 0.f;
         float              probeIrradianceThreshold = 0.f;
         float              probeBrightnessThreshold = 0.f;
+        float              probeVariabilityThreshold = 0.f;
 
         float              probeMinFrontfaceDistance = 0.f;
 
@@ -72,6 +76,7 @@ namespace Configs
         float              probeIrradianceScale = 1.f;
         float              probeDistanceScale = 1.f;
         float              probeDataScale = 1.f;
+        float              probeVariabilityScale = 1.f;
 
         rtxgi::EDDGIVolumeProbeVisType probeVisType = rtxgi::EDDGIVolumeProbeVisType::Default;
     };
@@ -84,6 +89,7 @@ namespace Configs
         bool showTextures = false;
         bool showIndirect = false;
         bool insertPerfMarkers = true;
+        bool shaderExecutionReordering = false;
         uint32_t selectedVolume = 0;
         std::vector<DDGIVolume> volumes;
     };
@@ -138,6 +144,7 @@ namespace Configs
     {
         bool  enabled = false;
         bool  antialiasing = false;
+        bool  shaderExecutionReordering = false;
         bool  reload = false;
         float rayNormalBias = 0.001f;
         float rayViewBias = 0.001f;

@@ -59,6 +59,9 @@
         #define RTXGI_PUSH_CONSTS_STRUCT_NAME GlobalConstants
         #define RTXGI_PUSH_CONSTS_VARIABLE_NAME GlobalConst
         #define RTXGI_PUSH_CONSTS_FIELD_DDGI_VOLUME_INDEX_NAME ddgi_volumeIndex
+        #define RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_X_NAME ddgi_reductionInputSizeX
+        #define RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Y_NAME ddgi_reductionInputSizeY
+        #define RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME ddgi_reductionInputSizeZ
         #define VOLUME_CONSTS_REGISTER 5
         #define VOLUME_CONSTS_SPACE 0
         #define VOLUME_RESOURCES_REGISTER 6
@@ -79,6 +82,9 @@
         #define OUTPUT_SPACE 0
         #define PROBE_DATA_REGISTER 4
         #define PROBE_DATA_SPACE 0
+        #define PROBE_VARIABILITY_REGISTER 5
+        #define PROBE_VARIABILITY_AVERAGE_REGISTER 6
+        #define PROBE_VARIABILITY_SPACE 0
     #endif
 #else
     #define CONSTS_REGISTER b0
@@ -103,6 +109,9 @@
         #define OUTPUT_SPACE space1
         #define PROBE_DATA_REGISTER u3
         #define PROBE_DATA_SPACE space1
+        #define PROBE_VARIABILITY_REGISTER u4
+        #define PROBE_VARIABILITY_AVERAGE_REGISTER u5
+        #define PROBE_VARIABILITY_SPACE space1
     #endif
 #endif
 #endif

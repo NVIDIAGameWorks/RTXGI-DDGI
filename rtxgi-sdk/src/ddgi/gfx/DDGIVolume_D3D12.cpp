@@ -38,6 +38,8 @@ namespace rtxgi
             if (!ValidateShaderBytecode(desc.probeRelocation.resetCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_RELOCATION_RESET;
             if (!ValidateShaderBytecode(desc.probeClassification.updateCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_CLASSIFICATION;
             if (!ValidateShaderBytecode(desc.probeClassification.resetCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_CLASSIFICATION_RESET;
+            if (!ValidateShaderBytecode(desc.probeVariability.reductionCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_VARIABILITY_REDUCTION;
+            if (!ValidateShaderBytecode(desc.probeVariability.extraReductionCS)) return ERTXGIStatus::ERROR_DDGI_INVALID_BYTECODE_PROBE_VARIABILITY_EXTRA_REDUCTION;
 
             return ERTXGIStatus::OK;
         }
@@ -52,6 +54,9 @@ namespace rtxgi
             if (desc.probeIrradiance == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_IRRADIANCE;
             if (desc.probeDistance == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_DISTANCE;
             if (desc.probeData == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_DATA;
+            if (desc.probeVariability == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_VARIABILITY;
+            if (desc.probeVariabilityAverage == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_VARIABILITY_AVERAGE;
+            if (desc.probeVariabilityReadback == nullptr) return ERTXGIStatus::ERROR_DDGI_INVALID_TEXTURE_PROBE_VARIABILITY_READBACK;
 
             // Render Target Views
             if (desc.probeIrradianceRTV.ptr == 0) return ERTXGIStatus::ERROR_DDGI_D3D12_INVALID_DESCRIPTOR;
@@ -64,6 +69,8 @@ namespace rtxgi
             if (desc.probeRelocation.resetPSO == nullptr) return ERTXGIStatus::ERROR_DDGI_D3D12_INVALID_PSO_PROBE_RELOCATION_RESET;
             if (desc.probeClassification.updatePSO == nullptr) return ERTXGIStatus::ERROR_DDGI_D3D12_INVALID_PSO_PROBE_CLASSIFICATION;
             if (desc.probeClassification.resetPSO == nullptr) return ERTXGIStatus::ERROR_DDGI_D3D12_INVALID_PSO_PROBE_CLASSIFICATION_RESET;
+            if (desc.probeVariabilityPSOs.reductionPSO == nullptr) return ERTXGIStatus::ERROR_DDGI_D3D12_INVALID_PSO_PROBE_REDUCTION;
+            if (desc.probeVariabilityPSOs.extraReductionPSO == nullptr) return ERTXGIStatus::ERROR_DDGI_D3D12_INVALID_PSO_PROBE_EXTRA_REDUCTION;
 
             return ERTXGIStatus::OK;
         }
@@ -95,6 +102,15 @@ namespace rtxgi
                 if (format == EDDGIVolumeTextureFormat::F16x4) return DXGI_FORMAT_R16G16B16A16_FLOAT;
                 else if (format == EDDGIVolumeTextureFormat::F32x4) return DXGI_FORMAT_R32G32B32A32_FLOAT;
             }
+            else if (type == EDDGIVolumeTextureType::Variability)
+            {
+                if (format == EDDGIVolumeTextureFormat::F16) return DXGI_FORMAT_R16_FLOAT;
+                else if(format == EDDGIVolumeTextureFormat::F32) return DXGI_FORMAT_R32_FLOAT;
+            }
+            else if (type == EDDGIVolumeTextureType::VariabilityAverage)
+            {
+                return DXGI_FORMAT_R32G32_FLOAT;
+            }
             return DXGI_FORMAT_UNKNOWN;
         }
 
@@ -106,7 +122,9 @@ namespace rtxgi
             // 1 UAV for probe irradiance texture array   (u1, space1)
             // 1 UAV for probe distance texture array     (u2, space1)
             // 1 UAV for probe data texture array         (u3, space1)
-            D3D12_DESCRIPTOR_RANGE ranges[5];
+            // 1 UAV for probe variation array            (u4, space1)
+            // 1 UAV for probe variation average array    (u5, space1)
+            D3D12_DESCRIPTOR_RANGE ranges[7];
 
             // Volume Constants Structured Buffer (t0, space1)
             ranges[0].NumDescriptors = 1;
@@ -142,6 +160,20 @@ namespace rtxgi
             ranges[4].RegisterSpace = 1;
             ranges[4].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
             ranges[4].OffsetInDescriptorsFromTableStart = heapDesc.resourceIndices.probeDataUAVIndex;
+
+            // Probe Variability Texture Array UAV (u4, space1)
+            ranges[5].NumDescriptors = 1;
+            ranges[5].BaseShaderRegister = 4;
+            ranges[5].RegisterSpace = 1;
+            ranges[5].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+            ranges[5].OffsetInDescriptorsFromTableStart = heapDesc.resourceIndices.probeVariabilityUAVIndex;
+
+            // Probe Variability Average Texture Array UAV (u5, space1)
+            ranges[6].NumDescriptors = 1;
+            ranges[6].BaseShaderRegister = 5;
+            ranges[6].RegisterSpace = 1;
+            ranges[6].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+            ranges[6].OffsetInDescriptorsFromTableStart = heapDesc.resourceIndices.probeVariabilityAverageUAVIndex;
 
             // Root Parameters
             std::vector<D3D12_ROOT_PARAMETER> rootParameters;
@@ -277,33 +309,6 @@ namespace rtxgi
             UINT volumeIndex;
             std::vector<D3D12_RESOURCE_BARRIER> barriers;
 
-            // Transition volume textures to unordered access for read/write
-            D3D12_RESOURCE_BARRIER barrier = {};
-            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-            // Transition(s)
-            for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
-            {
-                const DDGIVolume* volume = volumes[volumeIndex];
-
-                // Transition the volume's irradiance and distance textures to unordered access
-                barrier.Transition.pResource = volume->GetProbeIrradiance();
-                barriers.push_back(barrier);
-
-                barrier.Transition.pResource = volume->GetProbeDistance();
-                barriers.push_back(barrier);
-            }
-
-            // Wait for the resource transitions to complete
-            if (!barriers.empty()) cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-
-            barriers.clear();
-            barrier = {};
-            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-
             // Irradiance Blending
             if (bInsertPerfMarkers) PIXBeginEvent(cmdList, PIX_COLOR(RTXGI_PERF_MARKER_GREEN), "Probe Irradiance");
             for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
@@ -358,7 +363,11 @@ namespace rtxgi
                 }
 
                 // Add a barrier
+                D3D12_RESOURCE_BARRIER barrier = {};
+                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
                 barrier.UAV.pResource = volume->GetProbeIrradiance();
+                barriers.push_back(barrier);
+                barrier.UAV.pResource = volume->GetProbeVariability();
                 barriers.push_back(barrier);
             }
             if (bInsertPerfMarkers) PIXEndEvent(cmdList);
@@ -417,40 +426,15 @@ namespace rtxgi
                 }
 
                 // Add a barrier
+                D3D12_RESOURCE_BARRIER barrier = {};
+                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
                 barrier.UAV.pResource = volume->GetProbeDistance();
                 barriers.push_back(barrier);
             }
             if (bInsertPerfMarkers) PIXEndEvent(cmdList);
 
             // Barrier(s)
-            // Wait for the irradiance and distance blending passes
-            // to complete before using the textures
-            if (!barriers.empty()) cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-
-            // Remove previous barriers
-            barriers.clear();
-
-            // Transition volume textures back to pixel shader resources for read
-            barrier = {};
-            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-            // Transition(s)
-            for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
-            {
-                const DDGIVolume* volume = volumes[volumeIndex];
-
-                // Transition the volume's irradiance and distance texture arrays to unordered access
-                barrier.Transition.pResource = volume->GetProbeIrradiance();
-                barriers.push_back(barrier);
-
-                barrier.Transition.pResource = volume->GetProbeDistance();
-                barriers.push_back(barrier);
-            }
-
-            // Wait for the resource transitions to complete
+            // Wait for the irradiance and distance blending passes to complete before using the textures
             if (!barriers.empty()) cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
 
             if (bInsertPerfMarkers) PIXEndEvent(cmdList);
@@ -517,9 +501,11 @@ namespace rtxgi
             }
 
             // Probe Relocation Reset Barrier(s)
-            if(!barriers.empty()) cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-
-            barriers.clear();
+            if (!barriers.empty())
+            {
+                cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+                barriers.clear();
+            }
 
             // Probe Relocation
             for(volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
@@ -632,9 +618,11 @@ namespace rtxgi
             }
 
             // Probe Classification Reset Barrier(s)
-            if (!barriers.empty()) cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-
-            barriers.clear();
+            if (!barriers.empty())
+            {
+                cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+                barriers.clear();
+            }
 
             // Probe Classification
             for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
@@ -689,6 +677,223 @@ namespace rtxgi
             return ERTXGIStatus::OK;
         }
 
+        ERTXGIStatus CalculateDDGIVolumeVariability(ID3D12GraphicsCommandList* cmdList, UINT numVolumes, DDGIVolume** volumes)
+        {
+            if (bInsertPerfMarkers) PIXBeginEvent(cmdList, PIX_COLOR(RTXGI_PERF_MARKER_GREEN), "Probe Variability Calculation");
+
+            UINT volumeIndex;
+
+            // Reduction
+            for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
+            {
+                const DDGIVolume* volume = volumes[volumeIndex];
+                if (!volume->GetProbeVariabilityEnabled()) continue;  // Skip if the volume is not calculating variability
+
+                // Set the descriptor heap(s)
+                std::vector<ID3D12DescriptorHeap*> heaps;
+                heaps.push_back(volume->GetResourceDescriptorHeap());
+                if (volume->GetSamplerDescriptorHeap()) heaps.push_back(volume->GetSamplerDescriptorHeap());
+                cmdList->SetDescriptorHeaps((UINT)heaps.size(), heaps.data());
+
+                // Set root signature and root constants
+                cmdList->SetComputeRootSignature(volume->GetRootSignature());
+                cmdList->SetComputeRoot32BitConstants(volume->GetRootParamSlotRootConstants(), DDGIRootConstants::GetNum32BitValues(), volume->GetRootConstants().GetData(), 0);
+
+                // Set the descriptor tables (when relevant)
+                if (volume->GetBindlessEnabled())
+                {
+                    // Bindless resources, using application's root signature
+                    if (volume->GetBindlessType() == EBindlessType::RESOURCE_ARRAYS)
+                    {
+                        // Only need to set descriptor tables when using traditional resource array bindless
+                        cmdList->SetComputeRootDescriptorTable(volume->GetRootParamSlotResourceDescriptorTable(), volume->GetResourceDescriptorHeap()->GetGPUDescriptorHandleForHeapStart());
+                        if (volume->GetSamplerDescriptorHeap()) cmdList->SetComputeRootDescriptorTable(volume->GetRootParamSlotSamplerDescriptorTable(), volume->GetSamplerDescriptorHeap()->GetGPUDescriptorHandleForHeapStart());
+                    }
+                }
+                else
+                {
+                    // Bound resources, using the SDK's root signature
+                    cmdList->SetComputeRootDescriptorTable(volume->GetRootParamSlotResourceDescriptorTable(), volume->GetResourceDescriptorHeap()->GetGPUDescriptorHandleForHeapStart());
+                }
+
+                // Get the number of probes on the XYZ dimensions of the texture
+                UINT probeCountX, probeCountY, probeCountZ;
+                GetDDGIVolumeProbeCounts(volume->GetDesc(), probeCountX, probeCountY, probeCountZ);
+
+                // Initially, the reduction input is the full variability size (same as irradiance texture without border texels)
+                UINT inputTexelsX = probeCountX * volume->GetDesc().probeNumIrradianceInteriorTexels;
+                UINT inputTexelsY = probeCountY * volume->GetDesc().probeNumIrradianceInteriorTexels;
+                UINT inputTexelsZ = probeCountZ;
+
+                const uint3 NumThreadsInGroup = { 4, 8, 4 }; // Each thread group will have 8x8x8 threads
+                constexpr uint2 ThreadSampleFootprint = { 4, 2 }; // Each thread will sample 4x2 texels
+
+                DDGIRootConstants consts = volume->GetRootConstants();
+
+                // First pass reduction takes probe irradiance data and calculates variability, reduces as much as possible
+                {
+                    if (bInsertPerfMarkers && volume->GetInsertPerfMarkers())
+                    {
+                        std::string msg = "Reduction, DDGIVolume[" + std::to_string(volume->GetIndex()) + "] - \"" + volume->GetName() + "\"";
+                        PIXBeginEvent(cmdList, PIX_COLOR(RTXGI_PERF_MARKER_GREEN), msg.c_str());
+                    }
+
+                    // Set the PSO and dispatch threads
+                    cmdList->SetPipelineState(volume->GetProbeVariabilityReductionPSO());
+
+                    // One thread group per output texel
+                    UINT outputTexelsX = (UINT)ceil((float)inputTexelsX / (NumThreadsInGroup.x * ThreadSampleFootprint.x));
+                    UINT outputTexelsY = (UINT)ceil((float)inputTexelsY / (NumThreadsInGroup.y * ThreadSampleFootprint.y));
+                    UINT outputTexelsZ = (UINT)ceil((float)inputTexelsZ / NumThreadsInGroup.z);
+
+                    consts.reductionInputSizeX = inputTexelsX;
+                    consts.reductionInputSizeY = inputTexelsY;
+                    consts.reductionInputSizeZ = inputTexelsZ;
+                    cmdList->SetComputeRoot32BitConstants(volume->GetRootParamSlotRootConstants(), DDGIRootConstants::GetNum32BitValues(), consts.GetData(), 0);
+
+                    cmdList->Dispatch(outputTexelsX, outputTexelsY, outputTexelsZ);
+
+                    if (bInsertPerfMarkers && volume->GetInsertPerfMarkers()) PIXEndEvent(cmdList);
+
+                    // Each thread group will write out a value to the averaging texture
+                    // If there is more than one thread group, we will need to do extra averaging passes
+                    inputTexelsX = outputTexelsX;
+                    inputTexelsY = outputTexelsY;
+                    inputTexelsZ = outputTexelsZ;
+                }
+
+                // UAV barrier needed after each reduction pass
+                D3D12_RESOURCE_BARRIER reductionBarrier = {};
+                reductionBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                reductionBarrier.UAV.pResource = volume->GetProbeVariabilityAverage();
+                cmdList->ResourceBarrier(1, &reductionBarrier);
+
+                // Extra reduction passes average values in variability texture down to single value
+                while (inputTexelsX > 1 || inputTexelsY > 1 || inputTexelsZ > 1)
+                {
+                    if (bInsertPerfMarkers && volume->GetInsertPerfMarkers())
+                    {
+                        std::string msg = "Extra Reduction, DDGIVolume[" + std::to_string(volume->GetIndex()) + "] - \"" + volume->GetName() + "\"";
+                        PIXBeginEvent(cmdList, PIX_COLOR(RTXGI_PERF_MARKER_GREEN), msg.c_str());
+                    }
+
+                    cmdList->SetPipelineState(volume->GetProbeVariabilityExtraReductionPSO());
+
+                    // One thread group per output texel
+                    UINT outputTexelsX = (UINT)ceil((float)inputTexelsX / (NumThreadsInGroup.x * ThreadSampleFootprint.x));
+                    UINT outputTexelsY = (UINT)ceil((float)inputTexelsY / (NumThreadsInGroup.y * ThreadSampleFootprint.y));
+                    UINT outputTexelsZ = (UINT)ceil((float)inputTexelsZ / NumThreadsInGroup.z);
+
+                    consts.reductionInputSizeX = inputTexelsX;
+                    consts.reductionInputSizeY = inputTexelsY;
+                    consts.reductionInputSizeZ = inputTexelsZ;
+                    cmdList->SetComputeRoot32BitConstants(volume->GetRootParamSlotRootConstants(), DDGIRootConstants::GetNum32BitValues(), consts.GetData(), 0);
+
+                    cmdList->Dispatch(outputTexelsX, outputTexelsY, outputTexelsZ);
+
+                    if (bInsertPerfMarkers && volume->GetInsertPerfMarkers()) PIXEndEvent(cmdList);
+
+                    inputTexelsX = outputTexelsX;
+                    inputTexelsY = outputTexelsY;
+                    inputTexelsZ = outputTexelsZ;
+
+                    // Need a barrier in between each reduction pass
+                    cmdList->ResourceBarrier(1, &reductionBarrier);
+                }
+            }
+
+            if (bInsertPerfMarkers) PIXEndEvent(cmdList);
+
+            // Copy readback buffer
+            std::vector<D3D12_RESOURCE_BARRIER> barriers;
+            if (bInsertPerfMarkers) PIXBeginEvent(cmdList, PIX_COLOR(RTXGI_PERF_MARKER_GREEN), "Probe Variability Readback");
+
+            {
+                D3D12_RESOURCE_BARRIER beforeBarrier = {};
+                beforeBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                beforeBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+                beforeBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+                beforeBarrier.Transition.Subresource = 0;
+
+                D3D12_RESOURCE_BARRIER afterBarrier = beforeBarrier;
+                afterBarrier.Transition.StateBefore = beforeBarrier.Transition.StateAfter;
+                afterBarrier.Transition.StateAfter = beforeBarrier.Transition.StateBefore;
+
+                for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
+                {
+                    const DDGIVolume* volume = volumes[volumeIndex];
+                    if (!volume->GetProbeVariabilityEnabled()) continue;  // Skip if the volume is not calculating variability
+
+                    beforeBarrier.Transition.pResource = volume->GetProbeVariabilityAverage();
+                    barriers.push_back(beforeBarrier);
+                }
+
+                if (!barriers.empty())
+                {
+                    cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+                    barriers.clear();
+                }
+
+                for (volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
+                {
+                    const DDGIVolume* volume = volumes[volumeIndex];
+                    if (!volume->GetProbeVariabilityEnabled()) continue;  // Skip if the volume is not calculating variability
+
+                    D3D12_TEXTURE_COPY_LOCATION copyLocSrc = {};
+                    copyLocSrc.pResource = volume->GetProbeVariabilityAverage();
+                    copyLocSrc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                    copyLocSrc.SubresourceIndex = 0;
+
+                    D3D12_TEXTURE_COPY_LOCATION copyLocDst = {};
+                    copyLocDst.pResource = volume->GetProbeVariabilityReadback();
+                    copyLocDst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                    copyLocDst.PlacedFootprint.Offset = 0;
+                    copyLocDst.PlacedFootprint.Footprint.Width = 1;
+                    copyLocDst.PlacedFootprint.Footprint.Height = 1;
+                    copyLocDst.PlacedFootprint.Footprint.Depth = 1;
+                    copyLocDst.PlacedFootprint.Footprint.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::VariabilityAverage, volume->GetDesc().probeVariabilityFormat);
+                    copyLocDst.PlacedFootprint.Footprint.RowPitch = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+
+                    D3D12_BOX box = { 0, 0, 0, 1, 1, 1};
+                    cmdList->CopyTextureRegion(&copyLocDst, 0, 0, 0, &copyLocSrc, &box);
+
+                    afterBarrier.Transition.pResource = volume->GetProbeVariabilityAverage();
+                    barriers.push_back(afterBarrier);
+                }
+
+                if (!barriers.empty()) cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+            }
+
+            if (bInsertPerfMarkers) PIXEndEvent(cmdList);
+
+            return ERTXGIStatus::OK;
+        }
+
+        ERTXGIStatus ReadbackDDGIVolumeVariability(UINT numVolumes, DDGIVolume** volumes)
+        {
+            for (UINT volumeIndex = 0; volumeIndex < numVolumes; volumeIndex++)
+            {
+                // Get the volume
+                DDGIVolume* volume = volumes[volumeIndex];
+                if (!volume->GetProbeVariabilityEnabled()) continue;  // Skip if the volume is not calculating variability
+
+                // Get the probe variability readback buffer
+                ID3D12Resource* readback = volume->GetProbeVariabilityReadback();
+
+                // Read the first 32-bits of the readback buffer
+                float* pMappedMemory = nullptr;
+                D3D12_RANGE readRange = { 0, sizeof(float) };
+                D3D12_RANGE writeRange = {};
+                HRESULT hr = readback->Map(0, &readRange, (void**)&pMappedMemory);
+                if (FAILED(hr)) return ERTXGIStatus::ERROR_DDGI_MAP_FAILURE_VARIABILITY_READBACK_BUFFER;
+                float value = pMappedMemory[0];
+                readback->Unmap(0, &writeRange);
+
+                volume->SetVolumeAverageVariability(value);
+            }
+            return ERTXGIStatus::OK;
+        }
+
         //------------------------------------------------------------------------
         // Private DDGIVolume Functions
         //------------------------------------------------------------------------
@@ -707,6 +912,8 @@ namespace rtxgi
             RTXGI_SAFE_RELEASE(m_probeRelocationResetPSO);
             RTXGI_SAFE_RELEASE(m_probeClassificationPSO);
             RTXGI_SAFE_RELEASE(m_probeClassificationResetPSO);
+            RTXGI_SAFE_RELEASE(m_probeVariabilityReductionPSO);
+            RTXGI_SAFE_RELEASE(m_probeVariabilityExtraReductionPSO);
         }
 
         ERTXGIStatus DDGIVolume::CreateManagedResources(const DDGIVolumeDesc& desc, const DDGIVolumeManagedResourcesDesc& managed)
@@ -755,17 +962,29 @@ namespace rtxgi
                     managed.probeClassification.resetCS,
                     &m_probeClassificationResetPSO,
                     "Probe Classification Reset")) return ERTXGIStatus::ERROR_DDGI_D3D12_CREATE_FAILURE_PSO;
+
+                if (!CreateComputePSO(
+                    managed.probeVariability.reductionCS,
+                    &m_probeVariabilityReductionPSO,
+                    "Probe Variability Reduction")) return ERTXGIStatus::ERROR_DDGI_D3D12_CREATE_FAILURE_PSO;
+
+                if (!CreateComputePSO(
+                    managed.probeVariability.extraReductionCS,
+                    &m_probeVariabilityExtraReductionPSO,
+                    "Probe Variability Extra Reduction")) return ERTXGIStatus::ERROR_DDGI_D3D12_CREATE_FAILURE_PSO;
             }
 
             // Create the textures
             if (deviceChanged || m_desc.ShouldAllocateProbes(desc))
             {
                 // Probe counts have changed. The texture arrays are the wrong size or aren't allocated yet.
-                // (Re)allocate the probe ray data, irradiance, distance, and data textures.
+                // (Re)allocate the probe ray data, irradiance, distance, data, and variability textures.
                 if (!CreateProbeRayData(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_RAY_DATA;
                 if (!CreateProbeIrradiance(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_IRRADIANCE;
                 if (!CreateProbeDistance(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_DISTANCE;
                 if (!CreateProbeData(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_DATA;
+                if (!CreateProbeVariability(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_VARIABILITY;
+                if (!CreateProbeVariabilityAverage(desc)) return ERTXGIStatus::ERROR_DDGI_ALLOCATE_FAILURE_TEXTURE_PROBE_VARIABILITY_AVERAGE;
             }
             else
             {
@@ -806,6 +1025,9 @@ namespace rtxgi
             m_probeIrradiance = unmanaged.probeIrradiance;
             m_probeDistance = unmanaged.probeDistance;
             m_probeData = unmanaged.probeData;
+            m_probeVariability = unmanaged.probeVariability;
+            m_probeVariabilityAverage = unmanaged.probeVariabilityAverage;
+            m_probeVariabilityReadback = unmanaged.probeVariabilityReadback;
 
             // Render Target Views
             m_probeIrradianceRTV = unmanaged.probeIrradianceRTV;
@@ -818,6 +1040,8 @@ namespace rtxgi
             m_probeRelocationResetPSO = unmanaged.probeRelocation.resetPSO;
             m_probeClassificationPSO = unmanaged.probeClassification.updatePSO;
             m_probeClassificationResetPSO = unmanaged.probeClassification.resetPSO;
+            m_probeVariabilityReductionPSO = unmanaged.probeVariabilityPSOs.reductionPSO;
+            m_probeVariabilityExtraReductionPSO = unmanaged.probeVariabilityPSOs.extraReductionPSO;
         }
     #endif
 
@@ -910,12 +1134,12 @@ namespace rtxgi
             // Transition the probe textures render targets
             D3D12_RESOURCE_BARRIER barriers[2] = {};
             barriers[0].Transition.pResource = m_probeIrradiance;
-            barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+            barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
             barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
             barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
             barriers[1].Transition.pResource = m_probeDistance;
-            barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+            barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
             barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
             barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
@@ -930,10 +1154,10 @@ namespace rtxgi
 
             // Transition the probe textures back to unordered access
             barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+            barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
             barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+            barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
             // Wait for the transitions
             cmdList->ResourceBarrier(2, barriers);
@@ -941,6 +1165,46 @@ namespace rtxgi
             if (bInsertPerfMarkers) PIXEndEvent(cmdList);
 
             return ERTXGIStatus::OK;
+        }
+
+        void DDGIVolume::TransitionResources(ID3D12GraphicsCommandList* cmdList, EDDGIExecutionStage stage) const
+        {
+            std::vector<D3D12_RESOURCE_BARRIER> barriers;
+
+            D3D12_RESOURCE_BARRIER barrier = {};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+            if (stage == EDDGIExecutionStage::POST_PROBE_TRACE)
+            {
+                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            }
+            else if (stage == EDDGIExecutionStage::PRE_GATHER_CS)
+            {
+                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+            }
+            else if (stage == EDDGIExecutionStage::PRE_GATHER_PS)
+            {
+                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+            }
+            else if (stage == EDDGIExecutionStage::POST_GATHER_PS)
+            {
+                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+            }
+
+            // Add the volume texture array resources
+            barrier.Transition.pResource = m_probeIrradiance;
+            barriers.push_back(barrier);
+            barrier.Transition.pResource = m_probeDistance;
+            barriers.push_back(barrier);
+            barrier.Transition.pResource = m_probeData;
+            barriers.push_back(barrier);
+
+            cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
         }
 
         DDGIVolumeResourceIndices DDGIVolume::GetResourceIndices() const
@@ -972,6 +1236,16 @@ namespace rtxgi
                 if (view == EResourceViewType::UAV) return m_descriptorHeapDesc.resourceIndices.probeDataUAVIndex;
                 if (view == EResourceViewType::SRV) return m_descriptorHeapDesc.resourceIndices.probeDataSRVIndex;
             }
+            else if (type == EDDGIVolumeTextureType::Variability)
+            {
+                if (view == EResourceViewType::UAV) return m_descriptorHeapDesc.resourceIndices.probeVariabilityUAVIndex;
+                if (view == EResourceViewType::SRV) return m_descriptorHeapDesc.resourceIndices.probeVariabilitySRVIndex;
+            }
+            else if (type == EDDGIVolumeTextureType::VariabilityAverage)
+            {
+                if (view == EResourceViewType::UAV) return m_descriptorHeapDesc.resourceIndices.probeVariabilityAverageUAVIndex;
+                if (view == EResourceViewType::SRV) return m_descriptorHeapDesc.resourceIndices.probeVariabilityAverageSRVIndex;
+            }
 
             return 0;
         }
@@ -997,6 +1271,16 @@ namespace rtxgi
             {
                 if (view == EResourceViewType::UAV) m_descriptorHeapDesc.resourceIndices.probeDataUAVIndex = index;
                 if (view == EResourceViewType::SRV) m_descriptorHeapDesc.resourceIndices.probeDataSRVIndex = index;
+            }
+            else if (type == EDDGIVolumeTextureType::Variability)
+            {
+                if (view == EResourceViewType::UAV) m_descriptorHeapDesc.resourceIndices.probeVariabilityUAVIndex = index;
+                if (view == EResourceViewType::SRV) m_descriptorHeapDesc.resourceIndices.probeVariabilitySRVIndex = index;
+            }
+            else if (type == EDDGIVolumeTextureType::VariabilityAverage)
+            {
+                if (view == EResourceViewType::UAV) m_descriptorHeapDesc.resourceIndices.probeVariabilityAverageUAVIndex = index;
+                if (view == EResourceViewType::SRV) m_descriptorHeapDesc.resourceIndices.probeVariabilityAverageSRVIndex = index;
             }
         }
 
@@ -1043,6 +1327,9 @@ namespace rtxgi
             RTXGI_SAFE_RELEASE(m_probeIrradiance);
             RTXGI_SAFE_RELEASE(m_probeDistance);
             RTXGI_SAFE_RELEASE(m_probeData);
+            RTXGI_SAFE_RELEASE(m_probeVariability);
+            RTXGI_SAFE_RELEASE(m_probeVariabilityAverage);
+            RTXGI_SAFE_RELEASE(m_probeVariabilityReadback);
 
             RTXGI_SAFE_RELEASE(m_probeBlendingIrradiancePSO);
             RTXGI_SAFE_RELEASE(m_probeBlendingDistancePSO);
@@ -1050,6 +1337,8 @@ namespace rtxgi
             RTXGI_SAFE_RELEASE(m_probeRelocationResetPSO);
             RTXGI_SAFE_RELEASE(m_probeClassificationPSO);
             RTXGI_SAFE_RELEASE(m_probeClassificationResetPSO);
+            RTXGI_SAFE_RELEASE(m_probeVariabilityReductionPSO);
+            RTXGI_SAFE_RELEASE(m_probeVariabilityExtraReductionPSO);
         #else
             m_rootSignature = nullptr;
 
@@ -1057,6 +1346,9 @@ namespace rtxgi
             m_probeIrradiance = nullptr;
             m_probeDistance = nullptr;
             m_probeData = nullptr;
+            m_probeVariability = nullptr;
+            m_probeVariabilityAverage = nullptr;
+            m_probeVariabilityReadback = nullptr;
 
             m_probeBlendingIrradiancePSO = nullptr;
             m_probeBlendingDistancePSO = nullptr;
@@ -1064,6 +1356,8 @@ namespace rtxgi
             m_probeRelocationResetPSO = nullptr;
             m_probeClassificationPSO = nullptr;
             m_probeClassificationResetPSO = nullptr;
+            m_probeVariabilityReductionPSO = nullptr;
+            m_probeVariabilityExtraReductionPSO = nullptr;
         #endif;
         }
 
@@ -1156,6 +1450,30 @@ namespace rtxgi
                 srvDesc.Format = uavDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Data, m_desc.probeDataFormat);
                 m_device->CreateUnorderedAccessView(m_probeData, nullptr, &uavDesc, uavHandle);
                 m_device->CreateShaderResourceView(m_probeData, &srvDesc, srvHandle);
+            }
+
+            // Probe variability texture descriptors
+            {
+                uavHandle.ptr = heapStart.ptr + (m_descriptorHeapDesc.resourceIndices.probeVariabilityUAVIndex * m_descriptorHeapDesc.entrySize);
+                srvHandle.ptr = heapStart.ptr + (m_descriptorHeapDesc.resourceIndices.probeVariabilitySRVIndex * m_descriptorHeapDesc.entrySize);
+
+                srvDesc.Format = uavDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Variability, m_desc.probeVariabilityFormat);
+                m_device->CreateUnorderedAccessView(m_probeVariability, nullptr, &uavDesc, uavHandle);
+                m_device->CreateShaderResourceView(m_probeVariability, &srvDesc, srvHandle);
+            }
+
+            // Probe variability average texture descriptors
+            {
+                uavHandle.ptr = heapStart.ptr + (m_descriptorHeapDesc.resourceIndices.probeVariabilityAverageUAVIndex * m_descriptorHeapDesc.entrySize);
+                srvHandle.ptr = heapStart.ptr + (m_descriptorHeapDesc.resourceIndices.probeVariabilityAverageSRVIndex * m_descriptorHeapDesc.entrySize);
+
+                UINT variabilityAverageArraySize;
+                GetDDGIVolumeTextureDimensions(m_desc, EDDGIVolumeTextureType::VariabilityAverage, width, height, variabilityAverageArraySize);
+                srvDesc.Format = uavDesc.Format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::VariabilityAverage, m_desc.probeVariabilityFormat);
+                uavDesc.Texture2DArray.ArraySize = variabilityAverageArraySize;
+                srvDesc.Texture2DArray.ArraySize = variabilityAverageArraySize;
+                m_device->CreateUnorderedAccessView(m_probeVariabilityAverage, nullptr, &uavDesc, uavHandle);
+                m_device->CreateShaderResourceView(m_probeVariabilityAverage, &srvDesc, srvHandle);
             }
 
             // Describe the RTV heap
@@ -1308,7 +1626,7 @@ namespace rtxgi
 
             // Create the texture resource
             D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-            bool result = CreateTexture(width, height, arraySize, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, flags, &m_probeIrradiance);
+            bool result = CreateTexture(width, height, arraySize, format, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, flags, &m_probeIrradiance);
             if (!result) return false;
         #ifdef RTXGI_GFX_NAME_OBJECTS
             std::wstring name = L"DDGIVolume[" + std::to_wstring(desc.index) + L"], Probe Irradiance";
@@ -1334,7 +1652,7 @@ namespace rtxgi
 
             // Create the texture resource
             D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-            bool result = CreateTexture(width, height, arraySize, format, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, flags, &m_probeDistance);
+            bool result = CreateTexture(width, height, arraySize, format, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, flags, &m_probeDistance);
             if (!result) return false;
         #ifdef RTXGI_GFX_NAME_OBJECTS
             std::wstring name = L"DDGIVolume[" + std::to_wstring(desc.index) + L"], Probe Distance";
@@ -1360,11 +1678,95 @@ namespace rtxgi
             if (width <= 0 || height <= 0 || arraySize <= 0) return false;
 
             // Create the texture resource
-            bool result = CreateTexture(width, height, arraySize, format, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, &m_probeData);
+            bool result = CreateTexture(width, height, arraySize, format, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, &m_probeData);
             if (!result) return false;
         #ifdef RTXGI_GFX_NAME_OBJECTS
             std::wstring name = L"DDGIVolume[" + std::to_wstring(desc.index) + L"], Probe Data";
             m_probeData->SetName(name.c_str());
+        #endif
+
+            return true;
+        }
+
+        bool DDGIVolume::CreateProbeVariability(const DDGIVolumeDesc& desc)
+        {
+            RTXGI_SAFE_RELEASE(m_probeVariability);
+
+            UINT width = 0;
+            UINT height = 0;
+            UINT arraySize = 0;
+            DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+
+            // Get the texture dimensions and format
+            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::Variability, width, height, arraySize);
+            format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::Variability, desc.probeVariabilityFormat);
+
+            // Check for problems
+            if (width <= 0 || height <= 0 || arraySize <= 0) return false;
+
+            // Create the texture resource
+            bool result = CreateTexture(width, height, arraySize, format, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, &m_probeVariability);
+            if (!result) return false;
+        #ifdef RTXGI_GFX_NAME_OBJECTS
+            std::wstring name = L"DDGIVolume[" + std::to_wstring(desc.index) + L"], Probe Variability";
+            m_probeVariability->SetName(name.c_str());
+        #endif
+
+            return true;
+        }
+
+        bool DDGIVolume::CreateProbeVariabilityAverage(const DDGIVolumeDesc& desc)
+        {
+            RTXGI_SAFE_RELEASE(m_probeVariabilityAverage);
+
+            UINT width = 0;
+            UINT height = 0;
+            UINT arraySize = 0;
+            DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+
+            // Get the texture dimensions and format
+            GetDDGIVolumeTextureDimensions(desc, EDDGIVolumeTextureType::VariabilityAverage, width, height, arraySize);
+            format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::VariabilityAverage, desc.probeVariabilityFormat);
+
+            // Check for problems
+            if (width <= 0 || height <= 0 || arraySize <= 0) return false;
+
+            // Create the texture resource
+            bool result = CreateTexture(width, height, arraySize, format, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, &m_probeVariabilityAverage);
+            if (!result) return false;
+        #ifdef RTXGI_GFX_NAME_OBJECTS
+            std::wstring name = L"DDGIVolume[" + std::to_wstring(desc.index) + L"], Probe Variability Average";
+            m_probeVariabilityAverage->SetName(name.c_str());
+        #endif
+
+            // Create the readback texture
+            RTXGI_SAFE_RELEASE(m_probeVariabilityReadback);
+
+            // Readback texture is always in "full" format (R32G32F)
+            format = GetDDGIVolumeTextureFormat(EDDGIVolumeTextureType::VariabilityAverage, desc.probeVariabilityFormat);
+            {
+                D3D12_HEAP_PROPERTIES readbackHeapProperties = {};
+                readbackHeapProperties.Type = D3D12_HEAP_TYPE_READBACK;
+
+                D3D12_RESOURCE_DESC desc = {};
+                desc.Format = DXGI_FORMAT_UNKNOWN;
+                desc.Width = sizeof(float) * 2;
+                desc.Height = 1;
+                desc.MipLevels = 1;
+                desc.DepthOrArraySize = 1;
+                desc.SampleDesc.Count = 1;
+                desc.SampleDesc.Quality = 0;
+                desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+                desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+                desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+                HRESULT hr = m_device->CreateCommittedResource(&readbackHeapProperties, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_probeVariabilityReadback));
+                result = SUCCEEDED(hr);
+            }
+            if (!result) return false;
+        #ifdef RTXGI_GFX_NAME_OBJECTS
+            name = L"DDGIVolume[" + std::to_wstring(desc.index) + L"], Probe Variability Readback";
+            m_probeVariabilityReadback->SetName(name.c_str());
         #endif
 
             return true;

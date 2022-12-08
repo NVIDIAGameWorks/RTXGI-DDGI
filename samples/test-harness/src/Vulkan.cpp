@@ -66,7 +66,7 @@ namespace Graphics
             if(hr == VK_ERROR_OUT_OF_DATE_KHR) return false;    // window resized or destroyed
             if(hr != VK_SUCCESS)
             {
-                std::string msg = "Vulkan call failed in:\n" + fileName + " at line " + std::to_string(lineNumber);
+                std::string msg = "Vulkan call failed in:\n" + fileName + " at line " + std::to_string(lineNumber) + " where VkResult=" + std::to_string(hr);
                 Graphics::UI::MessageBox(msg);
                 return false;
             }
@@ -420,11 +420,15 @@ namespace Graphics
             vk.deviceProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
             vk.deviceASProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
             vk.deviceRTPipelineProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+            vk.deviceSubgroupProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
 
+            vk.deviceASProps.pNext = &vk.deviceSubgroupProps;
             vk.deviceRTPipelineProps.pNext = &vk.deviceASProps;
             vk.deviceProps.pNext = &vk.deviceRTPipelineProps;
 
             vkGetPhysicalDeviceProperties2(vk.physicalDevice, &vk.deviceProps);
+
+            vk.features.waveLaneCount = vk.deviceSubgroupProps.subgroupSize;
 
             // Set the graphics API name
             config.app.api = "Vulkan 1.2";
@@ -865,32 +869,38 @@ namespace Graphics
         }
 
         /**
-         * Create the index buffer and device memory for a mesh primitive.
+         * Create the index buffer and device memory for a mesh.
          * Copy the index data to the upload buffer and schedule a copy to the device buffer.
          */
-        bool CreateIndexBuffer(Globals& vk, const Scenes::MeshPrimitive& primitive, VkBuffer* ib, VkDeviceMemory* ibMemory, VkBuffer* ibUpload, VkDeviceMemory* ibUploadMemory)
+        bool CreateIndexBuffer(Globals& vk, const Scenes::Mesh& mesh, VkBuffer* ib, VkDeviceMemory* ibMemory, VkBuffer* ibUpload, VkDeviceMemory* ibUploadMemory)
         {
-            uint32_t index = primitive.index;
-
-            // Create the upload buffer
-            uint32_t size = static_cast<uint32_t>(primitive.indices.size()) * sizeof(uint32_t);
-            BufferDesc desc = { size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
+            // Create the index buffer upload resource
+            uint32_t sizeInBytes = mesh.numIndices * sizeof(uint32_t);
+            BufferDesc desc = { sizeInBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
             if (!CreateBuffer(vk, desc, ibUpload, ibUploadMemory)) return false;
 
-            // Create the device index buffer
+            // Create the index buffer device resource
             desc.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
             desc.memoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             if (!CreateBuffer(vk, desc, ib, ibMemory)) return false;
 
-            // Copy the index data to the upload buffer
+            // Copy the index data of each mesh primitive to the upload buffer
             uint8_t* pData = nullptr;
             VKCHECK(vkMapMemory(vk.device, *ibUploadMemory, 0, VK_WHOLE_SIZE, 0, reinterpret_cast<void**>(&pData)));
-            memcpy(pData, primitive.indices.data(), size);
+
+            for (uint32_t primitiveIndex = 0; primitiveIndex < static_cast<uint32_t>(mesh.primitives.size()); primitiveIndex++)
+            {
+                // Get the mesh primitive and copy its indices to the upload buffer
+                const Scenes::MeshPrimitive& primitive = mesh.primitives[primitiveIndex];
+
+                uint32_t size = static_cast<uint32_t>(primitive.indices.size()) * sizeof(uint32_t);
+                memcpy(pData + primitive.indexByteOffset, primitive.indices.data(), size);
+            }
             vkUnmapMemory(vk.device, *ibUploadMemory);
 
             // Schedule a copy of the upload buffer to the device buffer
             VkBufferCopy bufferCopy = {};
-            bufferCopy.size = size;
+            bufferCopy.size = sizeInBytes;
             vkCmdCopyBuffer(vk.cmdBuffer[vk.frameIndex], *ibUpload, *ib, 1, &bufferCopy);
 
             return true;
@@ -900,29 +910,36 @@ namespace Graphics
          * Create the vertex buffer and device memory for a mesh primitive.
          * Copy the vertex data to the upload buffer and schedule a copy to the device buffer.
          */
-        bool CreateVertexBuffer(Globals& vk, const Scenes::MeshPrimitive& primitive, VkBuffer* vb, VkDeviceMemory* vbMemory, VkBuffer* vbUpload, VkDeviceMemory* vbUploadMemory)
+        bool CreateVertexBuffer(Globals& vk, const Scenes::Mesh& mesh, VkBuffer* vb, VkDeviceMemory* vbMemory, VkBuffer* vbUpload, VkDeviceMemory* vbUploadMemory)
         {
-            uint32_t index = primitive.index;
-
-            // Create upload buffer
-            uint32_t size = static_cast<uint32_t>(primitive.vertices.size()) * sizeof(Vertex);
-            BufferDesc desc = { size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
+            // Create the vertex buffer upload resource
+            uint32_t stride = sizeof(Vertex);
+            uint32_t sizeInBytes = mesh.numVertices * stride;
+            BufferDesc desc = { sizeInBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
             if (!CreateBuffer(vk, desc, vbUpload, vbUploadMemory)) return false;
 
-            // Create the device vertex buffer
+            // Create the vertex buffer device resource
             desc.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
             desc.memoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             if (!CreateBuffer(vk, desc, vb, vbMemory)) return false;
 
-            // Copy the vertex data to the upload buffer
+            // Copy the vertex data of each mesh primitive to the upload
             uint8_t* pData = nullptr;
             VKCHECK(vkMapMemory(vk.device, *vbUploadMemory, 0, VK_WHOLE_SIZE, 0, reinterpret_cast<void**>(&pData)));
-            memcpy(pData, primitive.vertices.data(), size);
+
+            for (uint32_t primitiveIndex = 0; primitiveIndex < static_cast<uint32_t>(mesh.primitives.size()); primitiveIndex++)
+            {
+                // Get the mesh primitive and copy its vertices to the upload buffer
+                const Scenes::MeshPrimitive& primitive = mesh.primitives[primitiveIndex];
+
+                uint32_t size = static_cast<uint32_t>(primitive.vertices.size()) * stride;
+                memcpy(pData + primitive.vertexByteOffset, primitive.vertices.data(), size);
+            }
             vkUnmapMemory(vk.device, *vbUploadMemory);
 
             // Schedule a copy of the upload buffer to the device buffer
             VkBufferCopy bufferCopy = {};
-            bufferCopy.size = size;
+            bufferCopy.size = sizeInBytes;
             vkCmdCopyBuffer(vk.cmdBuffer[vk.frameIndex], *vbUpload, *vb, 1, &bufferCopy);
 
             return true;
@@ -932,54 +949,69 @@ namespace Graphics
          * Create a bottom level acceleration structure and device memory for a mesh primitive.
          * Allocate scratch memory and schedule a GPU BLAS build.
          */
-        bool CreateBLAS(Globals& vk, Resources& resources, const Scenes::MeshPrimitive& primitive, AccelerationStructure& as)
+        bool CreateBLAS(Globals& vk, Resources& resources, const Scenes::Mesh& mesh, AccelerationStructure& as)
         {
+            uint32_t numPrimitives = static_cast<uint32_t>(mesh.primitives.size());
+
+            // Describe the mesh primitives
+            std::vector<VkAccelerationStructureGeometryKHR> primitives(numPrimitives);
+            std::vector<VkAccelerationStructureBuildRangeInfoKHR> buildRanges(numPrimitives);
+            std::vector<VkAccelerationStructureBuildRangeInfoKHR*> buildRangeInfos(numPrimitives);
+            std::vector<uint32_t> primitiveCounts(numPrimitives);
+
+            for (uint32_t primitiveIndex = 0; primitiveIndex < numPrimitives; primitiveIndex++)
+            {
+                // Get the mesh primitive
+                const Scenes::MeshPrimitive& primitive = mesh.primitives[primitiveIndex];
+
+                VkAccelerationStructureGeometryKHR desc = {};
+                desc.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+                desc.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+                desc.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+
+                desc.geometry.triangles.vertexData = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, resources.sceneVBs[mesh.index]) + primitive.vertexByteOffset };
+                desc.geometry.triangles.vertexStride = sizeof(Vertex);
+                desc.geometry.triangles.maxVertex = static_cast<uint32_t>(primitive.vertices.size());
+                desc.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+                desc.geometry.triangles.indexData = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, resources.sceneIBs[mesh.index]) + primitive.indexByteOffset };
+                desc.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
+                desc.flags = primitive.opaque ? VK_GEOMETRY_OPAQUE_BIT_KHR : 0;
+
+                uint32_t primitiveCount = static_cast<uint32_t>(primitive.indices.size() / 3);
+
+                // Describe the geometry for the builder
+                VkAccelerationStructureBuildRangeInfoKHR buildRange = { primitiveCount, 0, 0, 0 };
+                buildRanges[primitiveIndex] = buildRange;
+                buildRangeInfos[primitiveIndex] = &buildRanges[primitiveIndex];
+
+                primitives[primitiveIndex] = desc;
+                primitiveCounts[primitiveIndex] = primitiveCount;
+            }
+
             VkBuildAccelerationStructureFlagBitsKHR buildFlags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
-
-            uint32_t primitiveCount = static_cast<uint32_t>(primitive.indices.size()) / 3;
-
-            // Describe the BLAS primitive triangles
-            VkAccelerationStructureGeometryTrianglesDataKHR asTriangleData = {};
-            asTriangleData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-            asTriangleData.vertexData = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, resources.sceneVBs[primitive.index]) };
-            asTriangleData.vertexStride = sizeof(Vertex);
-            asTriangleData.maxVertex = static_cast<uint32_t>(primitive.vertices.size());
-            asTriangleData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-            asTriangleData.indexData = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, resources.sceneIBs[primitive.index]) };
-            asTriangleData.indexType = VK_INDEX_TYPE_UINT32;
-
-            // Describe the mesh primitive geometry
-            VkAccelerationStructureGeometryDataKHR asGeometryData = {};
-            asGeometryData.triangles = asTriangleData;
-
-            VkAccelerationStructureGeometryKHR asGeometry = {};
-            asGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-            asGeometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-            asGeometry.geometry = asGeometryData;
-            if (primitive.opaque) asGeometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
 
             // Describe the bottom level acceleration structure inputs
             VkAccelerationStructureBuildGeometryInfoKHR asInputs = {};
             asInputs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
             asInputs.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
             asInputs.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-            asInputs.geometryCount = 1;
-            asInputs.pGeometries = &asGeometry;
+            asInputs.geometryCount = static_cast<uint32_t>(primitives.size());
+            asInputs.pGeometries = primitives.data();
             asInputs.flags = buildFlags;
 
             // Get the size requirements for the BLAS buffer
             VkAccelerationStructureBuildSizesInfoKHR asPreBuildInfo = {};
             asPreBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
-            vkGetAccelerationStructureBuildSizesKHR(vk.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &asInputs, &primitiveCount, &asPreBuildInfo);
+            vkGetAccelerationStructureBuildSizesKHR(vk.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &asInputs, primitiveCounts.data(), &asPreBuildInfo);
 
-            // Create the acceleration structure buffer, allocate and bind device memory
-            BufferDesc desc = { asPreBuildInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
-            if (!CreateBuffer(vk, desc, &as.asBuffer, &as.asMemory)) return false;
-
-            // Create the scratch buffer, allocate and bind device memory
-            desc = { asPreBuildInfo.buildScratchSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
-            if (!CreateBuffer(vk, desc, &as.scratch, &as.scratchMemory)) return false;
+            // Create the BLAS scratch buffer, allocate and bind device memory
+            BufferDesc blasScratchDesc = { asPreBuildInfo.buildScratchSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
+            if (!CreateBuffer(vk, blasScratchDesc, &as.scratch, &as.scratchMemory)) return false;
             asInputs.scratchData = VkDeviceOrHostAddressKHR{ GetBufferDeviceAddress(vk.device, as.scratch) };
+
+            // Create the BLAS buffer, allocate and bind device memory
+            BufferDesc blasDesc = { asPreBuildInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
+            if (!CreateBuffer(vk, blasDesc, &as.asBuffer, &as.asMemory)) return false;
 
             // Describe the BLAS acceleration structure
             VkAccelerationStructureCreateInfoKHR asCreateInfo = {};
@@ -994,11 +1026,6 @@ namespace Graphics
             // Set the location of the final acceleration structure
             asInputs.dstAccelerationStructure = as.asKHR;
 
-            // Describe and build the BLAS
-            std::vector<const VkAccelerationStructureBuildRangeInfoKHR*> buildRangeInfos(1);
-            VkAccelerationStructureBuildRangeInfoKHR buildInfo = { primitiveCount, 0, 0, 0};
-            buildRangeInfos[0] = &buildInfo;
-
             vkCmdBuildAccelerationStructuresKHR(vk.cmdBuffer[vk.frameIndex], 1, &asInputs, buildRangeInfos.data());
 
             return true;
@@ -1012,22 +1039,13 @@ namespace Graphics
         {
             VkBuildAccelerationStructureFlagBitsKHR buildFlags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
 
-            uint32_t primitiveCount = static_cast<uint32_t>(instances.size());
-
             // Describe the TLAS geometry instances
-            VkAccelerationStructureGeometryInstancesDataKHR asInstanceData = {};
-            asInstanceData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
-            asInstanceData.arrayOfPointers = VK_FALSE;
-            asInstanceData.data = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, as.instances) };
-
-            // Describe the mesh primitive geometry
-            VkAccelerationStructureGeometryDataKHR asGeometryData = {};
-            asGeometryData.instances = asInstanceData;
-
-            VkAccelerationStructureGeometryKHR asGeometry = {};
-            asGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-            asGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
-            asGeometry.geometry = asGeometryData;
+            VkAccelerationStructureGeometryKHR geometries = {};
+            geometries.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+            geometries.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+            geometries.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+            geometries.geometry.instances.arrayOfPointers = VK_FALSE;
+            geometries.geometry.instances.data = VkDeviceOrHostAddressConstKHR{ GetBufferDeviceAddress(vk.device, as.instances) };
 
             // Describe the top level acceleration structure inputs
             VkAccelerationStructureBuildGeometryInfoKHR asInputs = {};
@@ -1035,22 +1053,23 @@ namespace Graphics
             asInputs.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
             asInputs.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
             asInputs.geometryCount = 1;
-            asInputs.pGeometries = &asGeometry;
+            asInputs.pGeometries = &geometries;
             asInputs.flags = buildFlags;
 
             // Get the size requirements for the TLAS buffer
+            uint32_t primitiveCount = static_cast<uint32_t>(instances.size());
             VkAccelerationStructureBuildSizesInfoKHR asPreBuildInfo = {};
             asPreBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
             vkGetAccelerationStructureBuildSizesKHR(vk.device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &asInputs, &primitiveCount, &asPreBuildInfo);
 
+            // Create the TLAS scratch buffer, allocate and bind device memory
+            BufferDesc scratchDesc = { asPreBuildInfo.buildScratchSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
+            if (!CreateBuffer(vk, scratchDesc, &as.scratch, &as.scratchMemory)) return false;
+            asInputs.scratchData = VkDeviceOrHostAddressKHR{ GetBufferDeviceAddress(vk.device, as.scratch) };
+
             // Create the acceleration structure buffer, allocate and bind device memory
             BufferDesc desc = { asPreBuildInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
             if (!CreateBuffer(vk, desc, &as.asBuffer, &as.asMemory)) return false;
-
-            // Create the scratch buffer, allocate and bind device memory
-            desc = { asPreBuildInfo.buildScratchSize, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT };
-            if (!CreateBuffer(vk, desc, &as.scratch, &as.scratchMemory)) return false;
-            asInputs.scratchData = VkDeviceOrHostAddressKHR{ GetBufferDeviceAddress(vk.device, as.scratch) };
 
             // Describe the TLAS
             VkAccelerationStructureCreateInfoKHR asCreateInfo = {};
@@ -1553,12 +1572,15 @@ namespace Graphics
 
             vkDestroyBuffer(device, resources.materialsSTB, nullptr);
             vkFreeMemory(device, resources.materialsSTBMemory, nullptr);
-            vkDestroyBuffer(device, resources.materialIndicesRB, nullptr);
-            vkFreeMemory(device, resources.materialIndicesRBMemory, nullptr);
+            vkDestroyBuffer(device, resources.meshOffsetsRB, nullptr);
+            vkFreeMemory(device, resources.meshOffsetsRBMemory, nullptr);
+            vkDestroyBuffer(device, resources.geometryDataRB, nullptr);
+            vkFreeMemory(device, resources.geometryDataRBMemory, nullptr);
             resources.cameraCBPtr = nullptr;
             resources.lightsSTBPtr = nullptr;
             resources.materialsSTBPtr = nullptr;
-            resources.materialIndicesRBPtr = nullptr;
+            resources.meshOffsetsRBPtr = nullptr;
+            resources.geometryDataRBPtr = nullptr;
 
             // Render Targets
             vkDestroyImageView(device, resources.rt.GBufferAView, nullptr);
@@ -1743,16 +1765,16 @@ namespace Graphics
         }
 
         /**
-         * Create the scene materials buffers.
+         * Create the scene materials buffer.
          */
-        bool CreateSceneMaterialsBuffers(Globals& vk, Resources& resources, const Scenes::Scene& scene)
+        bool CreateSceneMaterialsBuffer(Globals& vk, Resources& resources, const Scenes::Scene& scene)
         {
-            // Create the materials upload buffer resource and allocate host memory
-            uint32_t size = ALIGN(256, Scenes::Material::GetGPUDataSize() * static_cast<uint32_t>(scene.materials.size()));
-            BufferDesc desc = { size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
+            // Create the materials buffer upload resource
+            uint32_t sizeInBytes = ALIGN(16, Scenes::Material::GetGPUDataSize() * static_cast<uint32_t>(scene.materials.size()));
+            BufferDesc desc = { sizeInBytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
             if (!CreateBuffer(vk, desc, &resources.materialsSTBUploadBuffer, &resources.materialsSTBUploadMemory)) return false;
 
-            // Create the materials upload buffer resource and allocate device memory
+            // Create the materials buffer device resource
             desc.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
             desc.memoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             if (!CreateBuffer(vk, desc, &resources.materialsSTB, &resources.materialsSTBMemory)) return false;
@@ -1766,55 +1788,118 @@ namespace Graphics
             VKCHECK(vkMapMemory(vk.device, resources.materialsSTBUploadMemory, 0, VK_WHOLE_SIZE, 0, reinterpret_cast<void**>(&resources.materialsSTBPtr)));
             for (uint32_t materialIndex = 0; materialIndex < static_cast<uint32_t>(scene.materials.size()); materialIndex++)
             {
+                // Get the material
                 Scenes::Material material = scene.materials[materialIndex];
+
+                // Add the offset to the textures (in resource arrays)
                 if (material.data.albedoTexIdx > -1) material.data.albedoTexIdx += Tex2DIndices::SCENE_TEXTURES;
                 if (material.data.normalTexIdx > -1) material.data.normalTexIdx += Tex2DIndices::SCENE_TEXTURES;
                 if (material.data.roughnessMetallicTexIdx > -1) material.data.roughnessMetallicTexIdx += Tex2DIndices::SCENE_TEXTURES;
                 if (material.data.emissiveTexIdx > -1) material.data.emissiveTexIdx += Tex2DIndices::SCENE_TEXTURES;
+
+                // Copy the material
                 memcpy(resources.materialsSTBPtr + offset, material.GetGPUData(), Scenes::Material::GetGPUDataSize());
+
+                // Move the destination pointer to the next material
                 offset += Scenes::Material::GetGPUDataSize();
             }
             vkUnmapMemory(vk.device, resources.materialsSTBUploadMemory);
 
             // Schedule a copy of the upload buffer to the device buffer
             VkBufferCopy bufferCopy = {};
-            bufferCopy.size = size;
+            bufferCopy.size = sizeInBytes;
             vkCmdCopyBuffer(vk.cmdBuffer[vk.frameIndex], resources.materialsSTBUploadBuffer, resources.materialsSTB, 1, &bufferCopy);
 
-            // Material Indices
+            return true;
+        }
 
-            // Create the material indices upload buffer resource
-            size = ALIGN(256, sizeof(uint32_t) * scene.numMeshPrimitives);
-            desc = { size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
-            if (!CreateBuffer(vk, desc, &resources.materialIndicesRBUploadBuffer, &resources.materialIndicesRBUploadMemory)) return false;
+        /**
+         * Create the scene material indexing buffers.
+         */
+        bool CreateSceneMaterialIndexingBuffers(Globals& vk, Resources& resources, const Scenes::Scene& scene)
+        {
+            // Mesh Offsets
 
-            // Create the material indices device buffer resource
-            desc.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-            desc.memoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            if (!CreateBuffer(vk, desc, &resources.materialIndicesRB, &resources.materialIndicesRBMemory)) return false;
+            // Create the mesh offsets buffer upload resource
+            uint32_t meshOffsetsSize = ALIGN(16, sizeof(uint32_t) * static_cast<uint32_t>(scene.meshes.size()));
+            BufferDesc desc = { meshOffsetsSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
+            if (!CreateBuffer(vk, desc, &resources.meshOffsetsRBUploadBuffer, &resources.meshOffsetsRBUploadMemory)) return false;
         #ifdef GFX_NAME_OBJECTS
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.materialIndicesRB), "Materials Indices Buffer", VK_OBJECT_TYPE_BUFFER);
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.materialIndicesRBMemory), "Materials Indices Buffer Memory", VK_OBJECT_TYPE_DEVICE_MEMORY);
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.meshOffsetsRBUploadBuffer), "Mesh Offsets Upload Buffer", VK_OBJECT_TYPE_BUFFER);
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.meshOffsetsRBUploadMemory), "Mesh Offsets Upload Buffer Memory", VK_OBJECT_TYPE_DEVICE_MEMORY);
         #endif
 
-            // Copy the material indices to the upload buffer.
-            offset = 0;
-            VKCHECK(vkMapMemory(vk.device, resources.materialIndicesRBUploadMemory, 0, VK_WHOLE_SIZE, 0, reinterpret_cast<void**>(&resources.materialIndicesRBPtr)));
+            // Create the mesh offsets buffer device resource
+            desc.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            desc.memoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            if (!CreateBuffer(vk, desc, &resources.meshOffsetsRB, &resources.meshOffsetsRBMemory)) return false;
+        #ifdef GFX_NAME_OBJECTS
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.meshOffsetsRB), "Mesh Offsets Buffer", VK_OBJECT_TYPE_BUFFER);
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.meshOffsetsRBMemory), "Mesh Offsets Buffer Memory", VK_OBJECT_TYPE_DEVICE_MEMORY);
+        #endif
+
+            // Geometry Data
+
+            // Create the geometry (mesh primitive) data buffer upload resource
+            uint32_t geometryDataSize = ALIGN(16, sizeof(GeometryData) * scene.numMeshPrimitives);
+            desc = { geometryDataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
+            if (!CreateBuffer(vk, desc, &resources.geometryDataRBUploadBuffer, &resources.geometryDataRBUploadMemory)) return false;
+        #ifdef GFX_NAME_OBJECTS
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.geometryDataRBUploadBuffer), "Geometry Data Upload Buffer", VK_OBJECT_TYPE_BUFFER);
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.geometryDataRBUploadMemory), "Geometry Data Upload Buffer Memory", VK_OBJECT_TYPE_DEVICE_MEMORY);
+        #endif
+
+            // Create the geometry data (mesh primitive) buffer device resource
+            desc.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            desc.memoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            if (!CreateBuffer(vk, desc, &resources.geometryDataRB, &resources.geometryDataRBMemory)) return false;
+        #ifdef GFX_NAME_OBJECTS
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.geometryDataRB), "Geometry Data Buffer", VK_OBJECT_TYPE_BUFFER);
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.geometryDataRBMemory), "Geometry Data Buffer Memory", VK_OBJECT_TYPE_DEVICE_MEMORY);
+        #endif
+
+            // Copy the mesh offsets and geometry data to the upload buffers
+            uint32_t primitiveOffset = 0;
+            VKCHECK(vkMapMemory(vk.device, resources.meshOffsetsRBUploadMemory, 0, VK_WHOLE_SIZE, 0, reinterpret_cast<void**>(&resources.meshOffsetsRBPtr)));
+            VKCHECK(vkMapMemory(vk.device, resources.geometryDataRBUploadMemory, 0, VK_WHOLE_SIZE, 0, reinterpret_cast<void**>(&resources.geometryDataRBPtr)));
+
+            uint8_t* meshOffsetsAddress = resources.meshOffsetsRBPtr;
+            uint8_t* geometryDataAddress = resources.geometryDataRBPtr;
             for (uint32_t meshIndex = 0; meshIndex < static_cast<uint32_t>(scene.meshes.size()); meshIndex++)
             {
-                const Scenes::Mesh mesh = scene.meshes[meshIndex];
+                // Get the mesh
+                const Scenes::Mesh& mesh = scene.meshes[meshIndex];
+
+                // Copy the mesh offset to the upload buffer
+                uint32_t meshOffset = primitiveOffset * sizeof(GeometryData);
+                memcpy(meshOffsetsAddress, &meshOffset, sizeof(uint32_t));
+                meshOffsetsAddress += sizeof(uint32_t);
+
                 for (uint32_t primitiveIndex = 0; primitiveIndex < static_cast<uint32_t>(scene.meshes[meshIndex].primitives.size()); primitiveIndex++)
                 {
+                    // Get the mesh primitive and copy its material index to the upload buffer
                     const Scenes::MeshPrimitive& primitive = scene.meshes[meshIndex].primitives[primitiveIndex];
-                    memcpy(resources.materialIndicesRBPtr + offset, &primitive.material, sizeof(uint32_t));
-                    offset += sizeof(uint32_t);
+
+                    GeometryData data;
+                    data.materialIndex = primitive.material;
+                    data.indexByteAddress = primitive.indexByteOffset;
+                    data.vertexByteAddress = primitive.vertexByteOffset;
+                    memcpy(geometryDataAddress, &data, sizeof(GeometryData));
+
+                    geometryDataAddress += sizeof(GeometryData);
+                    primitiveOffset++;
                 }
             }
-            vkUnmapMemory(vk.device, resources.materialIndicesRBUploadMemory);
+            vkUnmapMemory(vk.device, resources.meshOffsetsRBUploadMemory);
+            vkUnmapMemory(vk.device, resources.geometryDataRBUploadMemory);
 
-            // Schedule a copy of the upload buffer to the device buffer
-            bufferCopy.size = size;
-            vkCmdCopyBuffer(vk.cmdBuffer[vk.frameIndex], resources.materialIndicesRBUploadBuffer, resources.materialIndicesRB, 1, &bufferCopy);
+            // Schedule a copy of the upload buffers to the device buffers
+            VkBufferCopy bufferCopy = {};
+            bufferCopy.size = meshOffsetsSize;
+            vkCmdCopyBuffer(vk.cmdBuffer[vk.frameIndex], resources.meshOffsetsRBUploadBuffer, resources.meshOffsetsRB, 1, &bufferCopy);
+
+            bufferCopy.size = geometryDataSize;
+            vkCmdCopyBuffer(vk.cmdBuffer[vk.frameIndex], resources.geometryDataRBUploadBuffer, resources.geometryDataRB, 1, &bufferCopy);
 
             return true;
         }
@@ -1853,107 +1938,96 @@ namespace Graphics
         }
 
         /**
-         * Create the scene geometry index buffers.
+         * Create the scene mesh index buffers.
          */
         bool CreateSceneIndexBuffers(Globals& vk, Resources& resources, const Scenes::Scene& scene)
         {
-            resources.sceneIBs.resize(scene.numMeshPrimitives);
-            resources.sceneIBMemory.resize(scene.numMeshPrimitives);
-            resources.sceneIBUploadBuffers.resize(scene.numMeshPrimitives);
-            resources.sceneIBUploadMemory.resize(scene.numMeshPrimitives);
-            for (uint32_t meshIndex = 0; meshIndex < static_cast<uint32_t>(scene.meshes.size()); meshIndex++)
+            uint32_t numMeshes = static_cast<uint32_t>(scene.meshes.size());
+
+            resources.sceneIBs.resize(numMeshes);
+            resources.sceneIBMemory.resize(numMeshes);
+            resources.sceneIBUploadBuffers.resize(numMeshes);
+            resources.sceneIBUploadMemory.resize(numMeshes);
+            for (uint32_t meshIndex = 0; meshIndex < numMeshes; meshIndex++)
             {
                 // Get the mesh
-                const Scenes::Mesh mesh = scene.meshes[meshIndex];
-                for (size_t primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); primitiveIndex++)
-                {
-                    // Get the mesh primitive
-                    const Scenes::MeshPrimitive primitive = mesh.primitives[primitiveIndex];
+                const Scenes::Mesh& mesh = scene.meshes[meshIndex];
 
-                    // Create the index buffer and copy the data to the GPU
-                    if (!CreateIndexBuffer(vk, primitive,
-                        &resources.sceneIBs[primitive.index],
-                        &resources.sceneIBMemory[primitive.index],
-                        &resources.sceneIBUploadBuffers[primitive.index],
-                        &resources.sceneIBUploadMemory[primitive.index])) return false;
-                #ifdef GFX_NAME_OBJECTS
-                    std::string name = "IB: " + mesh.name + ", Primitive: " + std::to_string(primitiveIndex);
-                    std::string memoryName = "IB: " + mesh.name + ", Primitive: " + std::to_string(primitiveIndex) + " Memory";
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.sceneIBs[primitive.index]), name.c_str(), VK_OBJECT_TYPE_BUFFER);
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.sceneIBMemory[primitive.index]), memoryName.c_str(), VK_OBJECT_TYPE_DEVICE_MEMORY);
-                #endif
-                }
+                // Create the index buffer and copy the index data to the GPU
+                if (!CreateIndexBuffer(vk, mesh,
+                    &resources.sceneIBs[meshIndex],
+                    &resources.sceneIBMemory[meshIndex],
+                    &resources.sceneIBUploadBuffers[meshIndex],
+                    &resources.sceneIBUploadMemory[meshIndex])) return false;
+            #ifdef GFX_NAME_OBJECTS
+                std::string name = "IB: " + mesh.name;
+                std::string memoryName = "IB: " + mesh.name + " Memory";
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.sceneIBs[meshIndex]), name.c_str(), VK_OBJECT_TYPE_BUFFER);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.sceneIBMemory[meshIndex]), memoryName.c_str(), VK_OBJECT_TYPE_DEVICE_MEMORY);
+            #endif
             }
             return true;
         }
 
         /**
-         * Create the scene geometry vertex buffers.
+         * Create the scene mesh vertex buffers.
          */
         bool CreateSceneVertexBuffers(Globals& vk, Resources& resources, const Scenes::Scene& scene)
         {
-            resources.sceneVBs.resize(scene.numMeshPrimitives);
-            resources.sceneVBMemory.resize(scene.numMeshPrimitives);
-            resources.sceneVBUploadBuffers.resize(scene.numMeshPrimitives);
-            resources.sceneVBUploadMemory.resize(scene.numMeshPrimitives);
-            for (uint32_t meshIndex = 0; meshIndex < static_cast<uint32_t>(scene.meshes.size()); meshIndex++)
+            uint32_t numMeshes = static_cast<uint32_t>(scene.meshes.size());
+
+            resources.sceneVBs.resize(numMeshes);
+            resources.sceneVBMemory.resize(numMeshes);
+            resources.sceneVBUploadBuffers.resize(numMeshes);
+            resources.sceneVBUploadMemory.resize(numMeshes);
+            for (uint32_t meshIndex = 0; meshIndex < numMeshes; meshIndex++)
             {
                 // Get the mesh
-                const Scenes::Mesh mesh = scene.meshes[meshIndex];
-                for (uint32_t primitiveIndex = 0; primitiveIndex < static_cast<uint32_t>(mesh.primitives.size()); primitiveIndex++)
-                {
-                    // Get the mesh primitive
-                    const Scenes::MeshPrimitive primitive = mesh.primitives[primitiveIndex];
+                const Scenes::Mesh& mesh = scene.meshes[meshIndex];
 
-                    // Create the vertex buffer and copy the data to the GPU
-                    if (!CreateVertexBuffer(vk, primitive,
-                        &resources.sceneVBs[primitive.index],
-                        &resources.sceneVBMemory[primitive.index],
-                        &resources.sceneVBUploadBuffers[primitive.index],
-                        &resources.sceneVBUploadMemory[primitive.index])) return false;
-                #ifdef GFX_NAME_OBJECTS
-                    std::string name = "VB: " + mesh.name + ", Primitive: " + std::to_string(primitiveIndex);
-                    std::string memoryName = "VB: " + mesh.name + ", Primitive: " + std::to_string(primitiveIndex) + " Memory";
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.sceneVBs[primitive.index]), name.c_str(), VK_OBJECT_TYPE_BUFFER);
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.sceneVBMemory[primitive.index]), memoryName.c_str(), VK_OBJECT_TYPE_DEVICE_MEMORY);
-                #endif
-                }
+                // Create the vertex buffer and copy the data to the GPU
+                if (!CreateVertexBuffer(vk, mesh,
+                    &resources.sceneVBs[meshIndex],
+                    &resources.sceneVBMemory[meshIndex],
+                    &resources.sceneVBUploadBuffers[meshIndex],
+                    &resources.sceneVBUploadMemory[meshIndex])) return false;
+            #ifdef GFX_NAME_OBJECTS
+                std::string name = "VB: " + mesh.name;
+                std::string memoryName = "VB: " + mesh.name + " Memory";
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.sceneVBs[meshIndex]), name.c_str(), VK_OBJECT_TYPE_BUFFER);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(resources.sceneVBMemory[meshIndex]), memoryName.c_str(), VK_OBJECT_TYPE_DEVICE_MEMORY);
+            #endif
             }
 
             return true;
         }
 
         /**
-         * Create the scene's bottom level acceleration structures.
+         * Create the scene's bottom level acceleration structure(s).
          */
         bool CreateSceneBLAS(Globals& vk, Resources& resources, const Scenes::Scene& scene)
         {
-            // Describe the BLAS geometry. Each mesh primitive populates a BLAS.
-            resources.blas.resize(scene.numMeshPrimitives);
+            // Build a BLAS for each mesh
+            resources.blas.resize(scene.meshes.size());
             for (uint32_t meshIndex = 0; meshIndex < static_cast<uint32_t>(scene.meshes.size()); meshIndex++)
             {
-                // Get the mesh
-                const Scenes::Mesh mesh = scene.meshes[meshIndex];
-                for (uint32_t primitiveIndex = 0; primitiveIndex < static_cast<uint32_t>(mesh.primitives.size()); primitiveIndex++)
-                {
-                    // Get the mesh primitive
-                    const Scenes::MeshPrimitive primitive = mesh.primitives[primitiveIndex];
-                    AccelerationStructure& as = resources.blas[primitive.index];
+                // Get the mesh and its BLAS
+                const Scenes::Mesh& mesh = scene.meshes[meshIndex];
+                AccelerationStructure& as = resources.blas[meshIndex];
 
-                    // Create the BLAS and schedule a build
-                    if (!CreateBLAS(vk, resources, primitive, as)) return false;
-                #ifdef GFX_NAME_OBJECTS
-                    std::string name = "BLAS: " + mesh.name + ", Primitive: " + std::to_string(primitiveIndex);
-                    std::string memory = "BLAS Memory: " + mesh.name + ", Primitive: " + std::to_string(primitiveIndex);
-                    std::string scratch = "BLAS Scratch: " + mesh.name + ", Primitive: " + std::to_string(primitiveIndex);
-                    std::string scratchMemory = "BLAS Scratch Memory: " + mesh.name + ", Primitive: " + std::to_string(primitiveIndex);
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.asKHR), name.c_str(), VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR);
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.asBuffer), memory.c_str(), VK_OBJECT_TYPE_BUFFER);
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.asMemory), memory.c_str(), VK_OBJECT_TYPE_DEVICE_MEMORY);
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.scratch), scratch.c_str(), VK_OBJECT_TYPE_BUFFER);
-                    SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.scratchMemory), scratchMemory.c_str(), VK_OBJECT_TYPE_DEVICE_MEMORY);
-                #endif
-                }
+                // Create the BLAS and schedule a build
+                if (!CreateBLAS(vk, resources, mesh, as)) return false;
+            #ifdef GFX_NAME_OBJECTS
+                std::string name = "BLAS: " + mesh.name;
+                std::string memory = "BLAS Memory: " + mesh.name;
+                std::string scratch = "BLAS Scratch: " + mesh.name;
+                std::string scratchMemory = "BLAS Scratch Memory: " + mesh.name;
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.asKHR), name.c_str(), VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.asBuffer), memory.c_str(), VK_OBJECT_TYPE_BUFFER);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.asMemory), memory.c_str(), VK_OBJECT_TYPE_DEVICE_MEMORY);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.scratch), scratch.c_str(), VK_OBJECT_TYPE_BUFFER);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(as.scratchMemory), scratchMemory.c_str(), VK_OBJECT_TYPE_DEVICE_MEMORY);
+            #endif
             }
 
             // Wait for the BLAS builds to complete
@@ -1974,38 +2048,30 @@ namespace Graphics
             std::vector<VkAccelerationStructureInstanceKHR> instances;
             for (size_t instanceIndex = 0; instanceIndex < scene.instances.size(); instanceIndex++)
             {
-                const Scenes::MeshInstance instance = scene.instances[instanceIndex];
-                const Scenes::Mesh mesh = scene.meshes[instance.meshIndex];
-                for (size_t primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); primitiveIndex++)
-                {
-                    const Scenes::MeshPrimitive primitive = mesh.primitives[primitiveIndex];
+                // Get the mesh instance
+                const Scenes::MeshInstance& instance = scene.instances[instanceIndex];
 
-                    VkAccelerationStructureDeviceAddressInfoKHR asDeviceAddressInfo = {};
-                    asDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-                    asDeviceAddressInfo.accelerationStructure = resources.blas[primitive.index].asKHR;
-                    VkDeviceAddress blasAddress = vkGetAccelerationStructureDeviceAddressKHR(vk.device, &asDeviceAddressInfo);
+                // Get the BLAS device address
+                VkAccelerationStructureDeviceAddressInfoKHR asDeviceAddressInfo = {};
+                asDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+                asDeviceAddressInfo.accelerationStructure = resources.blas[instance.meshIndex].asKHR;
+                VkDeviceAddress blasAddress = vkGetAccelerationStructureDeviceAddressKHR(vk.device, &asDeviceAddressInfo);
 
-                    // Describe the mesh primitive instance
-                    VkAccelerationStructureInstanceKHR desc = {};
-                    desc.instanceCustomIndex = primitive.index;             // For indexing into the MeshPrimitives and MaterialIndices arrays. Requires 1 MeshPrimitive per BLAS.
-                    desc.mask = 0xFF;
-                    desc.instanceShaderBindingTableRecordOffset = 0;        // A single hit group for all geometry
-                    desc.accelerationStructureReference = blasAddress;
-                #if (COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT) || (COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP)
-                    desc.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FRONT_COUNTERCLOCKWISE_BIT_KHR;
-                #endif
+                // Describe the mesh instance
+                VkAccelerationStructureInstanceKHR desc = {};
+                desc.instanceCustomIndex = instance.meshIndex; // quantized to 24-bits
+                desc.mask = 0xFF;
+                desc.instanceShaderBindingTableRecordOffset = 0; // A single hit group for all geometry
+                desc.accelerationStructureReference = blasAddress;
+            #if (COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT) || (COORDINATE_SYSTEM == COORDINATE_SYSTEM_LEFT_Z_UP)
+                desc.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FRONT_COUNTERCLOCKWISE_BIT_KHR;
+            #endif
+                desc.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 
-                    // Disable front or back face culling for meshes with double sided materials
-                    if (scene.materials[primitive.material].data.doubleSided)
-                    {
-                        desc.flags |= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-                    }
+                // Write the instance transform
+                memcpy(desc.transform.matrix, instance.transform, sizeof(DirectX::XMFLOAT4) * 3);
 
-                    // Write the instance transform
-                    memcpy(desc.transform.matrix, instance.transform, sizeof(DirectX::XMFLOAT4) * 3);
-
-                    instances.push_back(desc);
-                }
+                instances.push_back(desc);
             }
 
             // Create the TLAS instances buffer
@@ -2434,7 +2500,7 @@ namespace Graphics
                 glfwSetWindowMonitor(vk.window, monitor, vk.x, vk.y, vk.windowWidth, vk.windowHeight, vk.vsync ? 60 : GLFW_DONT_CARE);
             }
 
-            vk.fullscreen = !vk.fullscreen;
+            vk.fullscreen = ~vk.fullscreen;
             vk.fullscreenChanged = false;
             return true;
         }
@@ -3066,7 +3132,8 @@ namespace Graphics
             // Create scene specific resources
             CHECK(CreateSceneCameraConstantBuffer(vk, resources, scene), "create scene camera constant buffer!", log);
             CHECK(CreateSceneLightsBuffer(vk, resources, scene), "create scene lights structured buffer!", log);
-            CHECK(CreateSceneMaterialsBuffers(vk, resources, scene), "create scene materials buffers!", log);
+            CHECK(CreateSceneMaterialsBuffer(vk, resources, scene), "create scene materials buffer!", log);
+            CHECK(CreateSceneMaterialIndexingBuffers(vk, resources, scene), "create scene material indexing buffers!", log);
             CHECK(CreateSceneIndexBuffers(vk, resources, scene), "create scene index buffers!", log);
             CHECK(CreateSceneVertexBuffers(vk, resources, scene), "create scene vertex buffers!", log);
             CHECK(CreateSceneBLAS(vk, resources, scene), "create scene bottom level acceleration structures!", log);
@@ -3090,8 +3157,10 @@ namespace Graphics
             // Release upload buffers
             vkDestroyBuffer(vk.device, resources.materialsSTBUploadBuffer, nullptr);
             vkFreeMemory(vk.device, resources.materialsSTBUploadMemory, nullptr);
-            vkDestroyBuffer(vk.device, resources.materialIndicesRBUploadBuffer, nullptr);
-            vkFreeMemory(vk.device, resources.materialIndicesRBUploadMemory, nullptr);
+            vkDestroyBuffer(vk.device, resources.meshOffsetsRBUploadBuffer, nullptr);
+            vkFreeMemory(vk.device, resources.meshOffsetsRBUploadMemory, nullptr);
+            vkDestroyBuffer(vk.device, resources.geometryDataRBUploadBuffer, nullptr);
+            vkFreeMemory(vk.device, resources.geometryDataRBUploadMemory, nullptr);
             vkDestroyBuffer(vk.device, resources.tlas.instancesUpload, nullptr);
             vkFreeMemory(vk.device, resources.tlas.instancesUploadMemory, nullptr);
             resources.tlas.instancesUpload = nullptr;

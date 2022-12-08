@@ -225,6 +225,7 @@ set_source_files_properties(${TEST_HARNESS_DDGIVIS_SHADER_SOURCE} PROPERTIES VS_
 # Test Harness options
 option(RTXGISAMPLES_GFX_NAME_OBJECTS "Enable naming of graphics objects (for debugging)" ON)
 option(RTXGISAMPLES_GFX_PERF_MARKERS "Enable GPU performance markers" ON)
+option(RTXGISAMPLES_GFX_NVAPI "Enable NVAPI" ON)
 
 # Test Harness bindless options
 set(RTXGISAMPLES_TEST_HARNESS_BINDLESS_TYPE "Resource Arrays" CACHE STRING "The bindless resource implementation to use")
@@ -310,6 +311,7 @@ set(GLFW_INCLUDE_PATH "${ROOT_DIR}/thirdparty/glfw/include")
 set(IMGUI_INCLUDE_PATH "${ROOT_DIR}/thirdparty/imgui")
 set(IMGUI_BACKENDS_INCLUDE_PATH "${ROOT_DIR}/thirdparty/imgui/backends")
 set(TINYGLTF_INCLUDE_PATH "${ROOT_DIR}/thirdparty/tinygltf")
+set(NVAPI_INCLUDE_PATH "${ROOT_DIR}/thirdparty/nvapi")
 
 # ---- WINDOWS / D3D12 --------------------------------------------------------------------------------------
 
@@ -355,11 +357,21 @@ if(RTXGI_API_D3D12_ENABLE)
         ${GLFW_INCLUDE_PATH}
         ${IMGUI_INCLUDE_PATH}
         ${IMGUI_BACKENDS_INCLUDE_PATH}
+        ${NVAPI_INCLUDE_PATH}
         ${TINYGLTF_INCLUDE_PATH}
     )
 
-    # Add statically linked libs
-    target_link_libraries(${TARGET_EXE} RTXGI-D3D12 glfw d3d11 d3d12 dxgi)
+    if(RTXGISAMPLES_GFX_NVAPI)
+        target_compile_definitions(${TARGET_EXE} PRIVATE GFX_NVAPI=1)
+
+        # Add statically linked libs
+        target_link_libraries(${TARGET_EXE} RTXGI-D3D12 glfw d3d11 d3d12 dxgi ${ROOT_DIR}/thirdparty/nvapi/amd64/nvapi64.lib)
+    else()
+        target_compile_definitions(${TARGET_EXE} PRIVATE GFX_NVAPI=0)
+
+        # Add statically linked libs
+        target_link_libraries(${TARGET_EXE} RTXGI-D3D12 glfw d3d11 d3d12 dxgi)
+    endif()
 
     # Add common compiler definitions for exposed Test Harness options
     SetupOptions(${TARGET_EXE})

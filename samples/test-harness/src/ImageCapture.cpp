@@ -87,6 +87,8 @@ namespace ImageCapture
             case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:           pfGuid = GUID_WICPixelFormat32bppBGRA; sRGB = true; break;
             case DXGI_FORMAT_B8G8R8X8_UNORM:                pfGuid = GUID_WICPixelFormat32bppBGR; break;
             case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:           pfGuid = GUID_WICPixelFormat32bppBGR; sRGB = true; break;
+                // WIC does not have two-channel formats, four-channel lets us output all data for bitwise comparisons
+            case DXGI_FORMAT_R32G32_FLOAT:                  pfGuid = GUID_WICPixelFormat128bppRGBAFloat; break;
             default:
                 return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
         }

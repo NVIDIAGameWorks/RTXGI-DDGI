@@ -38,8 +38,9 @@ VK_PUSH_CONST ConstantBuffer<GlobalConstants> GlobalConst : register(b0, space0)
 
 #define GetGlobalConst(x, y) (GlobalConst.x##_##y)
 
-uint GetPTSamplesPerPixel() { return (GetGlobalConst(pt, samplesPerPixel) & 0x7FFFFFFF); }
+uint GetPTSamplesPerPixel() { return (GetGlobalConst(pt, samplesPerPixel) & 0x3FFFFFFF); }
 uint GetPTAntialiasing() { return (GetGlobalConst(pt, samplesPerPixel) & 0x80000000); }
+uint GetPTShaderExecutionReordering() { return GetGlobalConst(pt, samplesPerPixel) & 0x40000000; }
 
 uint HasDirectionalLight() { return GetGlobalConst(lighting, hasDirectionalLight); }
 uint GetNumPointLights() { return GetGlobalConst(lighting, numPointLights); }
@@ -97,8 +98,9 @@ VK_BINDING(13, 0) ByteAddressBuffer                          ByteAddrBuffer[]   
 
 #define SPHERE_INDEX_BUFFER_INDEX 0
 #define SPHERE_VERTEX_BUFFER_INDEX 1
-#define MATERIAL_INDICES_INDEX 2
-#define GEOMETRY_BUFFERS_INDEX 3
+#define MESH_OFFSETS_INDEX 2
+#define GEOMETRY_DATA_INDEX 3
+#define GEOMETRY_BUFFERS_INDEX 4
 
 // Sampler Accessor Functions ------------------------------------------------------------------------------
 
@@ -112,8 +114,16 @@ SamplerState GetAnisoWrapSampler() { return Samplers[2]; }
 
 StructuredBuffer<Light> GetLights() { return Lights; }
 
-Material GetMaterial(uint index) { return Materials[index]; }
-uint GetMaterialIndex(uint meshIndex) { return ByteAddrBuffer[MATERIAL_INDICES_INDEX].Load(meshIndex * 4); }
+void GetGeometryData(uint meshIndex, uint geometryIndex, out GeometryData geometry)
+{
+    uint address = ByteAddrBuffer[MESH_OFFSETS_INDEX].Load(meshIndex * 4); // address of the Mesh in the GeometryData buffer
+    address += geometryIndex * 12; // offset to mesh primitive geometry, GeometryData stride is 12 bytes
+
+    geometry.materialIndex = ByteAddrBuffer[GEOMETRY_DATA_INDEX].Load(address);
+    geometry.indexByteAddress = ByteAddrBuffer[GEOMETRY_DATA_INDEX].Load(address + 4);
+    geometry.vertexByteAddress = ByteAddrBuffer[GEOMETRY_DATA_INDEX].Load(address + 8);
+}
+Material GetMaterial(GeometryData geometry) { return Materials[geometry.materialIndex]; }
 
 StructuredBuffer<DDGIVolumeDescGPUPacked> GetDDGIVolumeConstants(uint index) { return DDGIVolumes; }
 StructuredBuffer<DDGIVolumeResourceIndices> GetDDGIVolumeResourceIndices(uint index) { return DDGIVolumeBindless; }
@@ -156,15 +166,16 @@ Texture2DArray<float4> GetTex2DArray(uint index) { return Tex2DArray[index]; }
 #define RTAO_RAW_INDEX 14
 #define DDGI_OUTPUT_INDEX 15
 
-#define SCENE_TLAS_INDEX 40
-#define DDGIPROBEVIS_TLAS_INDEX 41
+#define SCENE_TLAS_INDEX 52
+#define DDGIPROBEVIS_TLAS_INDEX 53
 
-#define BLUE_NOISE_INDEX 42
+#define BLUE_NOISE_INDEX 54
 
-#define SPHERE_INDEX_BUFFER_INDEX 368
-#define SPHERE_VERTEX_BUFFER_INDEX 369
-#define MATERIAL_INDICES_INDEX 370
-#define GEOMETRY_BUFFERS_INDEX 371
+#define SPHERE_INDEX_BUFFER_INDEX 392
+#define SPHERE_VERTEX_BUFFER_INDEX 393
+#define MESH_OFFSETS_INDEX 394
+#define GEOMETRY_DATA_INDEX 395
+#define GEOMETRY_BUFFERS_INDEX 396
 
 // Sampler Accessor Functions ------------------------------------------------------------------------------
 
@@ -178,8 +189,17 @@ SamplerState GetAnisoWrapSampler() { return SamplerDescriptorHeap[2]; }
 
 StructuredBuffer<Light> GetLights() { return StructuredBuffer<Light>(ResourceDescriptorHeap[LIGHTS_INDEX]); }
 
-Material GetMaterial(uint index) { return StructuredBuffer<Material>(ResourceDescriptorHeap[MATERIALS_INDEX]).Load(index); }
-uint GetMaterialIndex(uint meshIndex) { return ByteAddressBuffer(ResourceDescriptorHeap[MATERIAL_INDICES_INDEX]).Load(meshIndex * 4); }
+void GetGeometryData(uint meshIndex, uint geometryIndex, out GeometryData geometry)
+{
+    uint address = ByteAddressBuffer(ResourceDescriptorHeap[MESH_OFFSETS_INDEX]).Load(meshIndex * 4) * 12; // offset to start of mesh, GeometryData is 12 bytes
+    address += geometryIndex * 12; // offset to mesh primitive geometry
+
+    ByteAddressBuffer geometryData = ByteAddressBuffer(ResourceDescriptorHeap[GEOMETRY_DATA_INDEX]);
+    geometry.materialIndex = geometryData.Load(address);
+    geometry.indexByteAddress = geometryData.Load(address + 4);
+    geometry.vertexByteAddress = geometryData.Load(address + 8);
+}
+Material GetMaterial(GeometryData geometry) { return StructuredBuffer<Material>(ResourceDescriptorHeap[MATERIALS_INDEX]).Load(geometry.materialIndex); }
 
 StructuredBuffer<DDGIVolumeDescGPUPacked> GetDDGIVolumeConstants(uint index) { return ResourceDescriptorHeap[index]; }
 StructuredBuffer<DDGIVolumeResourceIndices> GetDDGIVolumeResourceIndices(uint index) { return ResourceDescriptorHeap[index]; }

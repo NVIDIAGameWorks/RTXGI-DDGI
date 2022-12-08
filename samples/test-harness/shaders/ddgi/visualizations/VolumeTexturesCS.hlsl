@@ -53,6 +53,8 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
     Texture2DArray<float4> ProbeIrradiance = GetTex2DArray(resourceIndices.probeIrradianceSRVIndex);
     Texture2DArray<float4> ProbeDistance = GetTex2DArray(resourceIndices.probeDistanceSRVIndex);
     Texture2DArray<float4> ProbeData = GetTex2DArray(resourceIndices.probeDataSRVIndex);
+    Texture2DArray<float4> ProbeVariability = GetTex2DArray(resourceIndices.probeVariabilitySRVIndex);
+    Texture2DArray<float4> ProbeVariabilityAverage = GetTex2DArray(resourceIndices.probeVariabilityAverageSRVIndex);
 
     // Load and unpack the DDGIVolume's constants
     DDGIVolumeDescGPU volume = UnpackDDGIVolumeDescGPU(DDGIVolumes[volumeIndex]);
@@ -83,7 +85,7 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
     if(DispatchThreadID.x < irradianceRect.x && DispatchThreadID.y < irradianceRect.y)
     {
         // Compute the sampling coordinates
-        uint2 numScaledTexelsPerSlice = numTexelsPerSlice * irradianceScale;
+        uint2  numScaledTexelsPerSlice = numTexelsPerSlice * irradianceScale;
         float2 sliceUV = (float2(0.5f, 0.5f) + float2(DispatchThreadID.xy % numScaledTexelsPerSlice)) / float2(numScaledTexelsPerSlice);
         float  sliceIndex = float(DispatchThreadID.x / numScaledTexelsPerSlice.x);
         float3 coords = float3(sliceUV, sliceIndex);
@@ -126,7 +128,7 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
     if (DispatchThreadID.x < xmax && DispatchThreadID.y >= ymin && DispatchThreadID.y < ymax)
     {
         // Compute the sampling coordinates
-        uint2 numScaledTexelsPerSlice = numTexelsPerSlice * distanceScale;
+        uint2  numScaledTexelsPerSlice = numTexelsPerSlice * distanceScale;
         float2 sliceUV = (float2(0.5f, 0.5f) + float2(uint2(DispatchThreadID.x, DispatchThreadID.y - ymin) % numScaledTexelsPerSlice)) / float2(numScaledTexelsPerSlice);
         float  sliceIndex = float(DispatchThreadID.x / numScaledTexelsPerSlice.x);
         float3 coords = float3(sliceUV, sliceIndex);
@@ -142,12 +144,79 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
         return;
     }
 
+    // Variability
+    float variabilityScale = GetGlobalConst(ddgivis, probeVariabilityTextureScale);
+    numTexelsPerSlice = numProbesPerSlice * volume.probeNumIrradianceInteriorTexels;
+    uint2 variabilityRect = uint2(numTexelsPerSlice.x * numSlices, numTexelsPerSlice.y) * variabilityScale;
+    xmax = variabilityRect.x;
+    ymin += distanceRect.y + 5;
+    ymax = (ymin + variabilityRect.y);
+    if (DispatchThreadID.x < xmax.x && DispatchThreadID.y >= ymin && DispatchThreadID.y < ymax)
+    {
+        // Compute the sampling coordinates
+        uint2  numScaledTexelsPerSlice = numTexelsPerSlice * variabilityScale;
+        float2 sliceUV = (float2(0.5f, 0.5f) + float2(uint2(DispatchThreadID.x, DispatchThreadID.y - ymin) % numScaledTexelsPerSlice)) / float2(numScaledTexelsPerSlice);
+        float  sliceIndex = float(DispatchThreadID.x / numScaledTexelsPerSlice.x);
+        float3 coords = float3(sliceUV, sliceIndex);
+
+        // Sample the variability texture
+        float diff = ProbeVariability.SampleLevel(GetPointClampSampler(), coords, 0).r;
+
+        // Sample the probe data texture
+        bool active = true;
+        if (volume.probeClassificationEnabled)
+        {
+            // Sample the probe data texture
+            uint state = ProbeData.SampleLevel(GetPointClampSampler(), coords, 0).a;
+            active = (state == RTXGI_DDGI_PROBE_STATE_ACTIVE);
+        }
+
+        // Disabled = blue, above threshold = green, below = red, nan = yellow
+        if (!active) color = float3(0.f, 0.f, 1.f);
+        else if (isnan(diff)) color = float3(1.f, 1.f, 0.f);
+        else if (diff > GetGlobalConst(ddgivis, probeVariabilityTextureThreshold)) color = float3(0.f, 1.0, 0.f);
+        else color = float3(1.f, 0.f, 0.f);
+
+        // Overwrite GBufferA's albedo and mark the pixel to not be lit
+        GBufferA[DispatchThreadID.xy] = float4(color, 0.f);
+
+        return;
+    }
+
+    // Variability average
+    // 1/4 number of slices (rounded up) after reduction
+    uint2 variabilityAvgRect = uint2(numTexelsPerSlice.x * ((numSlices + 3)/4), numTexelsPerSlice.y) * variabilityScale;
+    xmax = variabilityAvgRect.x;
+    ymin += variabilityRect.y + 5;
+    ymax = (ymin + variabilityAvgRect.y);
+    if (DispatchThreadID.x < xmax.x && DispatchThreadID.y >= ymin && DispatchThreadID.y < ymax)
+    {
+        // Compute the sampling coordinates
+        uint2  numScaledTexelsPerSlice = numTexelsPerSlice * variabilityScale;
+        float2 sliceUV = (float2(0.5f, 0.5f) + float2(uint2(DispatchThreadID.x, DispatchThreadID.y - ymin) % numScaledTexelsPerSlice)) / float2(numScaledTexelsPerSlice);
+        float  sliceIndex = float(DispatchThreadID.x / numScaledTexelsPerSlice.x);
+        float3 coords = float3(sliceUV, sliceIndex);
+
+        // Sample the variability average texture
+        float diff = ProbeVariabilityAverage.SampleLevel(GetPointClampSampler(), coords, 0).r;
+
+        // Above threshold = green, below = red, nan = yellow
+        if (isnan(diff)) color = float3(1.f, 1.f, 0.f);
+        else if (diff > GetGlobalConst(ddgivis, probeVariabilityTextureThreshold)) color = float3(0.f, 1.f, 0.f);
+        else color = float3(1.f, 0.f, 0.f);
+
+        // Overwrite GBufferA's albedo and mark the pixel to not be lit
+        GBufferA[DispatchThreadID.xy] = float4(color, 0.f);
+
+        return;
+    }
+
     // Get the texture scale factor for probe data
     float probeDataScale = GetGlobalConst(ddgivis, probeDataTextureScale);
 
     // Relocation Offsets
     uint2 offsetRect = 0;
-    ymin += distanceRect.y + 5;
+    ymin += variabilityAvgRect.y + 5;
     if (volume.probeRelocationEnabled)
     {
         offsetRect = uint2(numProbesPerSlice.x * numSlices, numProbesPerSlice.y) * probeDataScale;
@@ -157,7 +226,7 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
         if (DispatchThreadID.x < xmax && DispatchThreadID.y >= ymin && DispatchThreadID.y < ymax)
         {
             // Compute the sampling coordinates
-            uint2 numScaledTexelsPerSlice = numProbesPerSlice * probeDataScale;
+            uint2  numScaledTexelsPerSlice = numProbesPerSlice * probeDataScale;
             float2 sliceUV = (float2(0.5f, 0.5f) + float2(uint2(DispatchThreadID.x, DispatchThreadID.y - ymin) % numScaledTexelsPerSlice)) / float2(numScaledTexelsPerSlice);
             float  sliceIndex = float(DispatchThreadID.x / numScaledTexelsPerSlice.x);
             float3 coords = float3(sliceUV, sliceIndex);
@@ -184,7 +253,7 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
         if (DispatchThreadID.x < xmax && DispatchThreadID.y >= ymin && DispatchThreadID.y < ymax)
         {
             // Compute the sampling coordinates
-            uint2 numScaledTexelsPerSlice = numProbesPerSlice * probeDataScale;
+            uint2  numScaledTexelsPerSlice = numProbesPerSlice * probeDataScale;
             float2 sliceUV = (float2(0.5f, 0.5f) + float2(uint2(DispatchThreadID.x, DispatchThreadID.y - ymin) % numScaledTexelsPerSlice)) / float2(numScaledTexelsPerSlice);
             float  sliceIndex = float(DispatchThreadID.x / numScaledTexelsPerSlice.x);
             float3 coords = float3(sliceUV, sliceIndex);
@@ -212,8 +281,7 @@ void CS(uint3 DispatchThreadID : SV_DispatchThreadID)
     if (DispatchThreadID.x <= xmax && DispatchThreadID.y > ymin && DispatchThreadID.y <= ymax)
     {
         // Compute the sampling coordinates
-        uint2 numScaledTexelsPerSlice = numTexelsPerSlice * rayDataScale;
-
+        uint2  numScaledTexelsPerSlice = numTexelsPerSlice * rayDataScale;
         float2 sliceUV = (float2(0.5f, 0.5f) + float2(uint2(DispatchThreadID.x, DispatchThreadID.y - ymin) % numScaledTexelsPerSlice)) / float2(numScaledTexelsPerSlice);
         float  sliceIndex = float(DispatchThreadID.x / numScaledTexelsPerSlice.x);
         float3 coords = float3(sliceUV, sliceIndex);

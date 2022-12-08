@@ -48,6 +48,7 @@ namespace Graphics
                 D3D12_GPU_VIRTUAL_ADDRESS    shaderTableHitGroupTableStartAddress = 0;
 
                 // DDGI
+                std::vector<rtxgi::DDGIVolumeDesc> volumeDescs;
                 std::vector<rtxgi::DDGIVolumeBase*> volumes;
                 std::vector<rtxgi::d3d12::DDGIVolume*> selectedVolumes;
 
@@ -61,6 +62,9 @@ namespace Graphics
                 ID3D12Resource*              volumeConstantsSTBUpload = nullptr;
                 UINT                         volumeConstantsSTBSizeInBytes = 0;
 
+                // Variability Tracking
+                std::vector<uint32_t>        numVolumeVariabilitySamples;
+
                 // Performance Stats
                 Instrumentation::Stat*       cpuStat = nullptr;
                 Instrumentation::Stat*       gpuStat = nullptr;
@@ -70,6 +74,7 @@ namespace Graphics
                 Instrumentation::Stat*       blendStat = nullptr;
                 Instrumentation::Stat*       relocateStat = nullptr;
                 Instrumentation::Stat*       lightingStat = nullptr;
+                Instrumentation::Stat*       variabilityStat = nullptr;
 
                 bool                         enabled = false;
             };
