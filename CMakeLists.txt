@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2019-2023, NVIDIA CORPORATION.  All rights reserved.
 #
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -27,7 +27,7 @@ endif()
 
 set(RTXGI_SDK_VERSION_MAJOR 1)
 set(RTXGI_SDK_VERSION_MINOR 3)
-set(RTXGI_SDK_VERSION_REVISION 5)
+set(RTXGI_SDK_VERSION_REVISION 6)
 
 # Only 64-bit platforms are supported
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4" )
