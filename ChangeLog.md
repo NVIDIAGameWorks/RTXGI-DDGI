@@ -1,5 +1,15 @@
 # RTXGI SDK Change Log
 
+## 1.3.6
+### SDK
+- **Improvements**
+  - Adds 16B to the end of the `DDGIVolumeDescGPUPacked` struct for future use.
+  - Updates `DDGIVolumeDescGPUPacked` struct comments and layout to properly reflect its size (in bytes).
+  - Updates copyrights and bumps revision numbers.
+
+### Test Harness
+- Updates copyrights and bumps revision numbers.
+
 ## 1.3.5
 
 ### SDK

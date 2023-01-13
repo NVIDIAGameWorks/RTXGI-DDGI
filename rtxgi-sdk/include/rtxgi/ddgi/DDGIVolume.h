@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2023, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -330,7 +330,7 @@ namespace rtxgi
 
         float3 GetScrollAnchor() const { return m_probeScrollAnchor; }
 
-        int3 GetScrollOffsets() { return m_probeScrollOffsets; }
+        int3 GetScrollOffsets() const { return m_probeScrollOffsets; }
 
         float3 GetProbeSpacing() const { return m_desc.probeSpacing; }
 

@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2019-2022, NVIDIA CORPORATION.  All rights reserved.
+* Copyright (c) 2019-2023, NVIDIA CORPORATION.  All rights reserved.
 *
 * NVIDIA CORPORATION and its licensors retain all intellectual property
 * and proprietary rights in and to this software, related documentation
@@ -52,28 +52,30 @@ struct DDGIVolumeDescGPUPacked
     float4   rotation;
     //------------------------------------------------- 32B
     float4   probeRayRotation;
-    //------------------------------------------------- 64B
+    //------------------------------------------------- 48B
     float    probeMaxRayDistance;
     float    probeNormalBias;
     float    probeViewBias;
     float    probeDistanceExponent;
+    //------------------------------------------------- 64B
+    float    probeIrradianceEncodingGamma;
+    float    probeIrradianceThreshold;
+    float    probeBrightnessThreshold;
+    float    probeMinFrontfaceDistance;
     //------------------------------------------------- 80B
     float3   probeSpacing;
     uint     packed0;       // probeCounts.x (10), probeCounts.y (10), probeCounts.z (10), unused (2)
     //------------------------------------------------- 96B
-    float    probeIrradianceEncodingGamma;
-    float    probeIrradianceThreshold;
-    float    probeBrightnessThreshold;
     uint     packed1;       // probeRandomRayBackfaceThreshold (16), probeFixedRayBackfaceThreshold (16)
-    //------------------------------------------------- 112B
-    float    probeMinFrontfaceDistance;
     uint     packed2;       // probeNumRays (16), probeNumIrradianceInteriorTexels (8), probeNumDistanceInteriorTexels (8)
     uint     packed3;       // probeScrollOffsets.x (15) sign bit (1), probeScrollOffsets.y (15) sign bit (1)
     uint     packed4;       // probeScrollOffsets.z (15) sign bit (1)
-                            // movementType (1), rayDataFormat (1), irradianceFormat (1), probeRelocationEnabled (1), probeClassificationEnabled (1)
+                            // movementType (1), probeRayDataFormat (3), probeIrradianceFormat (3), probeRelocationEnabled (1)
+                            // probeClassificationEnabled (1), probeVariabilityEnabled (1)
                             // probeScrollClear Y-Z plane (1), probeScrollClear X-Z plane (1), probeScrollClear X-Y plane (1)
                             // probeScrollDirection Y-Z plane (1), probeScrollDirection X-Z plane (1), probeScrollDirection X-Y plane (1)
-                            // unused (5)
+    //------------------------------------------------- 112B
+    uint4    reserved;      // 16B reserved for future use
     //------------------------------------------------- 128B
 };
 
@@ -137,20 +139,18 @@ static inline rtxgi::DDGIVolumeDescGPUPacked PackDDGIVolumeDescGPU(const rtxgi::
     output.probeNormalBias = input.probeNormalBias;
     output.probeViewBias = input.probeViewBias;
     output.probeDistanceExponent = input.probeDistanceExponent;
+    output.probeIrradianceEncodingGamma = input.probeIrradianceEncodingGamma;
+    output.probeIrradianceThreshold = input.probeIrradianceThreshold;
+    output.probeBrightnessThreshold = input.probeBrightnessThreshold;
+    output.probeMinFrontfaceDistance = input.probeMinFrontfaceDistance;
     output.probeSpacing = input.probeSpacing;
 
     output.packed0  = (uint32_t)input.probeCounts.x;
     output.packed0 |= (uint32_t)input.probeCounts.y << 10;
     output.packed0 |= (uint32_t)input.probeCounts.z << 20;
 
-    output.probeIrradianceEncodingGamma = input.probeIrradianceEncodingGamma;
-    output.probeIrradianceThreshold = input.probeIrradianceThreshold;
-    output.probeBrightnessThreshold = input.probeBrightnessThreshold;
-
     output.packed1  = (uint32_t)(input.probeRandomRayBackfaceThreshold * 65535);
     output.packed1 |= (uint32_t)(input.probeFixedRayBackfaceThreshold * 65535) << 16;
-
-    output.probeMinFrontfaceDistance = input.probeMinFrontfaceDistance;
 
     output.packed2  = (uint32_t)input.probeNumRays;
     output.packed2 |= (uint32_t)input.probeNumIrradianceInteriorTexels << 16;
@@ -171,11 +171,9 @@ static inline rtxgi::DDGIVolumeDescGPUPacked PackDDGIVolumeDescGPU(const rtxgi::
     output.packed4 = (output.packed4 & ~0x800000)   | (input.probeRelocationEnabled << 23);
     output.packed4 = (output.packed4 & ~0x1000000)  | (input.probeClassificationEnabled << 24);
     output.packed4 = (output.packed4 & ~0x2000000)  | (input.probeVariabilityEnabled << 25);
-
     output.packed4 = (output.packed4 & ~0x4000000)  | (input.probeScrollClear[0] << 26);
     output.packed4 = (output.packed4 & ~0x8000000)  | (input.probeScrollClear[1] << 27);
-    output.packed4 = (output.packed4 & ~0x10000000)  | (input.probeScrollClear[2] << 28);
-
+    output.packed4 = (output.packed4 & ~0x10000000) | (input.probeScrollClear[2] << 28);
     output.packed4 = (output.packed4 & ~0x20000000) | (input.probeScrollDirections[0] << 29);
     output.packed4 = (output.packed4 & ~0x40000000) | (input.probeScrollDirections[1] << 30);
     output.packed4 = (output.packed4 & ~0x80000000) | (input.probeScrollDirections[2] << 31);
@@ -201,6 +199,10 @@ DDGIVolumeDescGPU UnpackDDGIVolumeDescGPU(DDGIVolumeDescGPUPacked input)
     output.probeNormalBias = input.probeNormalBias;
     output.probeViewBias = input.probeViewBias;
     output.probeDistanceExponent = input.probeDistanceExponent;
+    output.probeIrradianceEncodingGamma = input.probeIrradianceEncodingGamma;
+    output.probeIrradianceThreshold = input.probeIrradianceThreshold;
+    output.probeBrightnessThreshold = input.probeBrightnessThreshold;
+    output.probeMinFrontfaceDistance = input.probeMinFrontfaceDistance;
     output.probeSpacing = input.probeSpacing;
 
     // Probe Counts
@@ -209,15 +211,10 @@ DDGIVolumeDescGPU UnpackDDGIVolumeDescGPU(DDGIVolumeDescGPUPacked input)
     output.probeCounts.z = (input.packed0 >> 20) & 0x000003FF;
 
     // Thresholds
-    output.probeIrradianceEncodingGamma = input.probeIrradianceEncodingGamma;
-    output.probeIrradianceThreshold = input.probeIrradianceThreshold;
-    output.probeBrightnessThreshold = input.probeBrightnessThreshold;
-
     output.probeRandomRayBackfaceThreshold = (float)(input.packed1 & 0x0000FFFF) / 65535.f;
     output.probeFixedRayBackfaceThreshold = (float)((input.packed1 >> 16) & 0x0000FFFF) / 65535.f;
 
-    output.probeMinFrontfaceDistance = input.probeMinFrontfaceDistance;
-
+    // Counts
     output.probeNumRays = input.packed2 & 0x0000FFFF;
     output.probeNumIrradianceInteriorTexels = (input.packed2 >> 16) & 0x000000FF;
     output.probeNumDistanceInteriorTexels = (input.packed2 >> 24) & 0x000000FF;
