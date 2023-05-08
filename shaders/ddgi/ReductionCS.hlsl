@@ -384,7 +384,7 @@ void DDGIExtraReductionCS(uint3 GroupID : SV_GroupID, uint3 GroupThreadID : SV_G
             }
         }
     }
-    float threadAverageValue = footprintInBounds ? threadFootprintValueSum / threadFootprintWeightSum : 0;
+    float threadAverageValue = (footprintInBounds && threadFootprintWeightSum > 0) ? threadFootprintValueSum / threadFootprintWeightSum : 0;
     // Per-thread weight will be 1.0 if thread sampled all 4x2 pixels, 0.125 if it only sampled one
     float ThreadTotalPossibleWeight = ThreadSampleFootprint.x * ThreadSampleFootprint.y;
     float threadWeight = threadFootprintWeightSum / ThreadTotalPossibleWeight;

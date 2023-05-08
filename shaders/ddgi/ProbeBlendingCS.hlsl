@@ -502,33 +502,34 @@ void DDGIProbeBlendingCS(
         result.rgb *= 1.f / (2.f * max(result.a, epsilon));
         result.a = 1.f;
 
-        // Get the previous irradiance in the probe
-        float3 previous = Output[DispatchThreadID].rgb;
+        // Get the irradiance mean stored in the probe
+        float3 probeIrradianceMean = Output[DispatchThreadID].rgb;
 
         // Get the history weight (hysteresis) to use for the probe texel's previous value
         // If the probe was previously cleared to completely black, set the hysteresis to zero
         float  hysteresis = volume.probeHysteresis;
-        if (dot(previous, previous) == 0) hysteresis = 0.f;
+        if (dot(probeIrradianceMean, probeIrradianceMean) == 0) hysteresis = 0.f;
 
     #if RTXGI_DDGI_BLEND_RADIANCE
         // Tone-mapping gamma adjustment
         result.rgb = pow(result.rgb, (1.f / volume.probeIrradianceEncodingGamma));
 
-        float3 delta = (result.rgb - previous.rgb);
+        // Get the difference between the current irradiance and the irradiance mean stored in the probe
+        float3 delta = (result.rgb - probeIrradianceMean.rgb);
 
-        float3 previousIrradianceMean = previous.rgb;
-        float3 currentIrradianceSample = result.rgb;
+        // Store the current irradiance (before interpolation) for use in probe variability
+        float3 irradianceSample = result.rgb;
 
-        if (RTXGIMaxComponent(previous.rgb - result.rgb) > volume.probeIrradianceThreshold)
+        if (RTXGIMaxComponent(probeIrradianceMean.rgb - result.rgb) > volume.probeIrradianceThreshold)
         {
             // Lower the hysteresis when a large lighting change is detected
             hysteresis = max(0.f, hysteresis - 0.75f);
         }
 
-        if (length(delta) > volume.probeBrightnessThreshold)
+        if (RTXGILinearRGBToLuminance(delta) > volume.probeBrightnessThreshold)
         {
-            // Clamp the maximum change in irradiance when a large brightness change is detected
-            result.rgb = previous.rgb + (delta * 0.25f);
+            // Clamp the maximum per-update change in irradiance when a large brightness change is detected
+            delta *= 0.25f;
         }
 
         // Interpolate the new blended irradiance with the existing irradiance in the probe.
@@ -542,26 +543,28 @@ void DDGIProbeBlendingCS(
         // dark convergence.
         static const float c_threshold = 1.f / 1024.f;
         float3 lerpDelta = (1.f - hysteresis) * delta;
-        if (RTXGIMaxComponent(result.rgb) < RTXGIMaxComponent(previous.rgb))
+        if (RTXGIMaxComponent(result.rgb) < RTXGIMaxComponent(probeIrradianceMean.rgb))
         {
             lerpDelta = min(max(c_threshold, abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
         }
-        result = float4(previous.rgb + lerpDelta, 1.f);
+        result = float4(probeIrradianceMean.rgb + lerpDelta, 1.f);
 
         if (volume.probeVariabilityEnabled)
         {
-            float3 newIrradianceMean = result.rgb;
-            float3 newIrradianceSigma2 = (currentIrradianceSample - previousIrradianceMean) * (currentIrradianceSample - newIrradianceMean);
-            float newLuminanceSigma2 = RTXGILinearRGBToLuminance(newIrradianceSigma2);
-            float newLuminanceMean = RTXGILinearRGBToLuminance(newIrradianceMean);
-            float coefficientOfVariation = (newLuminanceMean <= c_threshold) ? 0.f : sqrt(newLuminanceSigma2) / newLuminanceMean;
+            // Compute the coefficient of variation
+            float3 irradianceMean = result.rgb;
+            float3 irradianceSigma2 = (irradianceSample - probeIrradianceMean) * (irradianceSample - irradianceMean);
+            float  luminanceSigma2 = RTXGILinearRGBToLuminance(irradianceSigma2);
+            float  luminanceMean = RTXGILinearRGBToLuminance(irradianceMean);
+            float  coefficientOfVariation = (luminanceMean <= c_threshold) ? 0.f : sqrt(luminanceSigma2) / luminanceMean;
+
             ProbeVariability[threadCoords].r = coefficientOfVariation;
         }
     #else
 
         // Interpolate the new filtered distance with the existing filtered distance in the probe.
         // A high hysteresis value emphasizes the existing probe filtered distance.
-        result = float4(lerp(result.rg, previous.rg, hysteresis), 0.f, 1.f);
+        result = float4(lerp(result.rg, probeIrradianceMean.rg, hysteresis), 0.f, 1.f);
     #endif
 
         Output[DispatchThreadID] = result;
