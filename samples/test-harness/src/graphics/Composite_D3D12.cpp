@@ -33,14 +33,14 @@ namespace Graphics
                 resources.shaders.vs.entryPoint = L"VS";
                 resources.shaders.vs.targetProfile = L"vs_6_6";
                 Shaders::AddDefine(resources.shaders.vs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.vs, true), "compile composition vertex shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.vs), "compile composition vertex shader!\n", log);
 
                 // Load and compile the pixel shader
                 resources.shaders.ps.filepath = root + L"shaders/Composite.hlsl";
                 resources.shaders.ps.entryPoint = L"PS";
                 resources.shaders.ps.targetProfile = L"ps_6_6";
                 Shaders::AddDefine(resources.shaders.ps, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.ps, true), "compile composition pixel shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.ps), "compile composition pixel shader!\n", log);
 
                 return true;
             }
@@ -158,7 +158,7 @@ namespace Graphics
             void Execute(Globals& d3d, GlobalResources& d3dResources, Resources& resources)
             {
             #ifdef GFX_PERF_MARKERS
-                PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_BLUE), "Composite");
+                PIXBeginEvent(d3d.cmdList[d3d.frameIndex], PIX_COLOR(GFX_PERF_MARKER_BLUE), "Composite");
             #endif
                 CPU_TIMESTAMP_BEGIN(resources.cpuStat);
 
@@ -170,49 +170,49 @@ namespace Graphics
                 barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
                 // Wait for the transition to complete
-                d3d.cmdList->ResourceBarrier(1, &barrier);
+                d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                 // Set the CBV/SRV/UAV and sampler descriptor heaps
                 ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
-                d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+                d3d.cmdList[d3d.frameIndex]->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                 // Set the root signature
-                d3d.cmdList->SetGraphicsRootSignature(d3dResources.rootSignature);
+                d3d.cmdList[d3d.frameIndex]->SetGraphicsRootSignature(d3dResources.rootSignature);
 
                 // Update the root constants
                 UINT offset = 0;
                 GlobalConstants consts = d3dResources.constants;
-                d3d.cmdList->SetGraphicsRoot32BitConstants(0, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
+                d3d.cmdList[d3d.frameIndex]->SetGraphicsRoot32BitConstants(0, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
                 offset += AppConsts::GetAlignedNum32BitValues();
                 offset += PathTraceConsts::GetAlignedNum32BitValues();
                 offset += LightingConsts::GetAlignedNum32BitValues();
                 offset += RTAOConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetGraphicsRoot32BitConstants(0, CompositeConsts::GetNum32BitValues(), consts.composite.GetData(), offset);
+                d3d.cmdList[d3d.frameIndex]->SetGraphicsRoot32BitConstants(0, CompositeConsts::GetNum32BitValues(), consts.composite.GetData(), offset);
                 offset += CompositeConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetGraphicsRoot32BitConstants(0, PostProcessConsts::GetNum32BitValues(), consts.post.GetData(), offset);
+                d3d.cmdList[d3d.frameIndex]->SetGraphicsRoot32BitConstants(0, PostProcessConsts::GetNum32BitValues(), consts.post.GetData(), offset);
 
                 // Set the render target
                 D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = d3dResources.rtvDescHeap->GetCPUDescriptorHandleForHeapStart();
                 rtvHandle.ptr += (d3dResources.rtvDescHeapEntrySize * d3d.frameIndex);
-                d3d.cmdList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+                d3d.cmdList[d3d.frameIndex]->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
                 // Set the root parameter descriptor tables
             #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
-                d3d.cmdList->SetGraphicsRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                d3d.cmdList->SetGraphicsRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                d3d.cmdList[d3d.frameIndex]->SetGraphicsRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                d3d.cmdList[d3d.frameIndex]->SetGraphicsRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
             #endif
 
                 // Set raster state
-                d3d.cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                d3d.cmdList->RSSetViewports(1, &d3d.viewport);
-                d3d.cmdList->RSSetScissorRects(1, &d3d.scissor);
+                d3d.cmdList[d3d.frameIndex]->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                d3d.cmdList[d3d.frameIndex]->RSSetViewports(1, &d3d.viewport);
+                d3d.cmdList[d3d.frameIndex]->RSSetScissorRects(1, &d3d.scissor);
 
                 // Set the pipeline state object
-                d3d.cmdList->SetPipelineState(resources.pso);
+                d3d.cmdList[d3d.frameIndex]->SetPipelineState(resources.pso);
 
                 // Draw
                 GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
-                d3d.cmdList->DrawInstanced(3, 1, 0, 0);
+                d3d.cmdList[d3d.frameIndex]->DrawInstanced(3, 1, 0, 0);
                 GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
                 // Transition the back buffer to present
@@ -220,11 +220,11 @@ namespace Graphics
                 barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
 
                 // Wait for the transition to complete
-                d3d.cmdList->ResourceBarrier(1, &barrier);
+                d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                 CPU_TIMESTAMP_ENDANDRESOLVE(resources.cpuStat);
             #ifdef GFX_PERF_MARKERS
-                PIXEndEvent(d3d.cmdList);
+                PIXEndEvent(d3d.cmdList[d3d.frameIndex]);
             #endif
             }
 

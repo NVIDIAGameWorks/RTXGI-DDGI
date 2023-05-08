@@ -80,7 +80,7 @@ namespace Graphics
                     resources.shaderTableUpload->Unmap(0, nullptr);
 
                     // Schedule a copy of the upload buffer to the device buffer
-                    d3d.cmdList->CopyBufferRegion(resources.shaderTable, 0, resources.shaderTableUpload, 0, resources.shaderTableSize);
+                    d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.shaderTable, 0, resources.shaderTableUpload, 0, resources.shaderTableSize);
 
                     // Transition the default heap resource to generic read after the copy is complete
                     D3D12_RESOURCE_BARRIER barrier = {};
@@ -90,7 +90,7 @@ namespace Graphics
                     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
                     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                     return true;
                 }
@@ -149,7 +149,7 @@ namespace Graphics
                     resources.tlas.instancesUpload->Unmap(0, nullptr);
 
                     // Schedule a copy of the upload buffer to the device buffer
-                    d3d.cmdList->CopyBufferRegion(resources.tlas.instances, 0, resources.tlas.instancesUpload, 0, size);
+                    d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.tlas.instances, 0, resources.tlas.instancesUpload, 0, size);
 
                     // Transition the default heap resource to generic read after the copy is complete
                     D3D12_RESOURCE_BARRIER barrier = {};
@@ -159,7 +159,7 @@ namespace Graphics
                     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
                     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                     return true;
                 }
@@ -167,7 +167,7 @@ namespace Graphics
                 bool UpdateTLAS(Globals& d3d, GlobalResources& d3dResources, Resources& resources, const Configs::Config& config)
                 {
                 #ifdef GFX_PERF_MARKERS
-                    PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "Update DDGI Visualizations TLAS");
+                    PIXBeginEvent(d3d.cmdList[d3d.frameIndex], PIX_COLOR(GFX_PERF_MARKER_GREEN), "Update DDGI Visualizations TLAS");
                 #endif
 
                     // Update the instances and copy them to the GPU
@@ -185,23 +185,23 @@ namespace Graphics
                     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
                     // Wait for the transition to finish
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                     // Set the descriptor heap
                     ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
-                    d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+                    d3d.cmdList[d3d.frameIndex]->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                     // Set the root signature
-                    d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
+                    d3d.cmdList[d3d.frameIndex]->SetComputeRootSignature(d3dResources.rootSignature);
 
                     // Set the root parameter descriptor tables
                 #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
-                    d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                    d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                    d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                    d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
                 #endif
 
                     // Set the compute PSO
-                    d3d.cmdList->SetPipelineState(resources.updateTlasPSO);
+                    d3d.cmdList[d3d.frameIndex]->SetPipelineState(resources.updateTlasPSO);
 
                     UINT instanceOffset = 0;
                     for (UINT volumeIndex = 0; volumeIndex < static_cast<UINT>(resources.volumes->size()); volumeIndex++)
@@ -218,17 +218,17 @@ namespace Graphics
 
                         // Update the vis root constants
                         UINT offset = GlobalConstants::GetAlignedNum32BitValues() - DDGIVisConsts::GetAlignedNum32BitValues();
-                        d3d.cmdList->SetComputeRoot32BitConstants(0, DDGIVisConsts::GetNum32BitValues(), d3dResources.constants.ddgivis.GetData(), offset);
+                        d3d.cmdList[d3d.frameIndex]->SetComputeRoot32BitConstants(0, DDGIVisConsts::GetNum32BitValues(), d3dResources.constants.ddgivis.GetData(), offset);
 
                         // Update the DDGIRootConstants
                         DDGIRootConstants ddgiConsts = { volumeIndex, DescriptorHeapOffsets::STB_DDGI_VOLUME_CONSTS, DescriptorHeapOffsets::STB_DDGI_VOLUME_RESOURCE_INDICES };
-                        d3d.cmdList->SetComputeRoot32BitConstants(1, DDGIRootConstants::GetNum32BitValues(), ddgiConsts.GetData(), 0);
+                        d3d.cmdList[d3d.frameIndex]->SetComputeRoot32BitConstants(1, DDGIRootConstants::GetNum32BitValues(), ddgiConsts.GetData(), 0);
 
                         // Dispatch the compute shader
                         float groupSize = 32.f;
                         UINT numProbes = static_cast<UINT>(volume->GetNumProbes());
                         UINT numGroups = (UINT)ceil((float)numProbes / groupSize);
-                        d3d.cmdList->Dispatch(numGroups, 1, 1);
+                        d3d.cmdList[d3d.frameIndex]->Dispatch(numGroups, 1, 1);
 
                         // Increment the instance offset
                         instanceOffset += resources.volumes->at(volumeIndex)->GetNumProbes();
@@ -239,7 +239,7 @@ namespace Graphics
                     barrier.UAV.pResource = resources.tlas.instances;
 
                     // Wait for the compute passes to finish
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                     // Transition the TLAS instances
                     barrier = {};
@@ -250,7 +250,7 @@ namespace Graphics
                     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
                     // Wait for the transition to finish
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 
@@ -268,17 +268,17 @@ namespace Graphics
                     buildDesc.ScratchAccelerationStructureData = resources.tlas.scratch->GetGPUVirtualAddress();
                     buildDesc.DestAccelerationStructureData = resources.tlas.as->GetGPUVirtualAddress();
 
-                    d3d.cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+                    d3d.cmdList[d3d.frameIndex]->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
                     // Wait for the TLAS build to complete
                     barrier = {};
                     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
                     barrier.UAV.pResource = resources.tlas.as;
 
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                 #ifdef GFX_PERF_MARKERS
-                    PIXEndEvent(d3d.cmdList);
+                    PIXEndEvent(d3d.cmdList[d3d.frameIndex]);
                 #endif
 
                     return true;
@@ -305,7 +305,7 @@ namespace Graphics
                         Shaders::AddDefine(resources.rtShaders.rgs, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
                         Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                         Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.rgs, true), "compile DDGI Visualizations ray generation shader!\n", log);
+                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.rgs), "compile DDGI Visualizations ray generation shader!\n", log);
 
                         // Load and compile alternate RGS
                         resources.rtShaders2.rgs.filepath = root + L"shaders/ddgi/visualizations/ProbesRGS.hlsl";
@@ -315,7 +315,7 @@ namespace Graphics
                         Shaders::AddDefine(resources.rtShaders2.rgs, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
                         Shaders::AddDefine(resources.rtShaders2.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                         Shaders::AddDefine(resources.rtShaders2.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders2.rgs, true), "compile DDGI Visualizations ray generation shader!\n", log);
+                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders2.rgs), "compile DDGI Visualizations ray generation shader!\n", log);
                     }
 
                     // Load and compile the miss shader
@@ -326,7 +326,7 @@ namespace Graphics
 
                         // Load and compile
                         Shaders::AddDefine(resources.rtShaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.miss, true), "compile DDGI Visualizations miss shader!\n", log);
+                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.miss), "compile DDGI Visualizations miss shader!\n", log);
 
                         // Copy to the alternate RT pipeline
                         resources.rtShaders2.miss = resources.rtShaders.miss;
@@ -346,7 +346,7 @@ namespace Graphics
 
                         // Load and compile
                         Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                        CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs, true), "compile DDGI Visualizations closest hit shader!\n", log);
+                        CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs), "compile DDGI Visualizations closest hit shader!\n", log);
 
                         // Set the payload size
                         resources.rtShaders.payloadSizeInBytes = sizeof(ProbeVisualizationPayload);
@@ -367,7 +367,7 @@ namespace Graphics
                         Shaders::AddDefine(resources.textureVisCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
                         Shaders::AddDefine(resources.textureVisCS, L"THGP_DIM_X", L"8");
                         Shaders::AddDefine(resources.textureVisCS, L"THGP_DIM_Y", L"4");
-                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.textureVisCS, true), "compile DDGI Visualizations volume textures compute shader!\n", log);
+                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.textureVisCS), "compile DDGI Visualizations volume textures compute shader!\n", log);
                     }
 
                     // Load and compile the TLAS update compute shader
@@ -379,7 +379,7 @@ namespace Graphics
                         Shaders::AddDefine(resources.updateTlasCS, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.updateTlasCS, true), "compile DDGI Visualizations probes update compute shader!\n", log);
+                        CHECK(Shaders::Compile(d3d.shaderCompiler, resources.updateTlasCS), "compile DDGI Visualizations probes update compute shader!\n", log);
                     }
 
                     return true;
@@ -597,14 +597,14 @@ namespace Graphics
                     buildDesc.ScratchAccelerationStructureData = resources.blas.scratch->GetGPUVirtualAddress();
                     buildDesc.DestAccelerationStructureData = resources.blas.as->GetGPUVirtualAddress();
 
-                    d3d.cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+                    d3d.cmdList[d3d.frameIndex]->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
                     // Wait for the BLAS build to complete
                     D3D12_RESOURCE_BARRIER barrier = {};
                     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
                     barrier.UAV.pResource = resources.blas.as;
 
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                     return true;
                 }
@@ -832,25 +832,25 @@ namespace Graphics
                             if (resources.probeInstances.size() > 0)
                             {
                             #ifdef GFX_PERF_MARKERS
-                                PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "Vis: DDGIVolume Probes");
+                                PIXBeginEvent(d3d.cmdList[d3d.frameIndex], PIX_COLOR(GFX_PERF_MARKER_GREEN), "Vis: DDGIVolume Probes");
                             #endif
 
                                 // Set the descriptor heaps
                                 ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
-                                d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+                                d3d.cmdList[d3d.frameIndex]->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                                 // Set the root signature
-                                d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
+                                d3d.cmdList[d3d.frameIndex]->SetComputeRootSignature(d3dResources.rootSignature);
 
                                 // Update the vis root constants
                                 GlobalConstants consts = d3dResources.constants;
                                 UINT offset = GlobalConstants::GetAlignedNum32BitValues() - DDGIVisConsts::GetAlignedNum32BitValues();
-                                d3d.cmdList->SetComputeRoot32BitConstants(0, DDGIVisConsts::GetNum32BitValues(), consts.ddgivis.GetData(), offset);
+                                d3d.cmdList[d3d.frameIndex]->SetComputeRoot32BitConstants(0, DDGIVisConsts::GetNum32BitValues(), consts.ddgivis.GetData(), offset);
 
                                 // Set the root parameter descriptor tables
                             #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
-                                d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                                d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                                d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                                d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
                             #endif
 
                                 // Describe the shaders and dispatch (EDDGIVolumeProbeVisType::Default)
@@ -872,11 +872,11 @@ namespace Graphics
                                     desc.Depth = 1;
 
                                     // Set the PSO
-                                    d3d.cmdList->SetPipelineState1(resources.rtpso);
+                                    d3d.cmdList[d3d.frameIndex]->SetPipelineState1(resources.rtpso);
 
                                     // Dispatch rays
                                     GPU_TIMESTAMP_BEGIN(resources.gpuProbeStat->GetGPUQueryBeginIndex());
-                                    d3d.cmdList->DispatchRays(&desc);
+                                    d3d.cmdList[d3d.frameIndex]->DispatchRays(&desc);
                                     GPU_TIMESTAMP_END(resources.gpuProbeStat->GetGPUQueryEndIndex());
 
                                     D3D12_RESOURCE_BARRIER barriers[2] = {};
@@ -886,7 +886,7 @@ namespace Graphics
                                     barriers[1].UAV.pResource = d3dResources.rt.GBufferB;
 
                                     // Wait for the ray trace to complete
-                                    d3d.cmdList->ResourceBarrier(2, barriers);
+                                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(2, barriers);
                                 }
 
                                 // Describe the shaders and dispatch (EDDGIVolumeProbeVisType::Hide_Inactive)
@@ -908,11 +908,11 @@ namespace Graphics
                                     desc.Depth = 1;
 
                                     // Set the PSO
-                                    d3d.cmdList->SetPipelineState1(resources.rtpso2);
+                                    d3d.cmdList[d3d.frameIndex]->SetPipelineState1(resources.rtpso2);
 
                                     // Dispatch rays
                                     GPU_TIMESTAMP_BEGIN(resources.gpuProbeStat->GetGPUQueryBeginIndex());
-                                    d3d.cmdList->DispatchRays(&desc);
+                                    d3d.cmdList[d3d.frameIndex]->DispatchRays(&desc);
                                     GPU_TIMESTAMP_END(resources.gpuProbeStat->GetGPUQueryEndIndex());
 
                                     D3D12_RESOURCE_BARRIER barriers[2] = {};
@@ -922,11 +922,11 @@ namespace Graphics
                                     barriers[1].UAV.pResource = d3dResources.rt.GBufferB;
 
                                     // Wait for the ray trace to complete
-                                    d3d.cmdList->ResourceBarrier(2, barriers);
+                                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(2, barriers);
                                 }
 
                             #ifdef GFX_PERF_MARKERS
-                                PIXEndEvent(d3d.cmdList);
+                                PIXEndEvent(d3d.cmdList[d3d.frameIndex]);
                             #endif
                             }
                         }
@@ -935,50 +935,50 @@ namespace Graphics
                         if (resources.flags & VIS_FLAG_SHOW_TEXTURES)
                         {
                         #ifdef GFX_PERF_MARKERS
-                            PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREEN), "Vis: DDGIVolume Textures");
+                            PIXBeginEvent(d3d.cmdList[d3d.frameIndex], PIX_COLOR(GFX_PERF_MARKER_GREEN), "Vis: DDGIVolume Textures");
                         #endif
 
                             // Set the descriptor heaps
                             ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
-                            d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+                            d3d.cmdList[d3d.frameIndex]->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                             // Set the root signature
-                            d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
+                            d3d.cmdList[d3d.frameIndex]->SetComputeRootSignature(d3dResources.rootSignature);
 
                             // Update the vis root constants
                             GlobalConstants consts = d3dResources.constants;
                             UINT offset = GlobalConstants::GetAlignedNum32BitValues() - DDGIVisConsts::GetAlignedNum32BitValues();
-                            d3d.cmdList->SetComputeRoot32BitConstants(0, DDGIVisConsts::GetNum32BitValues(), consts.ddgivis.GetData(), offset);
+                            d3d.cmdList[d3d.frameIndex]->SetComputeRoot32BitConstants(0, DDGIVisConsts::GetNum32BitValues(), consts.ddgivis.GetData(), offset);
 
                             // Update the DDGIRootConstants
                             DDGIRootConstants ddgiConsts = { resources.selectedVolume, DescriptorHeapOffsets::STB_DDGI_VOLUME_CONSTS, DescriptorHeapOffsets::STB_DDGI_VOLUME_RESOURCE_INDICES };
-                            d3d.cmdList->SetComputeRoot32BitConstants(1, DDGIRootConstants::GetNum32BitValues(), ddgiConsts.GetData(), 0);
+                            d3d.cmdList[d3d.frameIndex]->SetComputeRoot32BitConstants(1, DDGIRootConstants::GetNum32BitValues(), ddgiConsts.GetData(), 0);
 
                             // Set the root parameter descriptor tables
                         #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
-                            d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                            d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                            d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                            d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
                         #endif
 
                             // Set the PSO
-                            d3d.cmdList->SetPipelineState(resources.texturesVisPSO);
+                            d3d.cmdList[d3d.frameIndex]->SetPipelineState(resources.texturesVisPSO);
 
                             // Dispatch threads
                             UINT groupsX = DivRoundUp(d3d.width, 8);
                             UINT groupsY = DivRoundUp(d3d.height, 4);
 
                             GPU_TIMESTAMP_BEGIN(resources.gpuTextureStat->GetGPUQueryBeginIndex());
-                            d3d.cmdList->Dispatch(groupsX, groupsY, 1);
+                            d3d.cmdList[d3d.frameIndex]->Dispatch(groupsX, groupsY, 1);
                             GPU_TIMESTAMP_END(resources.gpuTextureStat->GetGPUQueryEndIndex());
 
                             // Wait for the compute pass to finish
                             D3D12_RESOURCE_BARRIER barrier = {};
                             barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
                             barrier.UAV.pResource = d3dResources.rt.GBufferA;
-                            d3d.cmdList->ResourceBarrier(1, &barrier);
+                            d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                         #ifdef GFX_PERF_MARKERS
-                            PIXEndEvent(d3d.cmdList);
+                            PIXEndEvent(d3d.cmdList[d3d.frameIndex]);
                         #endif
                         }
 

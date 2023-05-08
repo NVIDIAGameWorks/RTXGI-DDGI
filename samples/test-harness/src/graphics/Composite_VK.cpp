@@ -34,7 +34,7 @@ namespace Graphics
                 resources.shaders.vs.targetProfile = L"vs_6_6";
                 resources.shaders.vs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                 Shaders::AddDefine(resources.shaders.vs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.vs, true), "compile composition vertex shader!\n", log);
+                CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.vs), "compile composition vertex shader!\n", log);
 
                 // Load and compile the pixel shader
                 resources.shaders.ps.filepath = root + L"shaders/Composite.hlsl";
@@ -42,7 +42,7 @@ namespace Graphics
                 resources.shaders.ps.targetProfile = L"ps_6_6";
                 resources.shaders.ps.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                 Shaders::AddDefine(resources.shaders.ps, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.ps, true), "compile composition pixel shader!\n", log);
+                CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.ps), "compile composition pixel shader!\n", log);
 
                 return true;
             }
@@ -201,6 +201,7 @@ namespace Graphics
             bool Reload(Globals& vk, GlobalResources& vkResources, Resources& resources, std::ofstream& log)
             {
                 log << "Reloading Composition shaders...";
+                vkDeviceWaitIdle(vk.device);
                 if (!LoadAndCompileShaders(vk, resources, log)) return false;
                 if (!CreatePipelines(vk, vkResources, resources, log)) return false;
                 log << "done.\n";

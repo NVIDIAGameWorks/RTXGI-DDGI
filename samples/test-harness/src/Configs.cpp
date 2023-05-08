@@ -503,6 +503,29 @@ namespace Configs
     }
 
     /**
+     * Parse a shaders configuration entry.
+     */
+    bool ParseConfigShadersEntry(const std::vector<std::string>& tokens, const std::string& rhs, Config& config, uint32_t lineNumber, std::ofstream& log)
+    {
+        // App config entries have exactly 2 tokens
+        PARSE_CHECK((tokens.size() == 2), lineNumber, log);
+
+        // Extract the data from the rhs, stripping out unnecessary characters
+        std::string data;
+        PARSE_CHECK(Extract(rhs, data), lineNumber, log);
+
+        if (tokens[1].compare("warningsAsErrors") == 0) { Store(data, config.shaders.warningsAsErrors); return true; }
+        if (tokens[1].compare("disableOptimizations") == 0) { Store(data, config.shaders.disableOptimizations); return true; }
+        if (tokens[1].compare("disableValidation") == 0) { Store(data, config.shaders.disableValidation); return true; }
+        if (tokens[1].compare("shaderSymbols") == 0) { Store(data, config.shaders.shaderSymbols); return true; }
+        if (tokens[1].compare("lifetimeMarkers") == 0) { Store(data, config.shaders.lifetimeMarkers); return true; }
+
+        log << "\nUnsupported configuration value specified!";
+        PARSE_CHECK(0, lineNumber, log);
+        return false;
+    }
+
+    /**
      * Parse an application configuration entry.
      */
     bool ParseConfigAppEntry(const std::vector<std::string>& tokens, const std::string& rhs, Config& config, uint32_t lineNumber, std::ofstream& log)
@@ -576,6 +599,7 @@ namespace Configs
             std::vector<std::string> tokens = Split(expression[0]);
 
             if (tokens[0].compare("app") == 0) { CHECK(ParseConfigAppEntry(tokens, expression[1], config, lineNumber, log), "parse config application entry!", log); continue; };
+            if (tokens[0].compare("shaders") == 0) { CHECK(ParseConfigShadersEntry(tokens, expression[1], config, lineNumber, log), "parse config shaders entry!", log); continue; };
             if (tokens[0].compare("scene") == 0) { CHECK(ParseConfigSceneEntry(tokens, expression[1], config, lineNumber, log), "parse config scene entry!", log); continue; };
             if (tokens[0].compare("input") == 0) { CHECK(ParseConfigInputEntry(tokens, expression[1], config, lineNumber, log), "parse config input entry!", log); continue; };
             if (tokens[0].compare("pt") == 0) { CHECK(ParseConfigPathTraceEntry(tokens, expression[1], config, lineNumber, log), "parse config path trace entry!", log); continue; };

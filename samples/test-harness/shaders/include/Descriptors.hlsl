@@ -38,6 +38,9 @@ VK_PUSH_CONST ConstantBuffer<GlobalConstants> GlobalConst : register(b0, space0)
 
 #define GetGlobalConst(x, y) (GlobalConst.x##_##y)
 
+uint GetPTNumBounces() { return (GetGlobalConst(pt, numBounces) &  0x7FFFFFFF); }
+uint GetPTProgressive() { return (GetGlobalConst(pt, numBounces) & 0x80000000); }
+
 uint GetPTSamplesPerPixel() { return (GetGlobalConst(pt, samplesPerPixel) & 0x3FFFFFFF); }
 uint GetPTAntialiasing() { return (GetGlobalConst(pt, samplesPerPixel) & 0x80000000); }
 uint GetPTShaderExecutionReordering() { return GetGlobalConst(pt, samplesPerPixel) & 0x40000000; }

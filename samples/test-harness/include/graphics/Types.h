@@ -190,6 +190,12 @@ namespace Graphics
             return data;
         }
 
+        // Pack the progressive accumulation bool into the last bit of numBounces
+        void SetProgressive(bool value)
+        {
+            numBounces |= ((uint)value << 31);
+        }
+
         // Pack the SER bool into the second-to-last bit of samplesPerPixel
         void SetShaderExecutionReordering(bool value)
         {

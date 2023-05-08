@@ -232,7 +232,7 @@ namespace Graphics
             // 3: VK_EXT_DEBUG_UTILS_EXTENSION_NAME
             std::vector<const char*> extensionNames(glfwExtensions, glfwExtensions + glfwExtensionCount);
             extensionNames.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        #if _DEBUG
+        #if _DEBUG || GFX_NAME_OBJECTS
             extensionNames.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         #endif
 
@@ -265,8 +265,8 @@ namespace Graphics
             VkApplicationInfo applicationInfo = {};
             applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
             applicationInfo.apiVersion = VK_API_VERSION_1_2;
-            applicationInfo.applicationVersion = VK_MAKE_VERSION(1, 2, 0);
-            applicationInfo.engineVersion = VK_MAKE_VERSION(1, 2, 0);
+            applicationInfo.applicationVersion = VK_MAKE_VERSION(RTXGI_VERSION::major, RTXGI_VERSION::minor, RTXGI_VERSION::revision);
+            applicationInfo.engineVersion = VK_MAKE_VERSION(RTXGI_VERSION::major, RTXGI_VERSION::minor, RTXGI_VERSION::revision);
             applicationInfo.pApplicationName = "RTXGI Test Harness";
             applicationInfo.pEngineName = "RTXGI Test Harness";
 
@@ -414,6 +414,7 @@ namespace Graphics
         #ifdef GFX_NAME_OBJECTS
             SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.device), "VKDevice", VK_OBJECT_TYPE_DEVICE);
             SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.queue), "VKQueue", VK_OBJECT_TYPE_QUEUE);
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.surface), "VKSurface", VK_OBJECT_TYPE_SURFACE_KHR);
         #endif
 
             // Get the properties of the device (include ray tracing properties)
@@ -447,15 +448,21 @@ namespace Graphics
         {
             VkFenceCreateInfo fenceCreateInfo = {};
             fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-            for (uint32_t fenceIndex = 0; fenceIndex < 2; fenceIndex++)
+            for (uint32_t fenceIndex = 0; fenceIndex < MAX_FRAMES_IN_FLIGHT; fenceIndex++)
             {
                 VKCHECK(vkCreateFence(vk.device, &fenceCreateInfo, nullptr, &vk.fences[fenceIndex]));
+            #ifdef GFX_NAME_OBJECTS
+                std::string fenceName = "Fence " + std::to_string(fenceIndex);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.fences[fenceIndex]), fenceName.c_str(), VK_OBJECT_TYPE_FENCE);
+            #endif
             }
 
+            fenceCreateInfo.flags = 0;
+            VKCHECK(vkCreateFence(vk.device, &fenceCreateInfo, nullptr, &vk.immediateFence));
         #ifdef GFX_NAME_OBJECTS
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.fences[0]), "Fence 0", VK_OBJECT_TYPE_FENCE);
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.fences[1]), "Fence 1", VK_OBJECT_TYPE_FENCE);
+            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.immediateFence), "Immediate Fence", VK_OBJECT_TYPE_FENCE);
         #endif
 
             return true;
@@ -488,10 +495,10 @@ namespace Graphics
             swapchainSize = surfaceCapabilities.currentExtent;
             if (swapchainSize.width != vk.width) return false;
             if (swapchainSize.height != vk.height) return false;
-            if (surfaceCapabilities.minImageCount > 2) return false;
+            if (surfaceCapabilities.minImageCount > MAX_FRAMES_IN_FLIGHT) return false;
 
             // Note: maxImageCount of 0 means unlimited number of images
-            assert((surfaceCapabilities.maxImageCount != 0) && (surfaceCapabilities.maxImageCount > 2));
+            assert((surfaceCapabilities.maxImageCount != 0) && (surfaceCapabilities.maxImageCount > MAX_FRAMES_IN_FLIGHT));
 
             VkSurfaceTransformFlagBitsKHR surfaceTransformFlagBits =
                 surfaceCapabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR : surfaceCapabilities.currentTransform;
@@ -504,7 +511,7 @@ namespace Graphics
             VkSwapchainCreateInfoKHR swapchainCreateInfo = {};
             swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
             swapchainCreateInfo.surface = vk.surface;
-            swapchainCreateInfo.minImageCount = 2;      // double buffer
+            swapchainCreateInfo.minImageCount = MAX_FRAMES_IN_FLIGHT;
             swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
             swapchainCreateInfo.preTransform = surfaceTransformFlagBits;
             swapchainCreateInfo.imageColorSpace = vk.swapChainColorSpace;
@@ -534,20 +541,19 @@ namespace Graphics
             // Create the swap chain
             VKCHECK(vkCreateSwapchainKHR(vk.device, &swapchainCreateInfo, nullptr, &vk.swapChain));
         #ifdef GFX_NAME_OBJECTS
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.surface), "Surface", VK_OBJECT_TYPE_SURFACE_KHR);
             SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.swapChain), "Swapchain", VK_OBJECT_TYPE_SWAPCHAIN_KHR);
         #endif
 
             // Get the swap chain image count
             uint32_t swapchainImageCount = 0;
             VKCHECK(vkGetSwapchainImagesKHR(vk.device, vk.swapChain, &swapchainImageCount, nullptr));
-            if (swapchainImageCount != 2) return false;
+            if (swapchainImageCount != MAX_FRAMES_IN_FLIGHT) return false;
 
             // Get the swap chain images
             VKCHECK(vkGetSwapchainImagesKHR(vk.device, vk.swapChain, &swapchainImageCount, vk.swapChainImage));
 
             // Create views for the swap chain images
-            for (uint32_t imageIndex = 0; imageIndex < 2; imageIndex++)
+            for (uint32_t imageIndex = 0; imageIndex < MAX_FRAMES_IN_FLIGHT; imageIndex++)
             {
                 // Describe the image view
                 VkImageViewCreateInfo imageViewCreateInfo = {};
@@ -561,16 +567,16 @@ namespace Graphics
 
                 // Create the image view
                 VKCHECK(vkCreateImageView(vk.device, &imageViewCreateInfo, nullptr, &vk.swapChainImageView[imageIndex]));
+
+            #ifdef GFX_NAME_OBJECTS
+                std::string imageName = "Back Buffer Image " + std::to_string(imageIndex);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.swapChainImage[imageIndex]), imageName.c_str(), VK_OBJECT_TYPE_IMAGE);
+
+                std::string viewName = "Back Buffer Image View " + std::to_string(imageIndex);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.swapChainImageView[imageIndex]), viewName.c_str(), VK_OBJECT_TYPE_IMAGE_VIEW);
+            #endif
             }
 
-        #ifdef GFX_NAME_OBJECTS
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.swapChainImage[0]), "Back Buffer Image 0", VK_OBJECT_TYPE_IMAGE);
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.swapChainImage[1]), "Back Buffer Image 1", VK_OBJECT_TYPE_IMAGE);
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.swapChainImageView[0]), "Back Buffer Image View 0", VK_OBJECT_TYPE_IMAGE_VIEW);
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.swapChainImageView[1]), "Back Buffer Image View 1", VK_OBJECT_TYPE_IMAGE_VIEW);
-        #endif
-
-            // Transition the back buffers to present
             ImageBarrierDesc barrier =
             {
                 VK_IMAGE_LAYOUT_UNDEFINED,
@@ -579,8 +585,12 @@ namespace Graphics
                 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                 { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
             };
-            SetImageLayoutBarrier(vk.cmdBuffer[vk.frameIndex], vk.swapChainImage[0], barrier);
-            SetImageLayoutBarrier(vk.cmdBuffer[vk.frameIndex], vk.swapChainImage[1], barrier);
+
+            // Transition the back buffers to present
+            for (uint32_t imageIndex = 0; imageIndex < MAX_FRAMES_IN_FLIGHT; imageIndex++)
+            {
+                SetImageLayoutBarrier(vk.cmdBuffer[vk.frameIndex], vk.swapChainImage[imageIndex], barrier);
+            }
 
             return true;
         }
@@ -592,14 +602,14 @@ namespace Graphics
         {
             // Describe the render pass
             VkAttachmentDescription attachmentDescriptions[1] = {};
-            attachmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
             attachmentDescriptions[0].format = vk.swapChainFormat;
+            attachmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
             attachmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             attachmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            attachmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            attachmentDescriptions[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             attachmentDescriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             attachmentDescriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            attachmentDescriptions[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
             VkAttachmentReference colorAttachmentReference = {};
             colorAttachmentReference.attachment = 0;
@@ -631,7 +641,7 @@ namespace Graphics
          */
         bool CreateFrameBuffers(Globals& vk)
         {
-            for (uint32_t bufferIndex = 0; bufferIndex < 2; bufferIndex++)
+            for (uint32_t bufferIndex = 0; bufferIndex < MAX_FRAMES_IN_FLIGHT; bufferIndex++)
             {
                 // Describe the frame buffer
                 VkFramebufferCreateInfo framebufferCreateInfo = {};
@@ -646,7 +656,8 @@ namespace Graphics
                 // Create the frame buffer
                 VKCHECK(vkCreateFramebuffer(vk.device, &framebufferCreateInfo, nullptr, &vk.frameBuffer[bufferIndex]));
             #ifdef GFX_NAME_OBJECTS
-                SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.frameBuffer[bufferIndex]), "Frame Buffer", VK_OBJECT_TYPE_FRAMEBUFFER);
+                std::string name = "Frame Buffer " + std::to_string(bufferIndex);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.frameBuffer[bufferIndex]), name.c_str(), VK_OBJECT_TYPE_FRAMEBUFFER);
             #endif
             }
 
@@ -677,25 +688,26 @@ namespace Graphics
          */
         bool CreateCommandBuffers(Globals& vk)
         {
-            uint32_t numCommandBuffers = 2;
-
             // Describe the command buffers
             VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
             commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-            commandBufferAllocateInfo.commandBufferCount = numCommandBuffers;
+            commandBufferAllocateInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
             commandBufferAllocateInfo.commandPool = vk.commandPool;
             commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
             // Allocate the command buffers from the command pool
-            std::vector<VkCommandBuffer> commandBuffers{ numCommandBuffers };
+            std::vector<VkCommandBuffer> commandBuffers;
+            commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
             VKCHECK(vkAllocateCommandBuffers(vk.device, &commandBufferAllocateInfo, commandBuffers.data()));
 
-            vk.cmdBuffer[0] = commandBuffers[0];
-            vk.cmdBuffer[1] = commandBuffers[1];
-        #ifdef GFX_NAME_OBJECTS
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.cmdBuffer[0]), "Command Buffer 0", VK_OBJECT_TYPE_COMMAND_BUFFER);
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.cmdBuffer[1]), "Command Buffer 1", VK_OBJECT_TYPE_COMMAND_BUFFER);
-        #endif
+            for (uint32_t index = 0; index < MAX_FRAMES_IN_FLIGHT; index++)
+            {
+                vk.cmdBuffer[index] = commandBuffers[index];
+            #ifdef GFX_NAME_OBJECTS
+                std::string name = "Command Buffer " + std::to_string(index);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.cmdBuffer[0]), name.c_str(), VK_OBJECT_TYPE_COMMAND_BUFFER);
+            #endif
+            }
 
             return true;
         }
@@ -707,13 +719,21 @@ namespace Graphics
         {
             VkSemaphoreCreateInfo semaphoreCreateInfo = {};
             semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+            semaphoreCreateInfo.flags = VK_SEMAPHORE_TYPE_BINARY;
 
-            VKCHECK(vkCreateSemaphore(vk.device, &semaphoreCreateInfo, nullptr, &vk.imageAcquiredSemaphore));
-            VKCHECK(vkCreateSemaphore(vk.device, &semaphoreCreateInfo, nullptr, &vk.renderingCompleteSemaphore));
-        #ifdef GFX_NAME_OBJECTS
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.imageAcquiredSemaphore), "Image Acquired Semaphore", VK_OBJECT_TYPE_SEMAPHORE);
-            SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.renderingCompleteSemaphore), "Rendering Complete Semaphore", VK_OBJECT_TYPE_SEMAPHORE);
-        #endif
+            for (uint32_t semaphoreIndex = 0; semaphoreIndex < MAX_FRAMES_IN_FLIGHT; semaphoreIndex++)
+            {
+                VKCHECK(vkCreateSemaphore(vk.device, &semaphoreCreateInfo, nullptr, &vk.imageAcquiredSemaphore[semaphoreIndex]));
+                VKCHECK(vkCreateSemaphore(vk.device, &semaphoreCreateInfo, nullptr, &vk.presentSemaphore[semaphoreIndex]));
+
+            #ifdef GFX_NAME_OBJECTS
+                std::string imageSemaphoreName = "Image Acquired Semaphore " + std::to_string(semaphoreIndex);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.imageAcquiredSemaphore[semaphoreIndex]), imageSemaphoreName.c_str(), VK_OBJECT_TYPE_SEMAPHORE);
+
+                std::string presentSemaphoreName = "Present Semaphore " + std::to_string(semaphoreIndex);
+                SetObjectName(vk.device, reinterpret_cast<uint64_t>(vk.presentSemaphore[semaphoreIndex]), presentSemaphoreName.c_str(), VK_OBJECT_TYPE_SEMAPHORE);
+            #endif
+            }
             return true;
         }
 
@@ -1535,22 +1555,38 @@ namespace Graphics
         }
 
         /**
+         * Destroy the existing GBuffer resources.
+         */
+        void CleanupGBuffer(Globals& vk, Resources& resources)
+        {
+            vkDestroyImageView(vk.device, resources.rt.GBufferAView, nullptr);
+            vkFreeMemory(vk.device, resources.rt.GBufferAMemory, nullptr);
+            vkDestroyImage(vk.device, resources.rt.GBufferA, nullptr);
+
+            vkDestroyImageView(vk.device, resources.rt.GBufferBView, nullptr);
+            vkFreeMemory(vk.device, resources.rt.GBufferBMemory, nullptr);
+            vkDestroyImage(vk.device, resources.rt.GBufferB, nullptr);
+
+            vkDestroyImageView(vk.device, resources.rt.GBufferCView, nullptr);
+            vkFreeMemory(vk.device, resources.rt.GBufferCMemory, nullptr);
+            vkDestroyImage(vk.device, resources.rt.GBufferC, nullptr);
+
+            vkDestroyImageView(vk.device, resources.rt.GBufferDView, nullptr);
+            vkFreeMemory(vk.device, resources.rt.GBufferDMemory, nullptr);
+            vkDestroyImage(vk.device, resources.rt.GBufferD, nullptr);
+        }
+
+        /**
          * Destroy the existing swapchain and associated resources.
          */
         void CleanupSwapchain(Globals& vk)
         {
-            for (uint32_t resourceIndex = 0; resourceIndex < 2; resourceIndex++)
+            for (uint32_t resourceIndex = 0; resourceIndex < MAX_FRAMES_IN_FLIGHT; resourceIndex++)
             {
                 vkDestroyFramebuffer(vk.device, vk.frameBuffer[resourceIndex], nullptr);
                 vkDestroyImageView(vk.device, vk.swapChainImageView[resourceIndex], nullptr);
             }
-
-            vkFreeCommandBuffers(vk.device, vk.commandPool, 2, vk.cmdBuffer);
-            vkDestroySemaphore(vk.device, vk.imageAcquiredSemaphore, nullptr);
-            vkDestroySemaphore(vk.device, vk.renderingCompleteSemaphore, nullptr);
-
             vkDestroySwapchainKHR(vk.device, vk.swapChain, nullptr);
-            vkDestroySurfaceKHR(vk.instance, vk.surface, nullptr);
         }
 
         /**
@@ -1671,24 +1707,19 @@ namespace Graphics
             Shaders::Cleanup(vk.shaderCompiler);
 
             // Release core Vulkan objects
-            vkDestroySemaphore(vk.device, vk.imageAcquiredSemaphore, nullptr);
-            vkDestroySemaphore(vk.device, vk.renderingCompleteSemaphore, nullptr);
-            vkFreeCommandBuffers(vk.device, vk.commandPool, 2, vk.cmdBuffer);
-            vkDestroyCommandPool(vk.device, vk.commandPool, nullptr);
-
-            for (resourceIndex = 0; resourceIndex < 2; resourceIndex++)
+            for (resourceIndex = 0; resourceIndex < MAX_FRAMES_IN_FLIGHT; resourceIndex++)
             {
+                vkDestroySemaphore(vk.device, vk.imageAcquiredSemaphore[resourceIndex], nullptr);
+                vkDestroySemaphore(vk.device, vk.presentSemaphore[resourceIndex], nullptr);
                 vkDestroyFramebuffer(vk.device, vk.frameBuffer[resourceIndex], nullptr);
-            }
-
-            vkDestroyRenderPass(vk.device, vk.renderPass, nullptr);
-
-            for (resourceIndex = 0; resourceIndex < 2; resourceIndex++)
-            {
                 vkDestroyFence(vk.device, vk.fences[resourceIndex], nullptr);
                 vkDestroyImageView(vk.device, vk.swapChainImageView[resourceIndex], nullptr);
             }
 
+            vkFreeCommandBuffers(vk.device, vk.commandPool, MAX_FRAMES_IN_FLIGHT, vk.cmdBuffer);
+            vkDestroyCommandPool(vk.device, vk.commandPool, nullptr);
+            vkDestroyRenderPass(vk.device, vk.renderPass, nullptr);
+            vkDestroyFence(vk.device, vk.immediateFence, nullptr);
             vkDestroySwapchainKHR(vk.device, vk.swapChain, nullptr);
             vkDestroySurfaceKHR(vk.instance, vk.surface, nullptr);
             vkDestroyDevice(vk.device, nullptr);
@@ -2210,23 +2241,28 @@ namespace Graphics
                 SetImageMemoryBarrier(commandBuffer, image, barrier);
             }
 
-            // Staging (read-back) texture resources
-            std::vector<VkImage> stagingResources; // linear layout
-            std::vector<VkImage> optimalStagingResources; // optimal tiled layout
-            std::vector<VkDeviceMemory> stagingResourcesMemory;
-            std::vector<VkDeviceMemory> optimalStagingResourcesMemory;
+            // Staging (read-back) resources
+            std::vector<VkBuffer> stagingBuffer; // linear layout
+            std::vector<VkImage> stagingImage;   // optimal tiled layout
+            std::vector<VkDeviceMemory> stagingBufferMemory;
+            std::vector<VkDeviceMemory> stagingImageMemory;
 
             // Loop over the subresources (array slices), copying them from the GPU
             for(uint32_t subresourceIndex = 0; subresourceIndex < arraySize; subresourceIndex++)
             {
                 // Add new resource entries
-                stagingResources.emplace_back();
-                optimalStagingResources.emplace_back();
-                stagingResourcesMemory.emplace_back();
-                optimalStagingResourcesMemory.emplace_back();
+                stagingBuffer.emplace_back();
+                stagingImage.emplace_back();
+                stagingBufferMemory.emplace_back();
+                stagingImageMemory.emplace_back();
 
-                // Create the staging texture resources
+                // Create the staging buffer and texture resources
                 {
+                    // Create the staging linear buffer
+                    uint32_t sizeInBytes = width * height * ImageCapture::NumChannels;
+                    BufferDesc bufferDesc = { sizeInBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
+                    if (!CreateBuffer(vk, bufferDesc, &stagingBuffer[subresourceIndex], &stagingBufferMemory[subresourceIndex])) return false;
+
                     // Describe the staging resource
                     VkImageCreateInfo imageCreateInfo = {};
                     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -2243,34 +2279,20 @@ namespace Graphics
                     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
                     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-                    // Create the resource (linear layout)
-                    VKCHECK(vkCreateImage(vk.device, &imageCreateInfo, nullptr, &stagingResources[subresourceIndex]));
-
-                    // Create the resource (optimal tiling)
+                    // Create the (optimal tiling) texture
                     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
                     imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-                    VKCHECK(vkCreateImage(vk.device, &imageCreateInfo, nullptr, &optimalStagingResources[subresourceIndex]));
+                    VKCHECK(vkCreateImage(vk.device, &imageCreateInfo, nullptr, &stagingImage[subresourceIndex]));
 
-                    // Get the memory requirements for the linear resource
+                    // Get the memory requirements for the optimal tiled texture
                     AllocateMemoryDesc desc = {};
-                    vkGetImageMemoryRequirements(vk.device, stagingResources[subresourceIndex], &desc.requirements);
-                    desc.properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-                    desc.flags = 0;
+                    vkGetImageMemoryRequirements(vk.device, stagingImage[subresourceIndex], &desc.requirements);
 
-                    // Allocate and bind the memory for the linear resource
-                    if (!AllocateMemory(vk, desc, &stagingResourcesMemory[subresourceIndex])) return false;
-                    VKCHECK(vkBindImageMemory(vk.device, stagingResources[subresourceIndex], stagingResourcesMemory[subresourceIndex], 0));
+                    // Allocate and bind the memory for the optimal tiled texture
+                    if (!AllocateMemory(vk, desc, &stagingImageMemory[subresourceIndex])) return false;
+                    VKCHECK(vkBindImageMemory(vk.device, stagingImage[subresourceIndex], stagingImageMemory[subresourceIndex], 0));
 
-                    // Get the memory requirements for the optimal tiled resource
-                    vkGetImageMemoryRequirements(vk.device, optimalStagingResources[subresourceIndex], &desc.requirements);
-                    desc.properties = 0;
-                    desc.flags = 0;
-
-                    // Allocate and bind the memory for the optimal tiled resource
-                    if (!AllocateMemory(vk, desc, &optimalStagingResourcesMemory[subresourceIndex])) return false;
-                    VKCHECK(vkBindImageMemory(vk.device, optimalStagingResources[subresourceIndex], optimalStagingResourcesMemory[subresourceIndex], 0));
-
-                    // Transition the staging resources to copy destinations
+                    // Transition the staging texture to a copy destination
                     ImageBarrierDesc barrier =
                     {
                         VK_IMAGE_LAYOUT_UNDEFINED,
@@ -2279,11 +2301,10 @@ namespace Graphics
                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                         { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
                     };
-                    SetImageMemoryBarrier(commandBuffer, stagingResources[subresourceIndex], barrier);
-                    SetImageMemoryBarrier(commandBuffer, optimalStagingResources[subresourceIndex], barrier);
+                    SetImageMemoryBarrier(commandBuffer, stagingImage[subresourceIndex], barrier);
                 }
 
-                // Copy the source resource (slice) to the optimal tiled resource
+                // Copy the source resource (slice) to the optimal tiled texture
                 {
                     VkImageSubresourceLayers source = {};
                     source.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -2307,12 +2328,12 @@ namespace Graphics
                         commandBuffer,
                         image,
                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                        optimalStagingResources[subresourceIndex],
+                        stagingImage[subresourceIndex],
                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         1, &region, VK_FILTER_NEAREST);
                 }
 
-                // Transition the optimal tiled resource to a copy source
+                // Transition the optimal tiled texture to a copy source
                 ImageBarrierDesc barrier =
                 {
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -2321,40 +2342,29 @@ namespace Graphics
                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                     { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
                 };
-                SetImageMemoryBarrier(commandBuffer, optimalStagingResources[subresourceIndex], barrier);
+                SetImageMemoryBarrier(commandBuffer, stagingImage[subresourceIndex], barrier);
 
-                // Copy the optimal tiled resource to the linear resource (for CPU copy)
+                // Copy the optimal tiled texture to the linear buffer (for CPU copy)
                 {
                     VkImageSubresourceLayers resource = {};
                     resource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                     resource.layerCount = 1;
                     resource.baseArrayLayer = 0;
 
-                    VkImageCopy region = {};
-                    region.srcSubresource = resource;
-                    region.dstSubresource = resource;
-                    region.extent.width = width;
-                    region.extent.height = height;
-                    region.extent.depth = 1;
+                    VkBufferImageCopy region = {};
+                    region.bufferOffset = 0;
+                    region.bufferRowLength = 0;
+                    region.bufferImageHeight = 0;
+                    region.imageSubresource = resource;
+                    region.imageExtent = { width, height, 1 };
 
-                    vkCmdCopyImage(
+                    // Copy the tiled image to a linear buffer
+                    vkCmdCopyImageToBuffer(
                         commandBuffer,
-                        optimalStagingResources[subresourceIndex],
+                        stagingImage[subresourceIndex],
                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                        stagingResources[subresourceIndex],
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        stagingBuffer[subresourceIndex],
                         1, &region);
-
-                    // Transition the linear resource to general read
-                    ImageBarrierDesc barrier =
-                    {
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        VK_IMAGE_LAYOUT_GENERAL,
-                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                        { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
-                    };
-                    SetImageMemoryBarrier(commandBuffer, stagingResources[subresourceIndex], barrier);
                 }
             }
 
@@ -2380,42 +2390,19 @@ namespace Graphics
             submitInfo.pCommandBuffers = &commandBuffer;
 
             VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
-            VKCHECK(vkQueueWaitIdle(vk.queue));
 
             WaitForGPU(vk);
 
-            // Copy the linear resources to CPU memory
+            // Copy the linear buffer to memory for writing to disk
             bool result = true;
             for (uint32_t subresourceIndex = 0; subresourceIndex < arraySize; subresourceIndex++)
             {
-                VkImageSubresource subResource{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0 };
-                VkSubresourceLayout subResourceLayout;
-                vkGetImageSubresourceLayout(vk.device, stagingResources[subresourceIndex], &subResource, &subResourceLayout);
-
-                // Map the linear resource's memory
+                // Map the linear buffer's memory
                 uint8_t* pData = nullptr;
-                VKCHECK(vkMapMemory(vk.device, stagingResourcesMemory[subresourceIndex], 0, VK_WHOLE_SIZE, 0, (void**)&pData));
+                VKCHECK(vkMapMemory(vk.device, stagingBufferMemory[subresourceIndex], 0, VK_WHOLE_SIZE, 0, (void**)&pData));
 
                 std::vector<uint8_t> converted(width * height * ImageCapture::NumChannels);
-
-                // Copy the linear resource to CPU memory
-                uint32_t rowSizeInBytes = width * ImageCapture::NumChannels; // * sizeof(uint8_t);
-                if(rowSizeInBytes < 64)
-                {
-                    // Copy the row texels, ignoring the padding added from 64B row alignment
-                    uint8_t* dst = converted.data();
-                    for(uint32_t rowIndex = 0; rowIndex < height; rowIndex++)
-                    {
-                        memcpy(dst, pData, rowSizeInBytes);
-                        dst += rowSizeInBytes;
-                        pData += 64;
-                    }
-                }
-                else
-                {
-                    // Copy the texels, they are 256 aligned already and don't include padding
-                    memcpy(converted.data(), pData, converted.size());
-                }
+                memcpy(converted.data(), pData, converted.size());
 
                 // Write the resource to disk as a PNG file (using STB)
                 std::string filename = file;
@@ -2423,17 +2410,17 @@ namespace Graphics
                 filename.append(".png");
                 result &= ImageCapture::CapturePng(filename, width, height, converted.data());
 
-                // Unmap the linear resource's memory
-                vkUnmapMemory(vk.device, stagingResourcesMemory[subresourceIndex]);
+                // Unmap the linear buffers's memory
+                vkUnmapMemory(vk.device, stagingBufferMemory[subresourceIndex]);
             }
 
             // Clean up
             for (uint32_t subresourceIndex = 0; subresourceIndex < arraySize; subresourceIndex++)
             {
-                vkFreeMemory(vk.device, stagingResourcesMemory[subresourceIndex], nullptr);
-                vkDestroyImage(vk.device, stagingResources[subresourceIndex], nullptr);
-                vkFreeMemory(vk.device, optimalStagingResourcesMemory[subresourceIndex], nullptr);
-                vkDestroyImage(vk.device, optimalStagingResources[subresourceIndex], nullptr);
+                vkFreeMemory(vk.device, stagingBufferMemory[subresourceIndex], nullptr);
+                vkDestroyBuffer(vk.device, stagingBuffer[subresourceIndex], nullptr);
+                vkFreeMemory(vk.device, stagingImageMemory[subresourceIndex], nullptr);
+                vkDestroyImage(vk.device, stagingImage[subresourceIndex], nullptr);
             }
             vkFreeCommandBuffers(vk.device, commandPool, 1, &commandBuffer);
             vkDestroyCommandPool(vk.device, commandPool, nullptr);
@@ -2516,7 +2503,7 @@ namespace Graphics
             return true;
         }
 
-        /*
+        /**
          * Add an image memory barrier on the given command buffer.
          */
         void SetImageMemoryBarrier(VkCommandBuffer cmdBuffer, VkImage image, const ImageBarrierDesc info)
@@ -2578,7 +2565,7 @@ namespace Graphics
             vkCmdPipelineBarrier(cmdBuffer, info.srcMask, info.dstMask, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
         }
 
-        /*
+        /**
          * Add an image layout barrier on the given command buffer.
          */
         void SetImageLayoutBarrier(VkCommandBuffer cmdBuffer, VkImage image, const ImageBarrierDesc info)
@@ -3109,22 +3096,24 @@ namespace Graphics
             // Initialize the shader compiler
             CHECK(Shaders::Initialize(config, vk.shaderCompiler), "initialize the shader compiler!", log);
 
-            // Create core Vulkan objects
+            // Create Vulkan device objects
             CHECK(CreateCommandPool(vk), "create command pool!", log);
             CHECK(CreateCommandBuffers(vk), "create command buffers!", log);
-            CHECK(ResetCmdList(vk), "reset command buffer!", log);
             CHECK(CreateFences(vk), "create fences!", log);
-            CHECK(CreateSwapChain(vk), "create swap chain!", log);
-            CHECK(CreateRenderPass(vk), "create render pass!", log);
-            CHECK(CreateFrameBuffers(vk), "create frame buffers!", log);
             CHECK(CreateSemaphores(vk), "create semaphores!", log);
             CHECK(CreateDescriptorPool(vk, resources), "create descriptor pool!", log);
-            CHECK(CreateQueryPools(vk, resources), "create query pools!", log);
             CHECK(CreateGlobalPipelineLayout(vk, resources), "create global pipeline layout!", log);
-            CHECK(CreateRenderTargets(vk, resources), "create render targets!", log);
             CHECK(CreateSamplers(vk, resources), "create samplers!", log);
             CHECK(CreateViewport(vk), "create viewport!", log);
             CHECK(CreateScissor(vk), "create scissor!", log);
+
+            // Create Vulkan device objects that require command buffer operations (e.g. transitions)
+            CHECK(ResetCmdList(vk), "reset command buffer!", log);
+            CHECK(CreateSwapChain(vk), "create swap chain!", log);
+            CHECK(CreateRenderPass(vk), "create render pass!", log);
+            CHECK(CreateFrameBuffers(vk), "create frame buffers!", log);
+            CHECK(CreateRenderTargets(vk, resources), "create render targets!", log);
+            CHECK(CreateQueryPools(vk, resources), "create query pools!", log);
 
             // Create default graphics resources
             CHECK(LoadAndCreateDefaultTextures(vk, resources, config, log), "load and create default textures!", log);
@@ -3148,11 +3137,12 @@ namespace Graphics
             submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
 
-            VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
-            VKCHECK(vkQueueWaitIdle(vk.queue));
+            // Submit command buffer and block until GPU work finishes
+            VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, vk.immediateFence));
+            VKCHECK(vkWaitForFences(vk.device, 1, &vk.immediateFence, VK_TRUE, UINT64_MAX));
+            VKCHECK(vkResetFences(vk.device, 1, &vk.immediateFence));
 
-            WaitForGPU(vk);
-            MoveToNextFrame(vk);
+            CHECK(ResetCmdList(vk), "reset command buffer!", log);
 
             // Release upload buffers
             vkDestroyBuffer(vk.device, resources.materialsSTBUploadBuffer, nullptr);
@@ -3206,6 +3196,26 @@ namespace Graphics
         }
 
         /**
+         * Post initialization tasks.
+         */
+        bool PostInitialize(Globals& vk, std::ofstream& log)
+        {
+            VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
+
+            VkSubmitInfo endInfo = {};
+            endInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            endInfo.commandBufferCount = 1;
+            endInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
+
+            // Submit command buffer and block until GPU work finishes
+            VKCHECK(vkQueueSubmit(vk.queue, 1, &endInfo, vk.immediateFence));
+            VKCHECK(vkWaitForFences(vk.device, 1, &vk.immediateFence, VK_TRUE, UINT64_MAX));
+            VKCHECK(vkResetFences(vk.device, 1, &vk.immediateFence));
+
+            return true;
+        }
+
+        /**
          * Update constant buffers.
          */
         void Update(Globals& vk, Resources& resources, const Configs::Config& config, Scenes::Scene& scene)
@@ -3245,9 +3255,9 @@ namespace Graphics
         }
 
         /**
-         * Update the swap chain.
+         * Resize the swap chain and open a command buffer for other resize operations (resource transitions).
          */
-        bool Resize(Globals& vk, GlobalResources& resources, int width, int height, std::ofstream& log)
+        bool ResizeBegin(Globals& vk, GlobalResources& resources, int width, int height, std::ofstream& log)
         {
             vk.width = width;
             vk.height = height;
@@ -3260,71 +3270,22 @@ namespace Graphics
             // Wait for the GPU to finish up any work
             VKCHECK(vkDeviceWaitIdle(vk.device));
 
-            // Release the swapchain and associated resources
+            // Release the Swapchain and GBuffer resources
             CleanupSwapchain(vk);
+            CleanupGBuffer(vk, resources);
 
-            // Release the GBuffer resources
-            vkDestroyImageView(vk.device, resources.rt.GBufferAView, nullptr);
-            vkFreeMemory(vk.device, resources.rt.GBufferAMemory, nullptr);
-            vkDestroyImage(vk.device, resources.rt.GBufferA, nullptr);
+            // Reset the command buffer
+            vkResetCommandBuffer(vk.cmdBuffer[vk.frameIndex], 0);
 
-            vkDestroyImageView(vk.device, resources.rt.GBufferBView, nullptr);
-            vkFreeMemory(vk.device, resources.rt.GBufferBMemory, nullptr);
-            vkDestroyImage(vk.device, resources.rt.GBufferB, nullptr);
+            // Start recording
+            VkCommandBufferBeginInfo beginInfo = {};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            VKCHECK(vkBeginCommandBuffer(vk.cmdBuffer[vk.frameIndex], &beginInfo));
 
-            vkDestroyImageView(vk.device, resources.rt.GBufferCView, nullptr);
-            vkFreeMemory(vk.device, resources.rt.GBufferCMemory, nullptr);
-            vkDestroyImage(vk.device, resources.rt.GBufferC, nullptr);
-
-            vkDestroyImageView(vk.device, resources.rt.GBufferDView, nullptr);
-            vkFreeMemory(vk.device, resources.rt.GBufferDMemory, nullptr);
-            vkDestroyImage(vk.device, resources.rt.GBufferD, nullptr);
-
-            // Reset the fences
-            VKCHECK(vkResetFences(vk.device, 2, vk.fences));
-
-            // Recreate the new swap chain, associated resources, GBuffer resources, and wait for the GPU
-            if (!CreateCommandBuffers(vk)) return false;
-            if (!ResetCmdList(vk)) return false;
-            if (!CreateSurface(vk)) return false;
+            // Recreate the Swapchain and GBuffer resources
             if (!CreateSwapChain(vk)) return false;
             if (!CreateFrameBuffers(vk)) return false;
-            if (!CreateSemaphores(vk)) return false;
             if (!CreateRenderTargets(vk, resources)) return false;
-
-        #ifdef GFX_PERF_INSTRUMENTATION
-            // Reset the GPU timestamp queries
-            vkCmdResetQueryPool(vk.cmdBuffer[vk.frameIndex], resources.timestampPool, 0, MAX_TIMESTAMPS * 2);
-        #endif
-
-            // Execute GPU work
-            VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
-
-            VkSubmitInfo submitInfo = {};
-            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
-
-            VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
-            VKCHECK(vkQueueWaitIdle(vk.queue));
-
-            // Wait for GPU to finish
-            if (!WaitForGPU(vk)) return false;
-
-            // Get the next available image from the swapchain
-            VKCHECK(vkAcquireNextImageKHR(vk.device, vk.swapChain, UINT64_MAX, vk.imageAcquiredSemaphore, VK_NULL_HANDLE, &vk.frameIndex));
-
-            // Reset the command list
-            if (!ResetCmdList(vk)) return false;
-
-            // Reset the frame number
-            vk.frameNumber = 1;
-
-        #ifdef GFX_PERF_INSTRUMENTATION
-            // Reset the GPU timestamp queries
-            vkCmdResetQueryPool(vk.cmdBuffer[vk.frameIndex], resources.timestampPool, 0, MAX_TIMESTAMPS * 2);
-            vkCmdWriteTimestamp(vk.cmdBuffer[vk.frameIndex], VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, resources.timestampPool, 0);
-        #endif
 
             log << "Back buffer resize, " << vk.width << "x" << vk.height << "\n";
             log << "GBuffer resize, " << vk.width << "x" << vk.height << "\n";
@@ -3334,19 +3295,44 @@ namespace Graphics
         }
 
         /**
-         * Reset the command list.
+         * Close and submit the resize command buffer. Wait on the CPU for the GPU to complete.
          */
-        bool ResetCmdList(Globals& vk)
+        bool ResizeEnd(Globals& vk)
         {
-            // Start the command buffer for the next frame
-            VkCommandBufferBeginInfo commandBufferBeginInfo = {};
-            commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            VKCHECK(vkBeginCommandBuffer(vk.cmdBuffer[vk.frameIndex], &commandBufferBeginInfo));
+            // Execute GPU work to finish initialization
+            VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
+
+            VkSubmitInfo submitInfo = {};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
+
+            // Submit command buffer and block until GPU work finishes
+            VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, vk.immediateFence));
+            VKCHECK(vkWaitForFences(vk.device, 1, &vk.immediateFence, VK_TRUE, UINT64_MAX));
+            VKCHECK(vkResetFences(vk.device, 1, &vk.immediateFence));
+
             return true;
         }
 
         /**
-         * Submit the command list.
+         * Reset the current frame's command list and begin recording.
+         */
+        bool ResetCmdList(Globals& vk)
+        {
+            // Reset the command buffer
+            vkResetCommandBuffer(vk.cmdBuffer[vk.frameIndex], 0);
+
+            // Start recording
+            VkCommandBufferBeginInfo beginInfo = {};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            VKCHECK(vkBeginCommandBuffer(vk.cmdBuffer[vk.frameIndex], &beginInfo));
+
+            return true;
+        }
+
+        /**
+         * Close and Submit the current frame's command list.
          */
         bool SubmitCmdList(Globals& vk)
         {
@@ -3358,12 +3344,12 @@ namespace Graphics
             VkSubmitInfo submitInfo = {};
             submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             submitInfo.waitSemaphoreCount = 1;
-            submitInfo.pWaitSemaphores = &vk.imageAcquiredSemaphore;
+            submitInfo.pWaitSemaphores = &vk.imageAcquiredSemaphore[vk.frameIndex];
             submitInfo.pWaitDstStageMask = &waitDstStageMask;
             submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
             submitInfo.signalSemaphoreCount = 1;
-            submitInfo.pSignalSemaphores = &vk.renderingCompleteSemaphore;
+            submitInfo.pSignalSemaphores = &vk.presentSemaphore[vk.frameIndex];
 
             // Submit the command buffer to the graphics queue
             VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, vk.fences[vk.frameIndex]));
@@ -3380,23 +3366,64 @@ namespace Graphics
             VkPresentInfoKHR presentInfo = {};
             presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
             presentInfo.waitSemaphoreCount = 1;
-            presentInfo.pWaitSemaphores = &vk.renderingCompleteSemaphore;
+            presentInfo.pWaitSemaphores = &vk.presentSemaphore[vk.frameIndex];
             presentInfo.swapchainCount = 1;
             presentInfo.pSwapchains = &vk.swapChain;
-            presentInfo.pImageIndices = &vk.frameIndex;
+            presentInfo.pImageIndices = &vk.imageIndex;
 
-            VKCHECK(vkQueuePresentKHR(vk.queue, &presentInfo));
+            VkResult result = vkQueuePresentKHR(vk.queue, &presentInfo);
 
-            // Wait for command buffers to complete before moving to the next frame
-            VKCHECK(vkWaitForFences(vk.device, 1, &vk.fences[vk.frameIndex], VK_TRUE, UINT64_MAX));
-            VKCHECK(vkResetFences(vk.device, 1, &vk.fences[vk.frameIndex]));
+            if (vk.vsyncChanged)
+            {
+                // Wait for the GPU to finish all work
+                VKCHECK(vkDeviceWaitIdle(vk.device));
+
+                CleanupSwapchain(vk);
+                vkResetCommandBuffer(vk.cmdBuffer[vk.frameIndex], 0);
+
+                // Start recording
+                VkCommandBufferBeginInfo beginInfo = {};
+                beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                VKCHECK(vkBeginCommandBuffer(vk.cmdBuffer[vk.frameIndex], &beginInfo));
+
+                // Recreate the Swapchain
+                if (!CreateSwapChain(vk)) return false;
+                if (!CreateFrameBuffers(vk)) return false;
+
+                // Execute GPU work to finish initialization
+                VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
+
+                VkSubmitInfo submitInfo = {};
+                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                submitInfo.commandBufferCount = 1;
+                submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
+
+                // Submit command buffer and block until GPU work finishes
+                VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, vk.immediateFence));
+                VKCHECK(vkWaitForFences(vk.device, 1, &vk.immediateFence, VK_TRUE, UINT64_MAX));
+                VKCHECK(vkResetFences(vk.device, 1, &vk.immediateFence));
+
+                vk.vsyncChanged = false;
+            }
 
             vk.frameNumber++;
+            vk.frameIndex = (vk.frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+
             return true;
         }
 
-        /*
-         * Wait for pending GPU work to complete.
+        /**
+         * Wait for the previous frame's graphics commands to complete on the GPU.
+         */
+        bool WaitForPrevGPUFrame(Globals& vk)
+        {
+            VKCHECK(vkWaitForFences(vk.device, 1, &vk.fences[vk.frameIndex], VK_TRUE, UINT64_MAX));
+            VKCHECK(vkResetFences(vk.device, 1, &vk.fences[vk.frameIndex]));
+            return true;
+        }
+
+        /**
+         * Wait (right now) for all GPU work to complete.
          */
         bool WaitForGPU(Globals& vk)
         {
@@ -3408,40 +3435,8 @@ namespace Graphics
          */
         bool MoveToNextFrame(Globals& vk)
         {
-            if (vk.vsyncChanged)
-            {
-                CleanupSwapchain(vk);
-
-                // Reset the fences
-                VKCHECK(vkResetFences(vk.device, 2, vk.fences));
-
-                // Recreate the new swap chain and associated resources
-                if (!CreateCommandBuffers(vk)) return false;
-                if (!ResetCmdList(vk)) return false;
-                if (!CreateSurface(vk)) return false;
-                if (!CreateSwapChain(vk)) return false;
-                if (!CreateFrameBuffers(vk)) return false;
-                if (!CreateSemaphores(vk)) return false;
-
-                // Execute GPU work
-                VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
-
-                VkSubmitInfo submitInfo = {};
-                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
-
-                VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
-                VKCHECK(vkQueueWaitIdle(vk.queue));
-
-                // Wait for the GPU to finish
-                if (!WaitForGPU(vk)) return false;
-
-                vk.vsyncChanged = false;
-            }
-
             // Get the next available image from the swapchain
-            VKCHECK(vkAcquireNextImageKHR(vk.device, vk.swapChain, UINT64_MAX, vk.imageAcquiredSemaphore, VK_NULL_HANDLE, &vk.frameIndex));
+            VKCHECK(vkAcquireNextImageKHR(vk.device, vk.swapChain, UINT64_MAX, vk.imageAcquiredSemaphore[vk.frameIndex], VK_NULL_HANDLE, &vk.imageIndex));
             return true;
         }
 
@@ -3470,10 +3465,10 @@ namespace Graphics
             std::vector<Timestamp> queries;
             queries.resize(performance.GetNumActiveGPUQueries());
 
-            // Copy the query results to the CPU read-back buffer
+            // Schedule a copy of the query results to the CPU read-back buffer
             vkCmdCopyQueryPoolResults(vk.cmdBuffer[vk.frameIndex], resources.timestampPool, 0, performance.GetNumActiveGPUQueries(), resources.timestamps, 0, sizeof(Timestamp), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
 
-            // Copy the timestamps from the read-back buffer
+            // Copy the (previous frame's) timestamps from the read-back buffer
             uint8_t* pData = nullptr;
             VKCHECK(vkMapMemory(vk.device, resources.timestampsMemory, 0, VK_WHOLE_SIZE, 0, reinterpret_cast<void**>(&pData)));
             memcpy(queries.data(), pData, sizeof(Timestamp) * performance.GetNumActiveGPUQueries());
@@ -3496,12 +3491,11 @@ namespace Graphics
                 {
                     elapsedTicks = end.timestamp - start.timestamp;
                     s->elapsed = std::max(static_cast<double>(elapsedTicks) / 1000000, (double)0);
+                    if (s->elapsed < 10000000) // sometimes timestamps are invalid, don't include those
+                    {
+                        Instrumentation::Resolve(s);
+                    }
                 }
-                else
-                {
-                    s->elapsed = 0;
-                }
-                Instrumentation::Resolve(s);
 
                 // Reset the GPU query indices for a new frame
                 s->ResetGPUQueryIndices();
@@ -3540,11 +3534,19 @@ namespace Graphics
     }
 
     /**
-     * Create a graphics device.
+     * Initialize Vulkan.
      */
     bool Initialize(const Configs::Config& config, Scenes::Scene& scene, Globals& gfx, GlobalResources& resources, std::ofstream& log)
     {
         return Graphics::Vulkan::Initialize(config, scene, gfx, resources, log);
+    }
+
+    /**
+     * Post initializationm tasks.
+     */
+    bool PostInitialize(Globals& gfx, std::ofstream& log)
+    {
+        return Graphics::Vulkan::PostInitialize(gfx, log);
     }
 
     /**
@@ -3556,11 +3558,19 @@ namespace Graphics
     }
 
     /**
-     * Resize the swapchain.
+     * Resize the swapchain and open a command buffer for other resize operations.
      */
-    bool Resize(Globals& gfx, GlobalResources& gfxResources, int width, int height, std::ofstream& log)
+    bool ResizeBegin(Globals& gfx, GlobalResources& gfxResources, int width, int height, std::ofstream& log)
     {
-        return Graphics::Vulkan::Resize(gfx, gfxResources, width, height, log);
+        return Graphics::Vulkan::ResizeBegin(gfx, gfxResources, width, height, log);
+    }
+
+    /**
+     * Close and submit the resize command buffer. Wait on the CPU for the GPU to complete.
+     */
+    bool ResizeEnd(Globals& gfx)
+    {
+        return Graphics::Vulkan::ResizeEnd(gfx);
     }
 
     /**
@@ -3572,7 +3582,7 @@ namespace Graphics
     }
 
     /**
-     * Reset the graphics command list.
+     * Reset the current frame's command list.
      */
     bool ResetCmdList(Globals& gfx)
     {
@@ -3580,7 +3590,7 @@ namespace Graphics
     }
 
     /**
-     * Submit the graphics command list.
+     * Submit the current frame's command list.
      */
     bool SubmitCmdList(Globals& gfx)
     {
@@ -3596,11 +3606,19 @@ namespace Graphics
     }
 
     /**
-     * Wait for the graphics device to idle.
+     * Wait (right now) for the graphics device to idle.
      */
     bool WaitForGPU(Globals& gfx)
     {
         return Graphics::Vulkan::WaitForGPU(gfx);
+    }
+
+    /**
+     * Wait for the previous frame's graphics commands to complete on the GPU.
+     */
+    bool WaitForPrevGPUFrame(Globals& gfx)
+    {
+        return Graphics::Vulkan::WaitForPrevGPUFrame(gfx);
     }
 
     /**

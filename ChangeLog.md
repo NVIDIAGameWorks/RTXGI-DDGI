@@ -1,5 +1,21 @@
 # RTXGI SDK Change Log
 
+## 1.3.7
+### SDK
+- **Bug Fixes**
+  - Fixes issue in ```ReductionCS.hlsl``` that caused a divide by zero when all probes in a volume are disabled. A reduction thread should not contribute to the variability calculation if ```threadFootprintWeightSum``` is zero.
+  - Fixes issue in ```ProbeBlendingCS.hlsl``` that prevented ```probeBrightnessThreshold``` from working as intended. Fixes GitHub Issue [#70](https://github.com/NVIDIAGameWorks/RTXGI/issues/70).
+
+### Test Harness
+- **Improvements**
+  - Enhances shader compilation options and allows for the options to be specified in ```*.ini``` files.
+  - Enhancements to frame queueing/buffering. The CPU can now run ahead one frame, allowing CPU and GPU work to overlap.
+  - Adds a toggle to enable/disable progressive rendering in the path tracer.
+  - Increased the granularity of CPU timestamps and reworks the detailed performance UI.
+- **Bug Fixes**
+  - Fixes minor issues with Vulkan timestamps.
+
+
 ## 1.3.6
 ### SDK
 - **Improvements**

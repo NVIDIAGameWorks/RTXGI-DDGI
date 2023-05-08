@@ -29,6 +29,7 @@ namespace Shaders
         IDxcIncludeHandler*   includes = nullptr;
 
         DxcCreateInstanceProc DxcCreateInstance = nullptr;
+        Configs::Shaders      config = {};
 
         std::string           root = "";
         std::string           rtxgi = "";
@@ -118,6 +119,6 @@ namespace Shaders
 
     bool Initialize(const Configs::Config& config, ShaderCompiler& compiler);
     void AddDefine(ShaderProgram& shader, std::wstring name, std::wstring value);
-    bool Compile(ShaderCompiler& compiler, ShaderProgram& shader, bool warningsAsErrors = false, bool debugInfo = false);
+    bool Compile(ShaderCompiler& compiler, ShaderProgram& shader, bool warningsAsErrors = true);
     void Cleanup(ShaderCompiler& compiler);
 }

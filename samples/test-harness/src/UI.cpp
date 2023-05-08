@@ -33,6 +33,7 @@ namespace Graphics
         static bool resChanged = false;
         static float debugWindowWidth = 500.f;
         static float perfWindowWidth = 300.f;
+        static float perfWindowHeight = 640.f;
         static float indent = 150.f;
         struct ResolutionOption
         {
@@ -686,6 +687,9 @@ namespace Graphics
                     ImGui::Checkbox("Antialiasing", &config.pathTrace.antialiasing);
                     ImGui::SameLine(); AddQuestionMark("Enable or disable antialiasing");
 
+                    ImGui::Checkbox("Progressive Accumulation", &config.pathTrace.progressive);
+                    ImGui::SameLine(); AddQuestionMark("Enable or disable progressive accumulation");
+
                     if (gfx.supportsShaderExecutionReordering)
                     {
                         ImGui::Checkbox("Shader Execution Reordering", &config.pathTrace.shaderExecutionReordering);
@@ -1205,7 +1209,7 @@ namespace Graphics
             SetupStyle();
 
             // Size the debug window based on the application height
-            ImGui::SetNextWindowSize(ImVec2(perfWindowWidth, 550.f));
+            ImGui::SetNextWindowSize(ImVec2(perfWindowWidth, perfWindowHeight));
             ImGui::Begin("Detailed Performance", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
             ImVec4 colors[3] =
@@ -1215,80 +1219,148 @@ namespace Graphics
                 ImVec4(1.f, 0.f, 0.f, 1.f),
             };
 
-            // GPU Performance
-            ImGui::TextColored(ImVec4(0.f, 0.71f, 0.071f, 1.f), "GPU");
-
-            // Display GPU times
-            uint32_t cIdx = GetPerfColor(performance.gpuTimes[0]->average);
-            ImGui::TextColored(colors[cIdx], "%s: %.3lf ms (avg, last %u frames)", performance.gpuTimes[0]->name.c_str(), performance.gpuTimes[0]->average, performance.gpuTimes[0]->sampleSize);
-            ImGui::Separator();
-
-            if (config.app.renderMode == ERenderMode::PATH_TRACE)
-            {
-                cIdx = GetPerfColor(performance.gpuTimes[1]->average);
-                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.gpuTimes[1]->name.c_str(), performance.gpuTimes[1]->average);
-            }
-            else if(config.app.renderMode == ERenderMode::DDGI)
-            {
-                for (size_t index = 2; index < (performance.gpuTimes.size() - 1); index++)
-                {
-                    cIdx = GetPerfColor(performance.gpuTimes[index]->average);
-                    ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.gpuTimes[index]->name.c_str(), performance.gpuTimes[index]->average);
-                }
-            }
-
-            // UI
-            cIdx = GetPerfColor(performance.gpuTimes.back()->average);
-            ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.gpuTimes.back()->name.c_str(), performance.gpuTimes.back()->average);
-
-            ImGui::Separator();
-            ImGui::NewLine();
-
             // CPU Performance
-            double gfxTotal = 0;
-            ImGui::TextColored(ImVec4(0.259f, 0.529f, 0.961f, 1.f), "CPU");
-
-            cIdx = GetPerfColor(performance.cpuTimes[0]->average);
-            ImGui::TextColored(colors[cIdx], "%s: %.3lf ms (avg, last %u frames)", performance.cpuTimes[0]->name.c_str(), performance.cpuTimes[0]->average, performance.cpuTimes[0]->sampleSize);
-            ImGui::Separator();
-            ImGui::Text("%s: %.3lf ms", performance.cpuTimes[1]->name.c_str(), performance.cpuTimes[1]->average); // input
-            ImGui::Text("%s: %.3lf ms", performance.cpuTimes[2]->name.c_str(), performance.cpuTimes[2]->average); // update
-
-            ImGui::Separator();
-
-            if (config.app.renderMode == ERenderMode::PATH_TRACE)
             {
-                gfxTotal += performance.cpuTimes[3]->average;
-                cIdx = GetPerfColor(performance.cpuTimes[3]->average);
-                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.cpuTimes[3]->name.c_str(), performance.cpuTimes[3]->average);
-            }
-            else if (config.app.renderMode == ERenderMode::DDGI)
-            {
-                for (size_t index = 4; index < performance.cpuTimes.size() - 2; index++)
+                ImGui::TextColored(ImVec4(0.259f, 0.529f, 0.961f, 1.f), "CPU");
+
+                // Get the stats
+                Instrumentation::Stat* frameStat = performance.cpuTimes[Instrumentation::EStatIndex::FRAME];
+                Instrumentation::Stat* waitStat = performance.cpuTimes[Instrumentation::EStatIndex::WAITFORGPU];
+                Instrumentation::Stat* resetStat = performance.cpuTimes[Instrumentation::EStatIndex::RESET];
+                Instrumentation::Stat* timestampBeginStat = performance.cpuTimes[Instrumentation::EStatIndex::TIMESTAMP_BEGIN];
+                Instrumentation::Stat* inputStat = performance.cpuTimes[Instrumentation::EStatIndex::INPUT];
+                Instrumentation::Stat* updateStat = performance.cpuTimes[Instrumentation::EStatIndex::UPDATE];
+                Instrumentation::Stat* renderStat = nullptr;
+                Instrumentation::Stat* uiStat = performance.cpuTimes[Instrumentation::EStatIndex::UI];
+                Instrumentation::Stat* timestampEndStat = performance.cpuTimes[Instrumentation::EStatIndex::TIMESTAMP_END];
+                Instrumentation::Stat* submitStat = performance.cpuTimes[Instrumentation::EStatIndex::SUBMIT];
+                Instrumentation::Stat* presentStat = performance.cpuTimes[Instrumentation::EStatIndex::PRESENT];
+
+                // Compute the total render time
+                double renderTotal = resetStat->average;
+                if (config.app.renderMode == ERenderMode::PATH_TRACE)
                 {
-                    gfxTotal += performance.cpuTimes[index]->average;
-                    cIdx = GetPerfColor(performance.cpuTimes[index]->average);
-                    ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.cpuTimes[index]->name.c_str(), performance.cpuTimes[index]->average);
+                    renderStat = performance.cpuTimes[Instrumentation::EStatIndex::PT];
+                    renderTotal += renderStat->average;
                 }
+                else if (config.app.renderMode == ERenderMode::DDGI)
+                {
+                    for (size_t index = Instrumentation::EStatIndex::GBUFFER; index < Instrumentation::EStatIndex::UI; index++)
+                    {
+                        renderStat = performance.cpuTimes[index];
+                        renderTotal += renderStat->average;
+                    }
+                }
+
+                renderTotal += uiStat->average;
+                renderTotal += submitStat->average;
+                renderTotal += presentStat->average;
+
+                // Frame
+                uint32_t cIdx = GetPerfColor(frameStat->average);
+                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms (avg, last %u frames)", frameStat->name.c_str(), frameStat->average, frameStat->sampleSize);
+                ImGui::Separator();
+
+                ImGui::Indent(10.f);
+
+                // Wait for GPU
+                cIdx = GetPerfColor(waitStat->average);
+                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", waitStat->name.c_str(), waitStat->average);
+
+                // Input, Update
+                ImGui::Text("%s: %.3lf ms", inputStat->name.c_str(), inputStat->average);
+                ImGui::Text("%s: %.3lf ms", updateStat->name.c_str(), updateStat->average);
+
+                // Timetamp
+                double timestampTotal = (timestampBeginStat->average + timestampEndStat->average);
+                ImGui::Text("%s: %.3lf ms", "Timestamps", timestampTotal);
+
+                // Render
+                cIdx = GetPerfColor(renderTotal);
+                ImGui::TextColored(colors[cIdx], "Render: %.3lf ms", renderTotal);
+
+                // Totals
+                double cpuTotal = (inputStat->average + updateStat->average + timestampTotal + renderTotal);
+                cIdx = GetPerfColor(cpuTotal);
+                ImGui::TextColored(colors[cIdx], "Total: %.3lf ms", inputStat->average + updateStat->average + timestampTotal + cpuTotal);
+
+                ImGui::Separator();
+
+                // Idle
+                double idle = frameStat->average - (cpuTotal + waitStat->average);
+                ImGui::Text("Idle: %.3lf ms", idle);
+
+                ImGui::Separator();
+
+                ImGui::Unindent(10.f);
+                ImGui::TextColored(ImVec4(0.259f, 0.529f, 0.961f, 1.f), "Render (CPU)");
+                ImGui::Indent(10.f);
+
+                // Reset
+                cIdx = GetPerfColor(resetStat->average);
+                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", resetStat->name.c_str(), resetStat->average);
+
+                if (config.app.renderMode == ERenderMode::PATH_TRACE)
+                {
+                    renderStat = performance.cpuTimes[Instrumentation::EStatIndex::PT];
+                    cIdx = GetPerfColor(renderStat->average);
+                    ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", renderStat->name.c_str(), renderStat->average);
+                }
+                else if (config.app.renderMode == ERenderMode::DDGI)
+                {
+                    for (size_t index = Instrumentation::EStatIndex::GBUFFER; index < Instrumentation::EStatIndex::UI; index++)
+                    {
+                        renderStat = performance.cpuTimes[index];
+                        cIdx = GetPerfColor(renderStat->average);
+                        ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", renderStat->name.c_str(), renderStat->average);
+                    }
+                }
+
+                // UI
+                cIdx = GetPerfColor(uiStat->average);
+                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", uiStat->name.c_str(), uiStat->average);
+
+                // Submit
+                cIdx = GetPerfColor(submitStat->average);
+                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", submitStat->name.c_str(), submitStat->average);
+
+                // Present
+                cIdx = GetPerfColor(presentStat->average);
+                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", presentStat->name.c_str(), presentStat->average);
+
+                ImGui::Unindent(10.f);
+                ImGui::Separator();
             }
 
-            // UI
-            gfxTotal += performance.cpuTimes[performance.cpuTimes.size() - 2]->average;
-            cIdx = GetPerfColor(performance.cpuTimes[performance.cpuTimes.size() - 2]->average);
-            ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.cpuTimes[performance.cpuTimes.size() - 2]->name.c_str(), performance.cpuTimes[performance.cpuTimes.size() - 2]->average);
+            // GPU Performance
+            {
+                ImGui::TextColored(ImVec4(0.f, 0.71f, 0.071f, 1.f), "GPU");
 
-            // Submit / Present
-            gfxTotal += performance.cpuTimes.back()->average;
-            cIdx = GetPerfColor(performance.cpuTimes.back()->average);
-            ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.cpuTimes.back()->name.c_str(), performance.cpuTimes.back()->average);
+                // Display GPU times
+                uint32_t cIdx = GetPerfColor(performance.gpuTimes[0]->average);
+                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms (avg, last %u frames)", performance.gpuTimes[0]->name.c_str(), performance.gpuTimes[0]->average, performance.gpuTimes[0]->sampleSize);
+                ImGui::Separator();
 
-            // Idle
-            double idle = performance.cpuTimes[0]->average - (performance.cpuTimes[1]->average + performance.cpuTimes[2]->average + gfxTotal);
-            ImGui::Text("GFX Total: %.3lf ms", gfxTotal);
-            ImGui::Separator();
-            ImGui::Text("Idle: %.3lf ms", idle);
+                if (config.app.renderMode == ERenderMode::PATH_TRACE)
+                {
+                    cIdx = GetPerfColor(performance.gpuTimes[1]->average);
+                    ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.gpuTimes[1]->name.c_str(), performance.gpuTimes[1]->average);
+                }
+                else if (config.app.renderMode == ERenderMode::DDGI)
+                {
+                    for (size_t index = 2; index < (performance.gpuTimes.size() - 1); index++)
+                    {
+                        cIdx = GetPerfColor(performance.gpuTimes[index]->average);
+                        ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.gpuTimes[index]->name.c_str(), performance.gpuTimes[index]->average);
+                    }
+                }
 
-            ImGui::Separator();
+                // UI
+                cIdx = GetPerfColor(performance.gpuTimes.back()->average);
+                ImGui::TextColored(colors[cIdx], "%s: %.3lf ms", performance.gpuTimes.back()->name.c_str(), performance.gpuTimes.back()->average);
+
+                ImGui::Separator();
+            }
 
             ImGui::SetWindowPos("Detailed Performance", ImVec2((gfx.width - ImGui::GetWindowWidth() - debugWindowWidth - 20.f), 20));
             ImGui::End();

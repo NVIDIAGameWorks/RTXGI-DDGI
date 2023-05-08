@@ -15,6 +15,7 @@
 #include "Scenes.h"
 #include "Instrumentation.h"
 
+const int MAX_FRAMES_IN_FLIGHT = 2;
 const int MAX_TLAS = 2;
 const int MAX_TEXTURES = 300;
 const int MAX_DDGIVOLUMES = 6;
@@ -48,13 +49,16 @@ namespace Graphics
 {
     bool CreateDevice(Globals& gfx, Configs::Config& config);
     bool Initialize(const Configs::Config& config, Scenes::Scene& scene, Globals& gfx, GlobalResources& resources, std::ofstream& log);
+    bool PostInitialize(Globals& gfx, std::ofstream& log);
     void Update(Globals& gfx, GlobalResources& gfxResources, const Configs::Config& config, Scenes::Scene& scene);
-    bool Resize(Globals& gfx, GlobalResources& resources, int width, int height, std::ofstream& log);
+    bool ResizeBegin(Globals& gfx, GlobalResources& resources, int width, int height, std::ofstream& log);
+    bool ResizeEnd(Globals& gfx);
     bool ToggleFullscreen(Globals& gfx);
     bool ResetCmdList(Globals& gfx);
     bool SubmitCmdList(Globals& gfx);
     bool Present(Globals& gfx);
     bool WaitForGPU(Globals& gfx);
+    bool WaitForPrevGPUFrame(Globals& gfx);
     bool MoveToNextFrame(Globals& gfx);
     void Cleanup(Globals& gfx, GlobalResources& gfxResources);
 

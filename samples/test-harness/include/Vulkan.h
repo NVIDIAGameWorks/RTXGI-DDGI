@@ -212,24 +212,23 @@ namespace Graphics
             int                                     queueFamilyIndex = -1;
 
             VkCommandPool                           commandPool = nullptr;
-            VkCommandBuffer                         cmdBuffer[2] = { nullptr, nullptr };
+            VkCommandBuffer                         cmdBuffer[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
             VkSurfaceKHR                            surface = nullptr;
             VkSwapchainKHR                          swapChain = nullptr;
-            VkImage                                 swapChainImage[2] = { nullptr, nullptr };
-            VkImageView                             swapChainImageView[2] = { nullptr, nullptr };
+            VkImage                                 swapChainImage[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+            VkImageView                             swapChainImageView[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
             VkFormat                                swapChainFormat = VK_FORMAT_UNDEFINED;
             VkColorSpaceKHR                         swapChainColorSpace;
 
             VkRenderPass                            renderPass = nullptr;
-            VkFramebuffer                           frameBuffer[2] = { nullptr, nullptr };
+            VkFramebuffer                           frameBuffer[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
-            VkFence                                 fences[2] = { nullptr, nullptr };
-            uint32_t                                frameIndex = 0;
-            uint32_t                                frameNumber = 0;
+            VkFence                                 immediateFence = nullptr;
+            VkFence                                 fences[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
-            VkSemaphore                             imageAcquiredSemaphore = nullptr;
-            VkSemaphore                             renderingCompleteSemaphore = nullptr;
+            VkSemaphore                             imageAcquiredSemaphore[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+            VkSemaphore                             presentSemaphore[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
             VkViewport                              viewport = {};
             VkRect2D                                scissor = {};
@@ -246,6 +245,10 @@ namespace Graphics
             int                                     y = 0;
             int                                     windowWidth = 0;
             int                                     windowHeight = 0;
+
+            uint32_t                                frameIndex = 0;
+            uint32_t                                frameNumber = 1;
+            uint32_t                                imageIndex = 0;
 
             int                                     width = 0;
             int                                     height = 0;

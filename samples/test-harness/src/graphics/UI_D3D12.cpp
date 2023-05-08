@@ -86,7 +86,7 @@ namespace Graphics
                 if (config.app.showUI)
                 {
                 #ifdef GFX_PERF_MARKERS
-                    PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_GREY), "ImGui");
+                    PIXBeginEvent(d3d.cmdList[d3d.frameIndex], PIX_COLOR(GFX_PERF_MARKER_GREY), "ImGui");
                 #endif
                     // Transition the back buffer to a render target
                     D3D12_RESOURCE_BARRIER barrier = {};
@@ -96,21 +96,21 @@ namespace Graphics
                     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
                     // Wait for the transition to complete
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                     // Set the render target
                     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle;
                     rtvHandle.ptr = d3dResources.rtvDescHeapStart.ptr + (d3d.frameIndex * d3dResources.rtvDescHeapEntrySize);
-                    d3d.cmdList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+                    d3d.cmdList[d3d.frameIndex]->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 
                     // Set the resources descriptor heap
                     ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap };
-                    d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+                    d3d.cmdList[d3d.frameIndex]->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                     // Render
                     GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
                     ImGui::Render();
-                    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), d3d.cmdList);
+                    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), d3d.cmdList[d3d.frameIndex]);
                     GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
                     // Transition the back buffer back to present
@@ -118,10 +118,10 @@ namespace Graphics
                     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
 
                     // Wait for the transition to complete
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                 #ifdef GFX_PERF_MARKERS
-                    PIXEndEvent(d3d.cmdList);
+                    PIXEndEvent(d3d.cmdList[d3d.frameIndex]);
                 #endif
                 }
 

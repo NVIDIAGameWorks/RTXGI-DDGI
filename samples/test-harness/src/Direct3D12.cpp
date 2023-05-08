@@ -186,54 +186,72 @@ namespace Graphics
         }
 
         /**
-         * Create a command allocator for each frame.
+         * Create the command allocators.
          */
         bool CreateCmdAllocators(Globals& d3d)
         {
-            for (UINT i = 0; i < 2; i++)
+            for (UINT index = 0; index < MAX_FRAMES_IN_FLIGHT; index++)
             {
-                D3DCHECK(d3d.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&d3d.cmdAlloc[i])));
+                D3DCHECK(d3d.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&d3d.cmdAlloc[index])));
             #ifdef GFX_NAME_OBJECTS
-                std::wstring name = L"Command Allocator " + std::to_wstring(i);
-                d3d.cmdAlloc[i]->SetName(name.c_str());
+                std::wstring name = L"Command Allocator " + std::to_wstring(index);
+                d3d.cmdAlloc[index]->SetName(name.c_str());
             #endif
             }
             return true;
         }
 
         /**
-         * Create the command list.
+         * Create the command lists.
          */
-        bool CreateCmdList(Globals& d3d)
+        bool CreateCmdLists(Globals& d3d)
         {
-            D3DCHECK(d3d.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, d3d.cmdAlloc[d3d.frameIndex], nullptr, IID_PPV_ARGS(&d3d.cmdList)));
-            D3DCHECK(d3d.cmdList->Close());
-        #ifdef GFX_NAME_OBJECTS
-            d3d.cmdList->SetName(L"Command List");
-        #endif
+            for (UINT index = 0; index < MAX_FRAMES_IN_FLIGHT; index++)
+            {
+                D3DCHECK(d3d.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, d3d.cmdAlloc[index], nullptr, IID_PPV_ARGS(&d3d.cmdList[index])));
+                D3DCHECK(d3d.cmdList[index]->Close());
+            #ifdef GFX_NAME_OBJECTS
+                std::wstring name = L"Command List " + std::to_wstring(index);
+                d3d.cmdList[index]->SetName(name.c_str());
+            #endif
+            }
             return true;
         }
 
         /**
-         * Create the fence and event handle.
+         * Create the fences and event handles.
          */
-        bool CreateFence(Globals& d3d)
+        bool CreateFences(Globals& d3d)
         {
-            // Create the fence
-            D3DCHECK(d3d.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&d3d.fence)));
+            // Create the frame fences and handles
+            for (UINT index = 0; index < MAX_FRAMES_IN_FLIGHT; index++)
+            {
+                D3DCHECK(d3d.device->CreateFence(1, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&d3d.fence[index])));
+            #ifdef GFX_NAME_OBJECTS
+                std::wstring name = L"Fence " + std::to_wstring(index);
+                d3d.fence[index]->SetName(name.c_str());
+            #endif
+
+                // Create the event handle to use for frame synchronization
+                d3d.fenceEvent[index] = CreateEventEx(nullptr, FALSE, FALSE, EVENT_ALL_ACCESS);
+                if (d3d.fenceEvent[index] == nullptr)
+                {
+                    if (FAILED(HRESULT_FROM_WIN32(GetLastError()))) return false;
+                }
+            }
+
+            // Create the immediate fence and event handle
+            D3DCHECK(d3d.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&d3d.immediateFence)));
         #ifdef GFX_NAME_OBJECTS
-            d3d.fence->SetName(L"Fence");
+            d3d.immediateFence->SetName(L"Immediate Fence");
         #endif
 
-            // Initialize the fence
-            d3d.fence->Signal(d3d.fenceValue);
-
-            // Create the event handle to use for frame synchronization
-            d3d.fenceEvent = CreateEventEx(nullptr, FALSE, FALSE, EVENT_ALL_ACCESS);
-            if (d3d.fenceEvent == nullptr)
+            d3d.immediateFenceEvent = CreateEventEx(nullptr, FALSE, FALSE, EVENT_ALL_ACCESS);
+            if (d3d.immediateFenceEvent == nullptr)
             {
                 if (FAILED(HRESULT_FROM_WIN32(GetLastError()))) return false;
             }
+
             return true;
         }
 
@@ -244,7 +262,7 @@ namespace Graphics
         {
             // Describe the swap chain
             DXGI_SWAP_CHAIN_DESC1 desc = {};
-            desc.BufferCount = 2;
+            desc.BufferCount = MAX_FRAMES_IN_FLIGHT;
             desc.Width = d3d.width;
             desc.Height = d3d.height;
             desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -266,10 +284,31 @@ namespace Graphics
 
             // Get the swap chain interface
             D3DCHECK(swapChain->QueryInterface(__uuidof(IDXGISwapChain4), reinterpret_cast<void**>(&d3d.swapChain)));
-
             SAFE_RELEASE(swapChain);
+
             d3d.frameIndex = d3d.swapChain->GetCurrentBackBufferIndex();
 
+            return true;
+        }
+
+        /**
+         * Create the back buffer and RTV.
+         */
+        bool CreateBackBuffer(Globals& d3d, Resources& resources)
+        {
+            // Create a RTV for each back buffer
+            D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = resources.rtvDescHeapStart;
+            for (UINT bufferIndex = 0; bufferIndex < MAX_FRAMES_IN_FLIGHT; bufferIndex++)
+            {
+                D3DCHECK(d3d.swapChain->GetBuffer(bufferIndex, IID_PPV_ARGS(&d3d.backBuffer[bufferIndex])));
+            #ifdef GFX_NAME_OBJECTS
+                std::wstring name = L"Back Buffer " + std::to_wstring(bufferIndex);
+                d3d.backBuffer[bufferIndex]->SetName(name.c_str());
+            #endif
+
+                d3d.device->CreateRenderTargetView(d3d.backBuffer[bufferIndex], nullptr, rtvHandle);
+                rtvHandle.ptr += resources.rtvDescHeapEntrySize;
+            }
             return true;
         }
 
@@ -280,7 +319,7 @@ namespace Graphics
         {
             // Describe the RTV heap
             D3D12_DESCRIPTOR_HEAP_DESC rtvDesc = {};
-            rtvDesc.NumDescriptors = 2;
+            rtvDesc.NumDescriptors = MAX_FRAMES_IN_FLIGHT;
             rtvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
             rtvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
@@ -362,35 +401,6 @@ namespace Graphics
             // Get the frequency of timestamp ticks
             D3DCHECK(d3d.cmdQueue->GetTimestampFrequency(&resources.timestampFrequency));
 
-            return true;
-        }
-
-        /**
-         * Create the back buffer and RTV.
-         */
-        bool CreateBackBuffer(Globals& d3d, Resources& resources)
-        {
-            // Create a RTV for each back buffer
-            D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = resources.rtvDescHeapStart;
-            for (UINT bufferIndex = 0; bufferIndex < 2; bufferIndex++)
-            {
-                D3DCHECK(d3d.swapChain->GetBuffer(bufferIndex, IID_PPV_ARGS(&d3d.backBuffer[bufferIndex])));
-
-                d3d.device->CreateRenderTargetView(d3d.backBuffer[bufferIndex], nullptr, rtvHandle);
-
-            #ifdef GFX_NAME_OBJECTS
-                if (bufferIndex == 0)
-                {
-                    d3d.backBuffer[bufferIndex]->SetName(L"Back Buffer 0");
-                }
-                else
-                {
-                    d3d.backBuffer[bufferIndex]->SetName(L"Back Buffer 1");
-                }
-            #endif
-
-                rtvHandle.ptr += resources.rtvDescHeapEntrySize;
-            }
             return true;
         }
 
@@ -503,7 +513,7 @@ namespace Graphics
             (*upload)->Unmap(0, nullptr);
 
             // Schedule a copy of the upload buffer to the device buffer
-            d3d.cmdList->CopyBufferRegion(*device, 0, *upload, 0, sizeInBytes);
+            d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(*device, 0, *upload, 0, sizeInBytes);
 
             // Transition the default heap resource to generic read after the copy is complete
             D3D12_RESOURCE_BARRIER barrier = {};
@@ -513,7 +523,7 @@ namespace Graphics
             barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
             barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-            d3d.cmdList->ResourceBarrier(1, &barrier);
+            d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
             return true;
         }
@@ -555,7 +565,7 @@ namespace Graphics
             (*upload)->Unmap(0, nullptr);
 
             // Schedule a copy of the upload buffer to the device buffer
-            d3d.cmdList->CopyBufferRegion(*device, 0, *upload, 0, sizeInBytes);
+            d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(*device, 0, *upload, 0, sizeInBytes);
 
             // Transition the default heap resource to generic read after the copy is complete
             D3D12_RESOURCE_BARRIER barrier = {};
@@ -565,7 +575,7 @@ namespace Graphics
             barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
             barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-            d3d.cmdList->ResourceBarrier(1, &barrier);
+            d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
             return true;
         }
@@ -649,7 +659,7 @@ namespace Graphics
             buildDesc.ScratchAccelerationStructureData = resources.blas[mesh.index].scratch->GetGPUVirtualAddress();
             buildDesc.DestAccelerationStructureData = resources.blas[mesh.index].as->GetGPUVirtualAddress();
 
-            d3d.cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+            d3d.cmdList[d3d.frameIndex]->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
             return true;
         }
@@ -702,14 +712,14 @@ namespace Graphics
             buildDesc.ScratchAccelerationStructureData = resources.tlas.scratch->GetGPUVirtualAddress();
             buildDesc.DestAccelerationStructureData = resources.tlas.as->GetGPUVirtualAddress();
 
-            d3d.cmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+            d3d.cmdList[d3d.frameIndex]->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
             // Wait for the TLAS build to complete
             D3D12_RESOURCE_BARRIER barrier = {};
             barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
             barrier.UAV.pResource = resources.tlas.as;
 
-            d3d.cmdList->ResourceBarrier(1, &barrier);
+            d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
             return true;
         }
@@ -845,7 +855,7 @@ namespace Graphics
                     destination.SubresourceIndex = mipIndex;
 
                     // Copy the texture from the upload heap to the default heap
-                    d3d.cmdList->CopyTextureRegion(&destination, 0, 0, 0, &source, NULL);
+                    d3d.cmdList[d3d.frameIndex]->CopyTextureRegion(&destination, 0, 0, 0, &source, NULL);
                 }
 
                 // Transition the default heap texture resource to a shader resource
@@ -856,7 +866,7 @@ namespace Graphics
                 barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
                 barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-                d3d.cmdList->ResourceBarrier(1, &barrier);
+                d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
             }
 
             return true;
@@ -1247,17 +1257,21 @@ namespace Graphics
             // Leave fullscreen mode if necessary
             if (d3d.fullscreen) d3d.swapChain->SetFullscreenState(FALSE, nullptr);
 
-            CloseHandle(d3d.fenceEvent);
             Shaders::Cleanup(d3d.shaderCompiler);
 
             // Release core D3D12 objects
-            SAFE_RELEASE(d3d.backBuffer[0]);
-            SAFE_RELEASE(d3d.backBuffer[1]);
+            for (UINT index = 0; index < MAX_FRAMES_IN_FLIGHT; index++)
+            {
+                SAFE_RELEASE(d3d.backBuffer[index]);
+                SAFE_RELEASE(d3d.cmdList[index]);
+                SAFE_RELEASE(d3d.cmdAlloc[index]);
+                SAFE_RELEASE(d3d.fence[index]);
+                CloseHandle(d3d.fenceEvent[index]);
+            }
+            SAFE_RELEASE(d3d.immediateFence);
+            CloseHandle(d3d.immediateFenceEvent);
+
             SAFE_RELEASE(d3d.swapChain);
-            SAFE_RELEASE(d3d.fence);
-            SAFE_RELEASE(d3d.cmdList);
-            SAFE_RELEASE(d3d.cmdAlloc[0]);
-            SAFE_RELEASE(d3d.cmdAlloc[1]);
             SAFE_RELEASE(d3d.cmdQueue);
             SAFE_RELEASE(d3d.device);
             SAFE_RELEASE(d3d.factory);
@@ -1334,7 +1348,7 @@ namespace Graphics
             }
 
             // Schedule a copy of the upload buffer to the device buffer
-            d3d.cmdList->CopyBufferRegion(resources.lightsSTB, 0, resources.lightsSTBUpload, 0, size);
+            d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.lightsSTB, 0, resources.lightsSTBUpload, 0, size);
 
             // Transition the default heap resource to generic read after the copy is complete
             D3D12_RESOURCE_BARRIER barrier = {};
@@ -1344,7 +1358,7 @@ namespace Graphics
             barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
             barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-            d3d.cmdList->ResourceBarrier(1, &barrier);
+            d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
             // Add the lights structured buffer SRV to the descriptor heap
             D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -1412,7 +1426,7 @@ namespace Graphics
             resources.materialsSTBUpload->Unmap(0, nullptr);
 
             // Schedule a copy of the upload buffer to the device buffer
-            d3d.cmdList->CopyBufferRegion(resources.materialsSTB, 0, resources.materialsSTBUpload, 0, size);
+            d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.materialsSTB, 0, resources.materialsSTBUpload, 0, size);
 
             // Transition the default heap resource to generic read after the copy is complete
             D3D12_RESOURCE_BARRIER barrier = {};
@@ -1422,7 +1436,7 @@ namespace Graphics
             barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
             barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-            d3d.cmdList->ResourceBarrier(1, &barrier);
+            d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
             // Add the materials structured buffer SRV to the descriptor heap
             D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -1515,8 +1529,8 @@ namespace Graphics
             resources.geometryDataRBUpload->Unmap(0, nullptr);
 
             // Schedule a copy of the upload buffers to the device buffers
-            d3d.cmdList->CopyBufferRegion(resources.meshOffsetsRB, 0, resources.meshOffsetsRBUpload, 0, meshOffsetsSize);
-            d3d.cmdList->CopyBufferRegion(resources.geometryDataRB, 0, resources.geometryDataRBUpload, 0, geometryDataSize);
+            d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.meshOffsetsRB, 0, resources.meshOffsetsRBUpload, 0, meshOffsetsSize);
+            d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.geometryDataRB, 0, resources.geometryDataRBUpload, 0, geometryDataSize);
 
             // Transition the default heap resources to generic read after the copies are complete
             std::vector<D3D12_RESOURCE_BARRIER> barriers;
@@ -1532,7 +1546,7 @@ namespace Graphics
             barrier.Transition.pResource = resources.geometryDataRB;
             barriers.push_back(barrier);
 
-            d3d.cmdList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+            d3d.cmdList[d3d.frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
 
             // Add the mesh offsets ByteAddressBuffer SRV to the descriptor heap
             D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -1582,7 +1596,7 @@ namespace Graphics
             resources.tlas.instancesUpload->Unmap(0, nullptr);
 
             // Schedule a copy of the upload buffer to the device buffer
-            d3d.cmdList->CopyBufferRegion(resources.tlas.instances, 0, resources.tlas.instancesUpload, 0, size);
+            d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.tlas.instances, 0, resources.tlas.instancesUpload, 0, size);
 
             // Transition the default heap resource to generic read after the copy is complete
             D3D12_RESOURCE_BARRIER barrier = {};
@@ -1592,7 +1606,7 @@ namespace Graphics
             barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
             barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-            d3d.cmdList->ResourceBarrier(1, &barrier);
+            d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
             // Add the TLAS instances structured buffer SRV to the descriptor heap
             D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -1709,7 +1723,7 @@ namespace Graphics
             D3D12_RESOURCE_BARRIER uavBarrier = {};
             uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
             uavBarrier.UAV.pResource = nullptr;
-            d3d.cmdList->ResourceBarrier(1, &uavBarrier);
+            d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &uavBarrier);
 
             return true;
         }
@@ -1865,21 +1879,21 @@ namespace Graphics
             ID3D12CommandAllocator* commandAlloc = nullptr;
             D3DCHECK(d3d.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAlloc)));
         #ifdef GFX_NAME_OBJECTS
-            d3d.cmdList->SetName(L"WriteResourceToDisk Command Allocator");
+            commandAlloc->SetName(L"WriteResourceToDisk Command Allocator");
         #endif
 
             // Create a command list
             ID3D12GraphicsCommandList* commandList = nullptr;
             D3DCHECK(d3d.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAlloc, nullptr, IID_PPV_ARGS(&commandList)));
         #ifdef GFX_NAME_OBJECTS
-            d3d.cmdList->SetName(L"WriteResourceToDisk Command List");
+            commandList->SetName(L"WriteResourceToDisk Command List");
         #endif
 
             // Create fence
             ID3D12Fence* fence = nullptr;
             D3DCHECK(d3d.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
         #ifdef GFX_NAME_OBJECTS
-            d3d.cmdList->SetName(L"WriteResourceToDisk Fence");
+            fence->SetName(L"WriteResourceToDisk Fence");
         #endif
 
             // Get the resource descriptor
@@ -1979,8 +1993,7 @@ namespace Graphics
             D3DCHECK(d3d.cmdQueue->Signal(fence, 1));
 
             // Block until the copy is complete
-            while (fence->GetCompletedValue() < 1)
-                SwitchToThread();
+            while (fence->GetCompletedValue() < 1) SwitchToThread();
 
             // Copy the staging resources and write them to disk
             bool result = true;
@@ -2446,7 +2459,7 @@ namespace Graphics
             return true;
         }
 
-        /*
+        /**
          * Initialize D3D12.
          */
         bool Initialize(const Configs::Config& config, Scenes::Scene& scene, Globals& d3d, Resources& resources, std::ofstream& log)
@@ -2464,21 +2477,21 @@ namespace Graphics
             // Initialize the shader compiler
             CHECK(Shaders::Initialize(config, d3d.shaderCompiler), "initialize the shader compiler!", log);
 
-            // Create core D3D12 objects
+            // Create D3D12 device objects
             CHECK(CreateCmdQueue(d3d), "create command queue!", log);
             CHECK(CreateCmdAllocators(d3d), "create command allocators!", log);
-            CHECK(CreateFence(d3d), "create fence!", log);
-            CHECK(CreateSwapChain(d3d), " create swap chain!", log);
-            CHECK(CreateCmdList(d3d), "create command list!", log);
-            CHECK(ResetCmdList(d3d), " reset command list!", log);
+            CHECK(CreateFences(d3d), "create fence!", log);
+            CHECK(CreateCmdLists(d3d), "create command list!", log);
             CHECK(CreateDescriptorHeaps(d3d, resources, scene), "create descriptor heaps!", log);
             CHECK(CreateQueryHeaps(d3d, resources), "create query heaps!", log);
             CHECK(CreateGlobalRootSignature(d3d, resources), "create global root signature!", log);
+            CHECK(CreateSwapChain(d3d), " create swap chain!", log);
             CHECK(CreateBackBuffer(d3d, resources), "create back buffers!", log);
             CHECK(CreateRenderTargets(d3d, resources), "create render targets!", log);
             CHECK(CreateSamplers(d3d, resources), "create samplers!", log);
             CHECK(CreateViewport(d3d), "create viewport!", log);
             CHECK(CreateScissor(d3d), "create scissor!", log);
+            CHECK(ResetCmdList(d3d), " reset command list!", log);
 
             // Create default graphics resources
             CHECK(LoadAndCreateDefaultTextures(d3d, resources, config, log), "load and create default textures!", log);
@@ -2495,7 +2508,11 @@ namespace Graphics
             CHECK(CreateSceneTextures(d3d, resources, scene, log), "create scene textures!", log);
 
             // Execute GPU work to finish initialization
-            SubmitCmdList(d3d);
+            // Close and submit the command list
+            D3DCHECK(d3d.cmdList[d3d.frameIndex]->Close());
+            ID3D12CommandList* pGraphicsList = { d3d.cmdList[d3d.frameIndex] };
+            d3d.cmdQueue->ExecuteCommandLists(1, &pGraphicsList);
+
             WaitForGPU(d3d);
             ResetCmdList(d3d);
 
@@ -2532,6 +2549,21 @@ namespace Graphics
 
             // Unload the CPU-side textures
             Scenes::Cleanup(scene);
+
+            return true;
+        }
+
+        /**
+         * Post initialization tasks.
+         */
+        bool PostInitialize(Globals& d3d, std::ofstream& log)
+        {
+            // Close and submit the command list
+            D3DCHECK(d3d.cmdList[d3d.frameIndex]->Close());
+            ID3D12CommandList* pGraphicsList = { d3d.cmdList[d3d.frameIndex] };
+            d3d.cmdQueue->ExecuteCommandLists(1, &pGraphicsList);
+
+            WaitForGPU(d3d);
 
             return true;
         }
@@ -2576,17 +2608,17 @@ namespace Graphics
                 barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
                 barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-                d3d.cmdList->ResourceBarrier(1, &barrier);
+                d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                 // Schedule a copy of the upload buffer to the device buffer
                 UINT size = Scenes::Light::GetGPUDataSize() * lastDirtyLight;
-                d3d.cmdList->CopyBufferRegion(resources.lightsSTB, 0, resources.lightsSTBUpload, 0, size);
+                d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.lightsSTB, 0, resources.lightsSTBUpload, 0, size);
 
                 // Transition the lights device buffer to generic read after the copy is complete
                 barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
                 barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
 
-                d3d.cmdList->ResourceBarrier(1, &barrier);
+                d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
             }
         }
 
@@ -2603,9 +2635,15 @@ namespace Graphics
             d3d.scissor.right = d3d.width;
             d3d.scissor.bottom = d3d.height;
 
-            // Release back buffer and GBuffer
-            SAFE_RELEASE(d3d.backBuffer[0]);
-            SAFE_RELEASE(d3d.backBuffer[1]);
+            // Wait for GPU idle
+            WaitForGPU(d3d);
+
+            // Release back buffer and GBuffer resources
+            for (UINT index = 0; index < MAX_FRAMES_IN_FLIGHT; index++)
+            {
+                d3d.fence[index]->Signal(1); // reset frame fences to initial state
+                SAFE_RELEASE(d3d.backBuffer[index]);
+            }
             SAFE_RELEASE(resources.rt.GBufferA);
             SAFE_RELEASE(resources.rt.GBufferB);
             SAFE_RELEASE(resources.rt.GBufferC);
@@ -2616,11 +2654,11 @@ namespace Graphics
             d3d.swapChain->GetDesc(&desc);
             D3DCHECK(d3d.swapChain->ResizeBuffers(2, d3d.width, d3d.height, desc.BufferDesc.Format, desc.Flags));
 
-            // Recreate the swapchain, back buffer, and GBuffer
+            // Recreate the back buffer and GBuffer resources
             if (!CreateBackBuffer(d3d, resources)) return false;
             if (!CreateRenderTargets(d3d, resources)) return false;
 
-            // Reset the frame index
+            // Reset the current frame index (always zero since it was just re-created)
             d3d.frameIndex = d3d.swapChain->GetCurrentBackBufferIndex();
 
             // Reset the frame number
@@ -2634,7 +2672,7 @@ namespace Graphics
         }
 
         /**
-         * Reset the command list.
+         * Reset the current frame's command list.
          */
         bool ResetCmdList(Globals& d3d)
         {
@@ -2642,22 +2680,25 @@ namespace Graphics
             D3DCHECK(d3d.cmdAlloc[d3d.frameIndex]->Reset());
 
             // Reset the command list for the current frame
-            D3DCHECK(d3d.cmdList->Reset(d3d.cmdAlloc[d3d.frameIndex], nullptr));
+            D3DCHECK(d3d.cmdList[d3d.frameIndex]->Reset(d3d.cmdAlloc[d3d.frameIndex], nullptr));
 
             return true;
         }
 
         /**
-         * Submit the command list.
+         * Submit the current frame's command list.
          */
         bool SubmitCmdList(Globals& d3d)
         {
             // Close the command list
-            D3DCHECK(d3d.cmdList->Close());
+            D3DCHECK(d3d.cmdList[d3d.frameIndex]->Close());
 
             // Submit the command list
-            ID3D12CommandList* pGraphicsList = { d3d.cmdList };
+            ID3D12CommandList* pGraphicsList = { d3d.cmdList[d3d.frameIndex] };
             d3d.cmdQueue->ExecuteCommandLists(1, &pGraphicsList);
+
+            // Schedule a fence update in the queue (from the GPU)
+            D3DCHECK(d3d.cmdQueue->Signal(d3d.fence[d3d.frameIndex], 1));
 
             return true;
         }
@@ -2675,23 +2716,34 @@ namespace Graphics
         }
 
         /**
-         * Wait for pending GPU work to complete.
+         * Wait for the previous frame's executing GPU work to complete.
+         */
+        bool WaitForPrevGPUFrame(Globals& d3d)
+        {
+            // Wait (on the CPU) until the previous frame's fence has been processed on the GPU
+            D3DCHECK(d3d.fence[d3d.frameIndex]->SetEventOnCompletion(1, d3d.fenceEvent[d3d.frameIndex]));
+            WaitForSingleObjectEx(d3d.fenceEvent[d3d.frameIndex], INFINITE, FALSE);
+
+            // Reset the fence
+            d3d.fence[d3d.frameIndex]->Signal(0);
+
+            return true;
+        }
+
+        /**
+         * Wait (right now) for GPU work to complete.
          */
         bool WaitForGPU(Globals& d3d)
         {
-            // Increment the fence value
-            d3d.fenceValue++;
-
             // Schedule a fence update in the queue (from the GPU)
-            D3DCHECK(d3d.cmdQueue->Signal(d3d.fence, d3d.fenceValue));
+            D3DCHECK(d3d.cmdQueue->Signal(d3d.immediateFence, 1));
 
             // Wait (on the CPU) until the fence has been processed on the GPU
-            UINT64 fence = d3d.fence->GetCompletedValue();
-            if (fence < d3d.fenceValue)
-            {
-                D3DCHECK(d3d.fence->SetEventOnCompletion(d3d.fenceValue, d3d.fenceEvent));
-                WaitForSingleObjectEx(d3d.fenceEvent, INFINITE, FALSE);
-            }
+            D3DCHECK(d3d.immediateFence->SetEventOnCompletion(1, d3d.immediateFenceEvent));
+            WaitForSingleObjectEx(d3d.immediateFenceEvent, INFINITE, FALSE);
+
+            // Wait is complete, reset the immediate fence
+            d3d.immediateFence->Signal(0);
 
             return true;
         }
@@ -2712,17 +2764,17 @@ namespace Graphics
     #ifdef GFX_PERF_INSTRUMENTATION
         void BeginFrame(Globals& d3d, GlobalResources& resources, Instrumentation::Performance& performance)
         {
-            d3d.cmdList->EndQuery(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, performance.gpuTimes[0]->GetGPUQueryBeginIndex());
+            d3d.cmdList[d3d.frameIndex]->EndQuery(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, performance.gpuTimes[0]->GetGPUQueryBeginIndex());
         }
 
         void EndFrame(Globals& d3d, GlobalResources& resources, Instrumentation::Performance& performance)
         {
-            d3d.cmdList->EndQuery(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, performance.gpuTimes[0]->GetGPUQueryEndIndex());
+            d3d.cmdList[d3d.frameIndex]->EndQuery(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, performance.gpuTimes[0]->GetGPUQueryEndIndex());
         }
 
         void ResolveTimestamps(Globals& d3d, GlobalResources& resources, Instrumentation::Performance& performance)
         {
-            d3d.cmdList->ResolveQueryData(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, 0, performance.GetNumActiveGPUQueries(), resources.timestamps, 0);
+            d3d.cmdList[d3d.frameIndex]->ResolveQueryData(resources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, 0, performance.GetNumActiveGPUQueries(), resources.timestamps, 0);
         }
 
         bool UpdateTimestamps(Globals& d3d, GlobalResources& resources, Instrumentation::Performance& performance)
@@ -2796,6 +2848,14 @@ namespace Graphics
     }
 
     /**
+     * Perform any remaining post-initialization tasks.
+     */
+    bool PostInitialize(Globals& gfx, std::ofstream& log)
+    {
+        return Graphics::D3D12::PostInitialize(gfx, log);
+    }
+
+    /**
      * Update root constants and constant buffers.
      */
     void Update(Globals& gfx, GlobalResources& gfxResources, const Configs::Config& config, Scenes::Scene& scene)
@@ -2806,9 +2866,14 @@ namespace Graphics
     /**
      * Resize the swapchain.
      */
-    bool Resize(Globals& gfx, GlobalResources& gfxResources, int width, int height, std::ofstream& log)
+    bool ResizeBegin(Globals& gfx, GlobalResources& gfxResources, int width, int height, std::ofstream& log)
     {
         return Graphics::D3D12::Resize(gfx, gfxResources, width, height, log);
+    }
+
+    bool ResizeEnd(Globals& gfx)
+    {
+        return true; // nothing to do here in D3D12
     }
 
     /**
@@ -2820,7 +2885,7 @@ namespace Graphics
     }
 
     /**
-     * Reset the graphics command list.
+     * Reset the current frame's command list.
      */
     bool ResetCmdList(Globals& gfx)
     {
@@ -2828,7 +2893,7 @@ namespace Graphics
     }
 
     /**
-     * Submit the graphics command list.
+     * Submit the current frame's command list.
      */
     bool SubmitCmdList(Globals& gfx)
     {
@@ -2844,11 +2909,19 @@ namespace Graphics
     }
 
     /**
-     * Wait for the graphics device to idle.
+     * Wait (right now) for the graphics device to idle.
      */
     bool WaitForGPU(Globals& gfx)
     {
         return Graphics::D3D12::WaitForGPU(gfx);
+    }
+
+    /**
+     * Wait for the previous frame's graphics commands to complete on the GPU.
+     */
+    bool WaitForPrevGPUFrame(Globals& gfx)
+    {
+        return Graphics::D3D12::WaitForPrevGPUFrame(gfx);
     }
 
     /**

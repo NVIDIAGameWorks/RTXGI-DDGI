@@ -34,7 +34,7 @@ namespace Graphics
                 resources.shaders.rgs.exportName = L"GBufferRGS";
                 resources.shaders.rgs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                 Shaders::AddDefine(resources.shaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.rgs, true), "compile GBuffer ray generation shader!\n", log);
+                CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.rgs), "compile GBuffer ray generation shader!\n", log);
 
                 // Load and compile the miss shader
                 resources.shaders.miss.filepath = root + L"shaders/Miss.hlsl";
@@ -42,7 +42,7 @@ namespace Graphics
                 resources.shaders.miss.exportName = L"GBufferMiss";
                 resources.shaders.miss.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                 Shaders::AddDefine(resources.shaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.miss, true), "compile GBuffer miss shader!\n", log);
+                CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.miss), "compile GBuffer miss shader!\n", log);
 
                 // Add the hit group
                 resources.shaders.hitGroups.emplace_back();
@@ -56,7 +56,7 @@ namespace Graphics
                 group.chs.exportName = L"GBufferCHS";
                 group.chs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                 Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                CHECK(Shaders::Compile(vk.shaderCompiler, group.chs, true), "compile GBuffer closest hit shader!\n", log);
+                CHECK(Shaders::Compile(vk.shaderCompiler, group.chs), "compile GBuffer closest hit shader!\n", log);
 
                 // Load and compile the AHS
                 group.ahs.filepath = root + L"shaders/AHS.hlsl";
@@ -64,7 +64,7 @@ namespace Graphics
                 group.ahs.exportName = L"GBufferAHS";
                 group.ahs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                 Shaders::AddDefine(group.ahs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                CHECK(Shaders::Compile(vk.shaderCompiler, group.ahs, true), "compile GBuffer any hit shader!\n", log);
+                CHECK(Shaders::Compile(vk.shaderCompiler, group.ahs), "compile GBuffer any hit shader!\n", log);
 
                 return true;
             }
@@ -366,9 +366,6 @@ namespace Graphics
              */
             bool Initialize(Globals& vk, GlobalResources& vkResources, Resources& resources, Instrumentation::Performance& perf, std::ofstream& log)
             {
-                // Reset the command list before initialization
-                CHECK(ResetCmdList(vk), "reset command list!", log);
-
                 if (!LoadAndCompileShaders(vk, resources, log)) return false;
                 if (!CreateDescriptorSets(vk, vkResources, resources, log)) return false;
                 if (!CreatePipelines(vk, vkResources, resources, log)) return false;
@@ -376,19 +373,6 @@ namespace Graphics
 
                 if (!UpdateShaderTable(vk, vkResources, resources, log)) return false;
                 if (!UpdateDescriptorSets(vk, vkResources, resources, log)) return false;
-
-                // Execute GPU work to finish initialization
-                VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
-
-                VkSubmitInfo submitInfo = {};
-                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
-
-                VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
-                VKCHECK(vkQueueWaitIdle(vk.queue));
-
-                WaitForGPU(vk);
 
                 perf.AddStat("GBuffer", resources.cpuStat, resources.gpuStat);
 
@@ -401,6 +385,7 @@ namespace Graphics
             bool Reload(Globals& vk, GlobalResources& vkResources, Resources& resources, std::ofstream& log)
             {
                 log << "Reloading GBuffer shaders...";
+                vkDeviceWaitIdle(vk.device);
                 if (!LoadAndCompileShaders(vk, resources, log)) return false;
                 if (!CreatePipelines(vk, vkResources, resources, log)) return false;
                 if (!UpdateShaderTable(vk, vkResources, resources, log)) return false;

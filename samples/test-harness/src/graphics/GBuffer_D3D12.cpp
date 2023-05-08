@@ -33,14 +33,14 @@ namespace Graphics
                 resources.shaders.rgs.entryPoint = L"RayGen";
                 resources.shaders.rgs.exportName = L"GBufferRGS";
                 Shaders::AddDefine(resources.shaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.rgs, true), "compile GBuffer ray generation shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.rgs), "compile GBuffer ray generation shader!\n", log);
 
                 // Load and compile the miss shader
                 resources.shaders.miss.filepath = root + L"shaders/Miss.hlsl";
                 resources.shaders.miss.entryPoint = L"Miss";
                 resources.shaders.miss.exportName = L"GBufferMiss";
                 Shaders::AddDefine(resources.shaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.miss, true), "compile GBuffer miss shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.miss), "compile GBuffer miss shader!\n", log);
 
                 // Add the hit group
                 resources.shaders.hitGroups.emplace_back();
@@ -53,14 +53,14 @@ namespace Graphics
                 group.chs.entryPoint = L"CHS_PRIMARY";
                 group.chs.exportName = L"GBufferCHS";
                 Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs, true), "compile GBuffer closest hit shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs), "compile GBuffer closest hit shader!\n", log);
 
                 // Load and compile the AHS
                 group.ahs.filepath = root + L"shaders/AHS.hlsl";
                 group.ahs.entryPoint = L"AHS_PRIMARY";
                 group.ahs.exportName = L"GBufferAHS";
                 Shaders::AddDefine(group.ahs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, group.ahs, true), "compile GBuffer any hit shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, group.ahs), "compile GBuffer any hit shader!\n", log);
 
                 // Set the payload size
                 resources.shaders.payloadSizeInBytes = sizeof(PackedPayload);
@@ -171,7 +171,7 @@ namespace Graphics
                 resources.shaderTableUpload->Unmap(0, nullptr);
 
                 // Schedule a copy of the upload buffer to the device buffer
-                d3d.cmdList->CopyBufferRegion(resources.shaderTable, 0, resources.shaderTableUpload, 0, resources.shaderTableSize);
+                d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.shaderTable, 0, resources.shaderTableUpload, 0, resources.shaderTableSize);
 
                 // Transition the default heap resource to generic read after the copy is complete
                 D3D12_RESOURCE_BARRIER barrier = {};
@@ -181,7 +181,7 @@ namespace Graphics
                 barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
                 barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-                d3d.cmdList->ResourceBarrier(1, &barrier);
+                d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                 return true;
             }
@@ -240,30 +240,30 @@ namespace Graphics
             void Execute(Globals& d3d, GlobalResources& d3dResources, Resources& resources)
             {
             #ifdef GFX_PERF_MARKERS
-                PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_ORANGE), "GBuffer");
+                PIXBeginEvent(d3d.cmdList[d3d.frameIndex], PIX_COLOR(GFX_PERF_MARKER_ORANGE), "GBuffer");
             #endif
                 CPU_TIMESTAMP_BEGIN(resources.cpuStat);
 
                 // Set the descriptor heaps
                 ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
-                d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+                d3d.cmdList[d3d.frameIndex]->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                 // Set the root signature
-                d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
+                d3d.cmdList[d3d.frameIndex]->SetComputeRootSignature(d3dResources.rootSignature);
 
                 // Update the root constants
                 UINT offset = 0;
                 GlobalConstants consts = d3dResources.constants;
-                d3d.cmdList->SetComputeRoot32BitConstants(0, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
+                d3d.cmdList[d3d.frameIndex]->SetComputeRoot32BitConstants(0, AppConsts::GetNum32BitValues(), consts.app.GetData(), offset);
                 offset += AppConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetComputeRoot32BitConstants(0, PathTraceConsts::GetNum32BitValues(), consts.pt.GetData(), offset);
+                d3d.cmdList[d3d.frameIndex]->SetComputeRoot32BitConstants(0, PathTraceConsts::GetNum32BitValues(), consts.pt.GetData(), offset);
                 offset += PathTraceConsts::GetAlignedNum32BitValues();
-                d3d.cmdList->SetComputeRoot32BitConstants(0, LightingConsts::GetNum32BitValues(), consts.lights.GetData(), offset);
+                d3d.cmdList[d3d.frameIndex]->SetComputeRoot32BitConstants(0, LightingConsts::GetNum32BitValues(), consts.lights.GetData(), offset);
 
                 // Set the root parameter descriptor tables
             #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
-                d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
             #endif
 
                 // Dispatch rays
@@ -284,11 +284,11 @@ namespace Graphics
                 desc.Depth = 1;
 
                 // Set the PSO
-                d3d.cmdList->SetPipelineState1(resources.rtpso);
+                d3d.cmdList[d3d.frameIndex]->SetPipelineState1(resources.rtpso);
 
                 // Dispatch rays
                 GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
-                d3d.cmdList->DispatchRays(&desc);
+                d3d.cmdList[d3d.frameIndex]->DispatchRays(&desc);
                 GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
 
                 D3D12_RESOURCE_BARRIER barriers[4] = {};
@@ -302,11 +302,11 @@ namespace Graphics
                 barriers[3].UAV.pResource = d3dResources.rt.GBufferD;
 
                 // Wait for the ray trace to complete
-                d3d.cmdList->ResourceBarrier(4, barriers);
+                d3d.cmdList[d3d.frameIndex]->ResourceBarrier(4, barriers);
 
                 CPU_TIMESTAMP_ENDANDRESOLVE(resources.cpuStat);
             #ifdef GFX_PERF_MARKERS
-                PIXEndEvent(d3d.cmdList);
+                PIXEndEvent(d3d.cmdList[d3d.frameIndex]);
             #endif
             }
 

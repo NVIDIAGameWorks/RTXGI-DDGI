@@ -18,6 +18,25 @@
 
 namespace Instrumentation
 {
+    enum EStatIndex
+    {
+        FRAME = 0,
+        WAITFORGPU,
+        RESET,
+        TIMESTAMP_BEGIN,
+        INPUT,
+        UPDATE,
+        PT,
+        GBUFFER,
+        DDGI,
+        DDGI_VIS,
+        RTAO,
+        COMPOSITE,
+        UI,
+        TIMESTAMP_END,
+        SUBMIT,
+        PRESENT,
+    };
 
     enum class EStatType
     {

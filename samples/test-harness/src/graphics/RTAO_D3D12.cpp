@@ -66,14 +66,14 @@ namespace Graphics
                 resources.rtShaders.rgs.entryPoint = L"RayGen";
                 resources.rtShaders.rgs.exportName = L"RTAOTraceRGS";
                 Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.rgs, true), "compile RTAO ray generation shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.rgs), "compile RTAO ray generation shader!\n", log);
 
                 // Load and compile the miss shader
                 resources.rtShaders.miss.filepath = root + L"shaders/Miss.hlsl";
                 resources.rtShaders.miss.entryPoint = L"Miss";
                 resources.rtShaders.miss.exportName = L"RTAOMiss";
                 Shaders::AddDefine(resources.rtShaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.miss, true), "compile RTAO miss shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.rtShaders.miss), "compile RTAO miss shader!\n", log);
 
                 // Add the hit group
                 resources.rtShaders.hitGroups.emplace_back();
@@ -86,14 +86,14 @@ namespace Graphics
                 group.chs.entryPoint = L"CHS_VISIBILITY";
                 group.chs.exportName = L"RTAOCHS";
                 Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs, true), "compile RTAO closest hit shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, group.chs), "compile RTAO closest hit shader!\n", log);
 
                 // Load and compile the AHS
                 group.ahs.filepath = root + L"shaders/AHS.hlsl";
                 group.ahs.entryPoint = L"AHS_GI";
                 group.ahs.exportName = L"RTAOAHS";
                 Shaders::AddDefine(group.ahs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
-                CHECK(Shaders::Compile(d3d.shaderCompiler, group.ahs, true), "compile RTAO any hit shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, group.ahs), "compile RTAO any hit shader!\n", log);
 
                 // Set the payload size
                 resources.rtShaders.payloadSizeInBytes = sizeof(PackedPayload);
@@ -106,7 +106,7 @@ namespace Graphics
                 resources.filterCS.targetProfile = L"cs_6_6";
                 Shaders::AddDefine(resources.filterCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
                 Shaders::AddDefine(resources.filterCS, L"BLOCK_SIZE", blockSize);
-                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.filterCS, true), "compile RTAO filter compute shader!\n", log);
+                CHECK(Shaders::Compile(d3d.shaderCompiler, resources.filterCS), "compile RTAO filter compute shader!\n", log);
 
                 return true;
             }
@@ -225,7 +225,7 @@ namespace Graphics
                 resources.shaderTableUpload->Unmap(0, nullptr);
 
                 // Schedule a copy of the upload buffer to the device buffer
-                d3d.cmdList->CopyBufferRegion(resources.shaderTable, 0, resources.shaderTableUpload, 0, resources.shaderTableSize);
+                d3d.cmdList[d3d.frameIndex]->CopyBufferRegion(resources.shaderTable, 0, resources.shaderTableUpload, 0, resources.shaderTableSize);
 
                 // Transition the default heap resource to generic read after the copy is complete
                 D3D12_RESOURCE_BARRIER barrier = {};
@@ -235,7 +235,7 @@ namespace Graphics
                 barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
                 barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-                d3d.cmdList->ResourceBarrier(1, &barrier);
+                d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                 return true;
             }
@@ -333,7 +333,7 @@ namespace Graphics
             void Execute(Globals& d3d, GlobalResources& d3dResources, Resources& resources)
             {
             #ifdef GFX_PERF_MARKERS
-                PIXBeginEvent(d3d.cmdList, PIX_COLOR(GFX_PERF_MARKER_RED), "RTAO");
+                PIXBeginEvent(d3d.cmdList[d3d.frameIndex], PIX_COLOR(GFX_PERF_MARKER_RED), "RTAO");
             #endif
                 CPU_TIMESTAMP_BEGIN(resources.cpuStat);
                 GPU_TIMESTAMP_BEGIN(resources.gpuStat->GetGPUQueryBeginIndex());
@@ -342,10 +342,10 @@ namespace Graphics
                 {
                     // Set the descriptor heaps
                     ID3D12DescriptorHeap* ppHeaps[] = { d3dResources.srvDescHeap, d3dResources.samplerDescHeap };
-                    d3d.cmdList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+                    d3d.cmdList[d3d.frameIndex]->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
                     // Set the global root signature
-                    d3d.cmdList->SetComputeRootSignature(d3dResources.rootSignature);
+                    d3d.cmdList[d3d.frameIndex]->SetComputeRootSignature(d3dResources.rootSignature);
 
                     // Update the root constants
                     UINT offset = 0;
@@ -353,12 +353,12 @@ namespace Graphics
                     offset += AppConsts::GetAlignedNum32BitValues();
                     offset += PathTraceConsts::GetAlignedNum32BitValues();
                     offset += LightingConsts::GetAlignedNum32BitValues();
-                    d3d.cmdList->SetComputeRoot32BitConstants(0, RTAOConsts::GetNum32BitValues(), consts.rtao.GetData(), offset);
+                    d3d.cmdList[d3d.frameIndex]->SetComputeRoot32BitConstants(0, RTAOConsts::GetNum32BitValues(), consts.rtao.GetData(), offset);
 
                     // Set the root parameter descriptor tables
                 #if RTXGI_BINDLESS_TYPE == RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS
-                    d3d.cmdList->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
-                    d3d.cmdList->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
+                    d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(2, d3dResources.samplerDescHeap->GetGPUDescriptorHandleForHeapStart());
+                    d3d.cmdList[d3d.frameIndex]->SetComputeRootDescriptorTable(3, d3dResources.srvDescHeap->GetGPUDescriptorHandleForHeapStart());
                 #endif
 
                     // Dispatch rays
@@ -379,36 +379,36 @@ namespace Graphics
                     desc.Depth = 1;
 
                     // Set the PSO
-                    d3d.cmdList->SetPipelineState1(resources.rtpso);
+                    d3d.cmdList[d3d.frameIndex]->SetPipelineState1(resources.rtpso);
 
                     // Dispatch rays
-                    d3d.cmdList->DispatchRays(&desc);
+                    d3d.cmdList[d3d.frameIndex]->DispatchRays(&desc);
 
                     D3D12_RESOURCE_BARRIER barrier = {};
                     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
                     barrier.UAV.pResource = resources.RTAORaw;
 
                     // Wait for the ray trace to complete
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
 
                     // --- Run the filter compute shader ---------------------------------
 
                     // Set the PSO and dispatch threads
-                    d3d.cmdList->SetPipelineState(resources.filterPSO);
+                    d3d.cmdList[d3d.frameIndex]->SetPipelineState(resources.filterPSO);
 
                     uint32_t groupsX = DivRoundUp(d3d.width, RTAO_FILTER_BLOCK_SIZE);
                     uint32_t groupsY = DivRoundUp(d3d.height, RTAO_FILTER_BLOCK_SIZE);
-                    d3d.cmdList->Dispatch(groupsX, groupsY, 1);
+                    d3d.cmdList[d3d.frameIndex]->Dispatch(groupsX, groupsY, 1);
 
                     // Wait for the compute pass to finish
                     barrier.UAV.pResource = resources.RTAOOutput;
-                    d3d.cmdList->ResourceBarrier(1, &barrier);
+                    d3d.cmdList[d3d.frameIndex]->ResourceBarrier(1, &barrier);
                 }
 
                 GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
                 CPU_TIMESTAMP_ENDANDRESOLVE(resources.cpuStat);
             #ifdef GFX_PERF_MARKERS
-                PIXEndEvent(d3d.cmdList);
+                PIXEndEvent(d3d.cmdList[d3d.frameIndex]);
             #endif
             }
 

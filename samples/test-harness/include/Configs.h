@@ -144,6 +144,7 @@ namespace Configs
     {
         bool  enabled = false;
         bool  antialiasing = false;
+        bool  progressive = true;
         bool  shaderExecutionReordering = false;
         bool  reload = false;
         float rayNormalBias = 0.001f;
@@ -197,6 +198,15 @@ namespace Configs
         float rotationSpeed = 1.f;
     };
 
+    struct Shaders
+    {
+        bool  warningsAsErrors = true;      // treat warnings as errors
+        bool  disableOptimizations = false; // disable optimizations
+        bool  disableValidation = false;    // disable validation
+        bool  shaderSymbols = false;        // include symbols in shader blobs
+        bool  lifetimeMarkers = false;      // enable variable lifetime markers
+    };
+
     struct Application
     {
         int         width = 1280;
@@ -222,6 +232,7 @@ namespace Configs
     struct Config
     {
         Application   app;
+        Shaders       shaders;
         Input         input;
         Scene         scene;
         PathTrace     pathTrace;

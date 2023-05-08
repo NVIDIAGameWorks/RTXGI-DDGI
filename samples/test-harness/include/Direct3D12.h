@@ -31,8 +31,8 @@ namespace Graphics
         #define D3DCHECK(hr) if(!Check(hr, __FILE__, __LINE__)) { return false; }
 
     #ifdef GFX_PERF_INSTRUMENTATION
-        #define GPU_TIMESTAMP_BEGIN(x) d3d.cmdList->EndQuery(d3dResources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, x);
-        #define GPU_TIMESTAMP_END(x) d3d.cmdList->EndQuery(d3dResources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, x);
+        #define GPU_TIMESTAMP_BEGIN(x) d3d.cmdList[d3d.frameIndex]->EndQuery(d3dResources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, x);
+        #define GPU_TIMESTAMP_END(x) d3d.cmdList[d3d.frameIndex]->EndQuery(d3dResources.timestampHeap, D3D12_QUERY_TYPE_TIMESTAMP, x);
     #else
         #define GPU_TIMESTAMP_BEGIN(x) 
         #define GPU_TIMESTAMP_END(x) 
@@ -99,15 +99,16 @@ namespace Graphics
             IDXGIFactory7*               factory = nullptr;
             ID3D12Device6*               device = nullptr;
             ID3D12CommandQueue*          cmdQueue = nullptr;
-            ID3D12CommandAllocator*      cmdAlloc[2] = { nullptr, nullptr };
-            ID3D12GraphicsCommandList4*  cmdList = nullptr;
+            ID3D12CommandAllocator*      cmdAlloc[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+            ID3D12GraphicsCommandList4*  cmdList[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
             IDXGISwapChain4*             swapChain = nullptr;
-            ID3D12Resource*              backBuffer[2] = { nullptr, nullptr };
+            ID3D12Resource*              backBuffer[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
-            ID3D12Fence*                 fence = nullptr;
-            UINT64                       fenceValue = 0;
-            HANDLE                       fenceEvent;
+            ID3D12Fence*                 fence[MAX_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+            ID3D12Fence*                 immediateFence = nullptr;
+            HANDLE                       fenceEvent[MAX_FRAMES_IN_FLIGHT];
+            HANDLE                       immediateFenceEvent;
             UINT                         frameIndex = 0;
             UINT                         frameNumber = 0;
 

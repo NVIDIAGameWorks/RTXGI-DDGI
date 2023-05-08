@@ -908,7 +908,7 @@ namespace Graphics
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME", L"ddgi_reductionInputSizeZ");
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-                    CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.rgs, true), "compile DDGI probe tracing ray generation shader!\n", log);
+                    CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.rgs), "compile DDGI probe tracing ray generation shader!\n", log);
                 }
 
                 // Load and compile the miss shader
@@ -918,7 +918,7 @@ namespace Graphics
                     resources.rtShaders.miss.exportName = L"DDGIProbeTraceMiss";
                     resources.rtShaders.miss.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                     Shaders::AddDefine(resources.rtShaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                    CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.miss, true), "compile DDGI probe tracing miss shader!\n", log);
+                    CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.miss), "compile DDGI probe tracing miss shader!\n", log);
                 }
 
                 // Add the hit group
@@ -934,7 +934,7 @@ namespace Graphics
                     group.chs.exportName = L"DDGIProbeTraceCHS";
                     group.chs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                     Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                    CHECK(Shaders::Compile(vk.shaderCompiler, group.chs, true), "compile DDGI probe tracing closest hit shader!\n", log);
+                    CHECK(Shaders::Compile(vk.shaderCompiler, group.chs), "compile DDGI probe tracing closest hit shader!\n", log);
 
                     // Load and compile the AHS
                     group.ahs.filepath = root + L"shaders/AHS.hlsl";
@@ -942,7 +942,7 @@ namespace Graphics
                     group.ahs.exportName = L"DDGIProbeTraceAHS";
                     group.ahs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                     Shaders::AddDefine(group.ahs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                    CHECK(Shaders::Compile(vk.shaderCompiler, group.ahs, true), "compile DDGI probe tracing any hit shader!\n", log);
+                    CHECK(Shaders::Compile(vk.shaderCompiler, group.ahs), "compile DDGI probe tracing any hit shader!\n", log);
 
                     // Set the payload size
                     resources.rtShaders.payloadSizeInBytes = sizeof(PackedPayload);
@@ -968,7 +968,7 @@ namespace Graphics
                     Shaders::AddDefine(resources.indirectCS, L"RTXGI_DDGI_NUM_VOLUMES", std::to_wstring(numVolumes));
                     Shaders::AddDefine(resources.indirectCS, L"THGP_DIM_X", L"8");
                     Shaders::AddDefine(resources.indirectCS, L"THGP_DIM_Y", L"4");
-                    CHECK(Shaders::Compile(vk.shaderCompiler, resources.indirectCS, true), "compile indirect lighting compute shader!\n", log);
+                    CHECK(Shaders::Compile(vk.shaderCompiler, resources.indirectCS), "compile indirect lighting compute shader!\n", log);
                 }
 
                 return true;
@@ -1490,11 +1490,8 @@ namespace Graphics
                 // Validate the SDK version
                 assert(RTXGI_VERSION::major == 1);
                 assert(RTXGI_VERSION::minor == 3);
-                assert(RTXGI_VERSION::revision == 6);
-                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.3.6") == 0);
-
-                // Reset the command list before initialization
-                CHECK(ResetCmdList(vk), "reset command list!", log);
+                assert(RTXGI_VERSION::revision == 7);
+                assert(std::strcmp(RTXGI_VERSION::getVersionString(), "1.3.7") == 0);
 
                 uint32_t numVolumes = static_cast<uint32_t>(config.ddgi.volumes.size());
 
@@ -1550,19 +1547,6 @@ namespace Graphics
                 resources.lightingStat = perf.AddGPUStat("  Lighting");
                 resources.variabilityStat = perf.AddGPUStat("  Variability");
 
-                // Execute GPU work to finish initialization
-                VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
-
-                VkSubmitInfo submitInfo = {};
-                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
-
-                VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
-                VKCHECK(vkQueueWaitIdle(vk.queue));
-
-                WaitForGPU(vk);
-
                 return true;
             }
 
@@ -1572,6 +1556,7 @@ namespace Graphics
             bool Reload(Globals& vk, GlobalResources& vkResources, Resources& resources, const Configs::Config& config, std::ofstream& log)
             {
                 log << "Reloading DDGI shaders...";
+                vkDeviceWaitIdle(vk.device);
 
                 uint32_t numVolumes = static_cast<uint32_t>(config.ddgi.volumes.size());
 

@@ -87,10 +87,14 @@ int Run(const std::vector<std::string>& arguments)
     // Performance Timers
     Instrumentation::Stat startupShutdown;
     Instrumentation::Performance perf;
-    perf.AddCPUStat("Frame");
+    Instrumentation::Stat* frameStat = perf.AddCPUStat("Frame");
+    Instrumentation::Stat* waitStat = perf.AddCPUStat("Wait For GPU");
+    Instrumentation::Stat* resetStat = perf.AddCPUStat("Reset");
+    Instrumentation::Stat* timestampBeginStat = perf.AddCPUStat("TimestampBegin");
+    Instrumentation::Stat* inputStat = perf.AddCPUStat("Input");
+    Instrumentation::Stat* updateStat = perf.AddCPUStat("Update");
     perf.AddGPUStat("Frame");
-    perf.AddCPUStat("Input");
-    perf.AddCPUStat("Update");
+
     Benchmark::BenchmarkRun benchmarkRun;
 
     CPU_TIMESTAMP_BEGIN(&startupShutdown);
@@ -122,6 +126,7 @@ int Run(const std::vector<std::string>& arguments)
         log.close();
         return EXIT_FAILURE;
     }
+
     log << "done.\n";
 
     // Input
@@ -194,7 +199,19 @@ int Run(const std::vector<std::string>& arguments)
     }
     log << "done.\n";
 
-    perf.AddCPUStat("Submit/Present");
+    log << "Post initialization...";
+    if (!Graphics::PostInitialize(gfx, log))
+    {
+        log << "\nFailed post-initialize!";
+        log.close();
+        return EXIT_FAILURE;
+    }
+    log << "done\n";
+
+    // Add a few more CPU stats
+    Instrumentation::Stat* timestampEndStat = perf.AddCPUStat("TimestampEnd");
+    Instrumentation::Stat* submitStat = perf.AddCPUStat("Submit");
+    Instrumentation::Stat* presentStat = perf.AddCPUStat("Present");
 
     CPU_TIMESTAMP_END(&startupShutdown);
     log << "Startup complete in " << startupShutdown.elapsed << " milliseconds\n";
@@ -202,66 +219,35 @@ int Run(const std::vector<std::string>& arguments)
     log << "Main loop...\n";
     std::flush(log);
 
-#ifdef GFX_PERF_INSTRUMENTATION
-    Graphics::BeginFrame(gfx, gfxResources, perf);
-#endif
-
     // Main loop
     while(!glfwWindowShouldClose(gfx.window))
     {
-        CPU_TIMESTAMP_BEGIN(perf.cpuTimes[0]);   // frame
-        CPU_TIMESTAMP_BEGIN(perf.cpuTimes[1]);   // input
+        CPU_TIMESTAMP_BEGIN(frameStat);
 
-        glfwPollEvents();
+        // Wait for the previous frame's GPU work to complete
+        CPU_TIMESTAMP_BEGIN(waitStat);
+        if (!Graphics::WaitForPrevGPUFrame(gfx)) { log << "GPU took too long to complete, device removed!"; break; }
+        CPU_TIMESTAMP_ENDANDRESOLVE(waitStat);
 
-        // Handle resize events
-        if (Windows::GetWindowEvent() == Windows::EWindowEvent::RESIZE)
-        {
-            Graphics::WaitForGPU(gfx);
+        // Move to the next frame and reset the frame's command list
+        CPU_TIMESTAMP_BEGIN(resetStat);
+        if (!Graphics::MoveToNextFrame(gfx)) break;
+        if (!Graphics::ResetCmdList(gfx)) break;
+        CPU_TIMESTAMP_ENDANDRESOLVE(resetStat);
 
-            // Get the new back buffer dimensions from GLFW
-            int width, height;
-            glfwGetFramebufferSize(gfx.window, &width, &height);
+        CPU_TIMESTAMP_BEGIN(timestampBeginStat);
+    #ifdef GFX_PERF_INSTRUMENTATION
+        if (!Graphics::UpdateTimestamps(gfx, gfxResources, perf)) break;
+        Graphics::BeginFrame(gfx, gfxResources, perf);
+    #endif
+        CPU_TIMESTAMP_ENDANDRESOLVE(timestampBeginStat);
 
-            // Wait for the window to have valid dimensions
-            while(width == 0 || height == 0)
-            {
-                glfwGetFramebufferSize(gfx.window, &width, &height);
-                glfwWaitEvents();
-            }
-
-            // Resize all screen-space buffers
-            if (!Graphics::Resize(gfx, gfxResources, width, height, log)) break;                  // Back buffers and GBuffer textures
-            if (!Graphics::PathTracing::Resize(gfx, gfxResources, pt, log)) break;                // PT Output and Accumulation
-            if (!Graphics::GBuffer::Resize(gfx, gfxResources, gbuffer, log)) break;               // GBuffer
-            if (!Graphics::DDGI::Resize(gfx, gfxResources, ddgi, log)) break;                     // DDGI
-            if (!Graphics::DDGI::Visualizations::Resize(gfx, gfxResources, ddgiVis, log)) break;  // DDGI Visualizations
-            if (!Graphics::RTAO::Resize(gfx, gfxResources, rtao, log)) break;                     // RTAO Raw and Output textures
-            if (!Graphics::Composite::Resize(gfx, gfxResources, composite, log)) break;           // Composite
-            Windows::ResetWindowEvent();
-
-            CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
-            continue;
-        }
-
-        // Initialize the benchmark
-        if (!config.app.benchmarkRunning && input.event == Inputs::EInputEvent::RUN_BENCHMARK)
-        {
-            Benchmark::StartBenchmark(benchmarkRun, perf, config, gfx);
-            input.event = Inputs::EInputEvent::NONE;
-        }
-
-        // Reload shaders and PSOs for graphics workloads
+        // Reload shaders, recreate PSOs, and update shader tables
         {
             if (config.pathTrace.reload)
             {
                 if (!Graphics::PathTracing::Reload(gfx, gfxResources, pt, log)) break;
                 config.pathTrace.reload = false;
-                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
-            #ifdef GFX_PERF_INSTRUMENTATION
-                Graphics::BeginFrame(gfx, gfxResources, perf);
-            #endif
-                continue;
             }
 
             if (config.ddgi.reload)
@@ -269,52 +255,33 @@ int Run(const std::vector<std::string>& arguments)
                 if (!Graphics::DDGI::Reload(gfx, gfxResources, ddgi, config, log)) break;
                 if (!Graphics::DDGI::Visualizations::Reload(gfx, gfxResources, ddgi, ddgiVis, config, log)) break;
                 config.ddgi.reload = false;
-                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
-            #ifdef GFX_PERF_INSTRUMENTATION
-                Graphics::EndFrame(gfx, gfxResources, perf);
-                Graphics::ResolveTimestamps(gfx, gfxResources, perf);
-                if (!Graphics::UpdateTimestamps(gfx, gfxResources, perf)) break;
-                Graphics::BeginFrame(gfx, gfxResources, perf);
-            #endif
-                continue;
             }
 
             if (config.rtao.reload)
             {
                 if (!Graphics::RTAO::Reload(gfx, gfxResources, rtao, log)) break;
                 config.rtao.reload = false;
-                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
-            #ifdef GFX_PERF_INSTRUMENTATION
-                Graphics::BeginFrame(gfx, gfxResources, perf);
-            #endif
-                continue;
             }
 
             if (config.postProcess.reload)
             {
                 if (!Graphics::Composite::Reload(gfx, gfxResources, composite, log)) break;
                 config.postProcess.reload = false;
-                CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
-            #ifdef GFX_PERF_INSTRUMENTATION
-                Graphics::BeginFrame(gfx, gfxResources, perf);
-            #endif
-                continue;
             }
         }
+
+        CPU_TIMESTAMP_BEGIN(inputStat);
+
+        glfwPollEvents();
 
         // Exit the application
         if (input.event == Inputs::EInputEvent::QUIT) break;
 
-        // Fullscreen transition
-        if (input.event == Inputs::EInputEvent::FULLSCREEN_CHANGE || gfx.fullscreenChanged)
+        // Initialize the benchmark
+        if (!config.app.benchmarkRunning && input.event == Inputs::EInputEvent::RUN_BENCHMARK)
         {
-            Graphics::ToggleFullscreen(gfx);
+            Benchmark::StartBenchmark(benchmarkRun, perf, config, gfx);
             input.event = Inputs::EInputEvent::NONE;
-            CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]); // frame ended early
-        #ifdef GFX_PERF_INSTRUMENTATION
-            Graphics::BeginFrame(gfx, gfxResources, perf);
-        #endif
-            continue;
         }
 
         // Handle mouse and keyboard input
@@ -327,12 +294,12 @@ int Run(const std::vector<std::string>& arguments)
             input.event = Inputs::EInputEvent::NONE;
         }
 
-        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[1]);  // input
+        CPU_TIMESTAMP_ENDANDRESOLVE(inputStat);
 
-        // Update constant buffers
-        CPU_TIMESTAMP_BEGIN(perf.cpuTimes[2]);
+        // Update the simulation / constant buffers
+        CPU_TIMESTAMP_BEGIN(updateStat);
         Graphics::Update(gfx, gfxResources, config, scene);
-        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[2]);
+        CPU_TIMESTAMP_ENDANDRESOLVE(updateStat);
 
         if(config.app.renderMode == ERenderMode::PATH_TRACE)
         {
@@ -363,33 +330,70 @@ int Run(const std::vector<std::string>& arguments)
         }
 
         // UI
-        CPU_TIMESTAMP_BEGIN(perf.cpuTimes[perf.cpuTimes.size() - 2]);
+        CPU_TIMESTAMP_BEGIN(perf.cpuTimes[Instrumentation::EStatIndex::UI]);
         Graphics::UI::Update(gfx, ui, config, input, scene, ddgi.volumes, perf);
         Graphics::UI::Execute(gfx, gfxResources, ui, config);
-        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[perf.cpuTimes.size() - 2]);
+        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[Instrumentation::EStatIndex::UI]);
 
-        // Timestamps
+        // GPU Timestamps
+        CPU_TIMESTAMP_BEGIN(timestampEndStat);
     #ifdef GFX_PERF_INSTRUMENTATION
         Graphics::EndFrame(gfx, gfxResources, perf);
         Graphics::ResolveTimestamps(gfx, gfxResources, perf);
     #endif
+        CPU_TIMESTAMP_ENDANDRESOLVE(timestampEndStat);
 
-        // Submit / Present
-        CPU_TIMESTAMP_BEGIN(perf.cpuTimes.back());
+        // Submit
+        CPU_TIMESTAMP_BEGIN(submitStat);
         if (!Graphics::SubmitCmdList(gfx)) break;
+        CPU_TIMESTAMP_ENDANDRESOLVE(submitStat);
+
+        // Present
+        CPU_TIMESTAMP_BEGIN(presentStat);
         if (!Graphics::Present(gfx)) continue;
-        if (!Graphics::WaitForGPU(gfx)) { log << "GPU took too long to complete, device removed!"; break; }
+        CPU_TIMESTAMP_ENDANDRESOLVE(presentStat);
+        CPU_TIMESTAMP_ENDANDRESOLVE(frameStat); // end of frame
+
+        // Handle window resize events
+        if (Windows::GetWindowEvent() == Windows::EWindowEvent::RESIZE)
+        {
+            // Get the new back buffer dimensions from GLFW
+            int width, height;
+            glfwGetFramebufferSize(gfx.window, &width, &height);
+
+            // Wait for the window to have valid dimensions
+            while (width == 0 || height == 0)
+            {
+                glfwGetFramebufferSize(gfx.window, &width, &height);
+                glfwWaitEvents();
+            }
+
+            // Resize all screen-space buffers
+            if (!Graphics::ResizeBegin(gfx, gfxResources, width, height, log)) break;             // Back buffers and GBuffer textures
+            if (!Graphics::PathTracing::Resize(gfx, gfxResources, pt, log)) break;                // PT Output and Accumulation
+            if (!Graphics::GBuffer::Resize(gfx, gfxResources, gbuffer, log)) break;               // GBuffer
+            if (!Graphics::DDGI::Resize(gfx, gfxResources, ddgi, log)) break;                     // DDGI
+            if (!Graphics::DDGI::Visualizations::Resize(gfx, gfxResources, ddgiVis, log)) break;  // DDGI Visualizations
+            if (!Graphics::RTAO::Resize(gfx, gfxResources, rtao, log)) break;                     // RTAO Raw and Output textures
+            if (!Graphics::Composite::Resize(gfx, gfxResources, composite, log)) break;           // Composite
+            if (!Graphics::ResizeEnd(gfx)) break;
+            Windows::ResetWindowEvent();
+        }
+
+        // Fullscreen transition
+        if (input.event == Inputs::EInputEvent::FULLSCREEN_CHANGE || gfx.fullscreenChanged)
+        {
+            Graphics::ToggleFullscreen(gfx);
+            input.event = Inputs::EInputEvent::NONE;
+        }
 
         // Image Capture (user triggered)
-        StoreImages(input.event, config, gfx, gfxResources, rtao, ddgi);
-
-        if (!Graphics::MoveToNextFrame(gfx)) break;
-        if (!Graphics::ResetCmdList(gfx)) break;
-        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes.back());
-        CPU_TIMESTAMP_ENDANDRESOLVE(perf.cpuTimes[0]);
+        if (input.event == Inputs::EInputEvent::SAVE_IMAGES || input.event == Inputs::EInputEvent::SCREENSHOT)
+        {
+            StoreImages(input.event, config, gfx, gfxResources, rtao, ddgi);
+        }
 
     #ifdef GFX_PERF_INSTRUMENTATION
-        if (!Graphics::UpdateTimestamps(gfx, gfxResources, perf)) break;
         if (config.app.benchmarkRunning)
         {
             if (Benchmark::UpdateBenchmark(benchmarkRun, perf, config, gfx, log))
@@ -402,7 +406,6 @@ int Run(const std::vector<std::string>& arguments)
                 StoreImages(e, config, gfx, gfxResources, rtao, ddgi);
             }
         }
-        Graphics::BeginFrame(gfx, gfxResources, perf);
     #endif
     }
 

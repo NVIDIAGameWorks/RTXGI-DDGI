@@ -461,7 +461,7 @@ namespace Graphics
                         resources.rtShaders.rgs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                         Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.rgs, true), "compile DDGI Visualizations ray generation shader!\n", log);
+                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.rgs), "compile DDGI Visualizations ray generation shader!\n", log);
 
                         // Load and compile alternate RGS
                         resources.rtShaders2.rgs.filepath = root + L"shaders/ddgi/visualizations/ProbesRGS.hlsl";
@@ -470,7 +470,7 @@ namespace Graphics
                         resources.rtShaders2.rgs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                         Shaders::AddDefine(resources.rtShaders2.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         Shaders::AddDefine(resources.rtShaders2.rgs, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders2.rgs, true), "compile DDGI Visualizations ray generation shader!\n", log);
+                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders2.rgs), "compile DDGI Visualizations ray generation shader!\n", log);
                     }
 
                     // Load and compile the miss shader
@@ -480,7 +480,7 @@ namespace Graphics
                         resources.rtShaders.miss.exportName = L"DDGIVisProbesMiss";
                         resources.rtShaders.miss.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
                         Shaders::AddDefine(resources.rtShaders.miss, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.miss, true), "compile DDGI Visualizations miss shader!\n", log);
+                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.rtShaders.miss), "compile DDGI Visualizations miss shader!\n", log);
 
                         // Copy to the alternate RT pipeline
                         resources.rtShaders2.miss = resources.rtShaders.miss;
@@ -501,7 +501,7 @@ namespace Graphics
 
                         // Load and compile
                         Shaders::AddDefine(group.chs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                        CHECK(Shaders::Compile(vk.shaderCompiler, group.chs, true), "compile DDGI Visualizations closest hit shader!\n", log);
+                        CHECK(Shaders::Compile(vk.shaderCompiler, group.chs), "compile DDGI Visualizations closest hit shader!\n", log);
 
                         // Set the payload size
                         resources.rtShaders.payloadSizeInBytes = sizeof(ProbeVisualizationPayload);
@@ -528,7 +528,7 @@ namespace Graphics
                         Shaders::AddDefine(resources.textureVisCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
                         Shaders::AddDefine(resources.textureVisCS, L"THGP_DIM_X", L"8");
                         Shaders::AddDefine(resources.textureVisCS, L"THGP_DIM_Y", L"4");
-                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.textureVisCS, true), "compile DDGI Visualizations volume textures compute shader!\n", log);
+                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.textureVisCS), "compile DDGI Visualizations volume textures compute shader!\n", log);
                     }
 
                     // Load and compile the TLAS update compute shader
@@ -546,7 +546,7 @@ namespace Graphics
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_PUSH_CONSTS_FIELD_DDGI_REDUCTION_INPUT_SIZE_Z_NAME", L"ddgi_reductionInputSizeZ");
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
                         Shaders::AddDefine(resources.updateTlasCS, L"RTXGI_COORDINATE_SYSTEM", std::to_wstring(RTXGI_COORDINATE_SYSTEM));
-                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.updateTlasCS, true), "compile DDGI Visualizations probes update compute shader!\n", log);
+                        CHECK(Shaders::Compile(vk.shaderCompiler, resources.updateTlasCS), "compile DDGI Visualizations probes update compute shader!\n", log);
                     }
 
                     return true;
@@ -972,9 +972,6 @@ namespace Graphics
                     resources.volumeConstantsSTB = ddgiResources.volumeConstantsSTB;
                     resources.volumeResourceIndicesSTB = ddgiResources.volumeResourceIndicesSTB;
 
-                    // Reset the command list before initialization
-                    CHECK(ResetCmdList(vk), "reset command list!", log);
-
                     if (!LoadAndCompileShaders(vk, resources, log)) return false;
                     if (!CreateDescriptorSets(vk, vkResources, resources, log)) return false;
                     if (!CreatePipelines(vk, vkResources, resources, log)) return false;
@@ -990,19 +987,6 @@ namespace Graphics
                     resources.gpuProbeStat = perf.AddGPUStat("DDGI Probe Vis");
                     resources.gpuTextureStat = perf.AddGPUStat("DDGI Texture Vis");
 
-                    // Execute GPU work to finish initialization
-                    VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
-
-                    VkSubmitInfo submitInfo = {};
-                    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-                    submitInfo.commandBufferCount = 1;
-                    submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
-
-                    VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, VK_NULL_HANDLE));
-                    VKCHECK(vkQueueWaitIdle(vk.queue));
-
-                    WaitForGPU(vk);
-
                     return true;
                 }
 
@@ -1016,6 +1000,7 @@ namespace Graphics
                     resources.volumeResourceIndicesSTB = ddgiResources.volumeResourceIndicesSTB;
 
                     log << "Reloading DDGI Visualization shaders...";
+                    vkDeviceWaitIdle(vk.device);
                     if (!LoadAndCompileShaders(vk, resources, log)) return false;
                     if (!CreatePipelines(vk, vkResources, resources, log)) return false;
                     if (!UpdateShaderTable(vk, vkResources, resources)) return false;

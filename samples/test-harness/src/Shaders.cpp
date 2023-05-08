@@ -87,6 +87,7 @@ namespace Shaders
         // Create the default include handler
         if(FAILED(dxc.utils->CreateDefaultIncludeHandler(&dxc.includes))) return false;
 
+        dxc.config = config.shaders;
         dxc.root = config.app.root;
         dxc.rtxgi = config.app.rtxgi;
 
@@ -112,7 +113,7 @@ namespace Shaders
     /**
      * Compile a shader with the DirectX Shader Compiler (DXC).
      */
-    bool Compile(ShaderCompiler& dxc, ShaderProgram& shader, bool warningsAsErrors, bool debugInfo)
+    bool Compile(ShaderCompiler& dxc, ShaderProgram& shader, bool warningsAsErrors)
     {
         uint32_t codePage = 0;
         IDxcBlobEncoding* pShaderSource = nullptr;
@@ -133,13 +134,20 @@ namespace Shaders
             AddDefine(shader, L"HLSL", L"1");
 
             // Treat warnings as errors
-            if(warningsAsErrors) shader.arguments.push_back(L"-WX");
+            if(warningsAsErrors || dxc.config.warningsAsErrors) shader.arguments.push_back(L"-WX");
+
+            // Disable compilation optimizations
+            if(dxc.config.disableOptimizations) shader.arguments.push_back(L"-Od");
+
+            // Disable validation
+            if(dxc.config.disableValidation) shader.arguments.push_back(L"-Vd");
 
             // Add with debug information to compiled shaders
-            if(debugInfo)
+            if(dxc.config.shaderSymbols)
             {
-                shader.arguments.push_back(L"-Zi");
-                shader.arguments.push_back(L"-Qembed_debug");
+                shader.arguments.push_back(L"-Zi");                      // enable debug information (symbols)
+                shader.arguments.push_back(L"-Qembed_debug");            // embed shader pdb (symbols) in the shader
+                if(dxc.config.lifetimeMarkers) shader.arguments.push_back(L"-enable-lifetime-markers"); // enable variable lifetime markers
             }
 
             // Add include directories

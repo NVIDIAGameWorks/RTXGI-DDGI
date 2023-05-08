@@ -26,7 +26,7 @@ float3 TracePath(RayDesc ray, uint seed)
     StructuredBuffer<Light> Lights = GetLights();
     RaytracingAccelerationStructure SceneTLAS = GetAccelerationStructure(SCENE_TLAS_INDEX);
 
-    for (int bounceIndex = 0; bounceIndex < GetGlobalConst(pt, numBounces); bounceIndex++)
+    for (int bounceIndex = 0; bounceIndex < GetPTNumBounces(); bounceIndex++)
     {
         // Trace the ray
         PackedPayload packedPayload = (PackedPayload)0;
@@ -168,18 +168,22 @@ void RayGen()
 
     // Progressive Accumulation
     float numPaths = (float)GetPTSamplesPerPixel();
+
     if (GetGlobalConst(app, frameNumber) > 1)
     {
-        // Read the previous color and number of paths
-        float3 previousColor = PTAccumulation[LaunchIndex.xy].xyz;
-        float  numPreviousPaths = PTAccumulation[LaunchIndex.xy].w;
+        if (GetPTProgressive())
+        {
+            // Read the previous color and number of paths
+            float3 previousColor = PTAccumulation[LaunchIndex.xy].xyz;
+            float  numPreviousPaths = PTAccumulation[LaunchIndex.xy].w;
 
-        // Add in the new color and number of paths
-        color = (previousColor + color);
-        numPaths = (numPreviousPaths + numPaths);
+            // Add in the new color and number of paths
+            color = (previousColor + color);
+            numPaths = (numPreviousPaths + numPaths);
 
-        // Store to the accumulation buffer
-        PTAccumulation[LaunchIndex.xy] = float4(color, numPaths);
+            // Store to the accumulation buffer
+            PTAccumulation[LaunchIndex.xy] = float4(color, numPaths);
+        }
     }
     else
     {

@@ -53,27 +53,23 @@ namespace Graphics
                 CHECK(ImGui_ImplVulkan_Init(&initInfo, vk.renderPass),"initialize ImGui Vulkan!\n", log);
 
                 // Setup the fonts texture
-                VKCHECK(vkResetCommandPool(vk.device, vk.commandPool, 0));
-
-                VkCommandBufferBeginInfo beginInfo = {};
-                beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-                beginInfo.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-                VKCHECK(vkBeginCommandBuffer(vk.cmdBuffer[vk.frameIndex], &beginInfo));
-
                 ImGui_ImplVulkan_CreateFontsTexture(vk.cmdBuffer[vk.frameIndex]);
 
-                VkSubmitInfo endInfo = {};
-                endInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-                endInfo.commandBufferCount = 1;
-                endInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
-
                 VKCHECK(vkEndCommandBuffer(vk.cmdBuffer[vk.frameIndex]));
-                VKCHECK(vkQueueSubmit(vk.queue, 1, &endInfo, VK_NULL_HANDLE));
-                VKCHECK(vkDeviceWaitIdle(vk.device));
+
+                VkSubmitInfo submitInfo = {};
+                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                submitInfo.commandBufferCount = 1;
+                submitInfo.pCommandBuffers = &vk.cmdBuffer[vk.frameIndex];
+
+                // Submit command buffer and block until GPU work finishes
+                VKCHECK(vkQueueSubmit(vk.queue, 1, &submitInfo, vk.immediateFence));
+                VKCHECK(vkWaitForFences(vk.device, 1, &vk.immediateFence, VK_TRUE, UINT64_MAX));
+                VKCHECK(vkResetFences(vk.device, 1, &vk.immediateFence));
 
                 ImGui_ImplVulkan_DestroyFontUploadObjects();
 
-                Graphics::ResetCmdList(vk);
+                ResetCmdList(vk);
 
                 Graphics::UI::s_initialized = true;
 
@@ -109,13 +105,13 @@ namespace Graphics
 
             void Execute(Graphics::Globals& vk, Graphics::GlobalResources& vkResources, Resources& resources, const Configs::Config& config)
             {
+            #ifdef GFX_PERF_MARKERS
+                AddPerfMarker(vk, GFX_PERF_MARKER_GREY, "ImGui");
+            #endif
+                CPU_TIMESTAMP_BEGIN(resources.cpuStat);
+
                 if (config.app.showUI)
                 {
-                #ifdef GFX_PERF_MARKERS
-                    AddPerfMarker(vk, GFX_PERF_MARKER_GREY, "ImGui" );
-                #endif
-                    CPU_TIMESTAMP_BEGIN(resources.cpuStat);
-
                     // Note: Clear is ignored since vk.renderPass attachment load op is VK_ATTACHMENT_LOAD_OP_DONT_CARE
                     VkClearValue clearValue;
                     clearValue.color = { 0.f, 0.f, 0.f, 0.f };
@@ -140,13 +136,13 @@ namespace Graphics
                     // End the render pass
                     vkCmdEndRenderPass(vk.cmdBuffer[vk.frameIndex]);
                     GPU_TIMESTAMP_END(resources.gpuStat->GetGPUQueryEndIndex());
-
-                #ifdef GFX_PERF_MARKERS
-                    vkCmdEndDebugUtilsLabelEXT(vk.cmdBuffer[vk.frameIndex]);
-                #endif
-
-                    CPU_TIMESTAMP_ENDANDRESOLVE(resources.cpuStat);
                 }
+
+            #ifdef GFX_PERF_MARKERS
+                vkCmdEndDebugUtilsLabelEXT(vk.cmdBuffer[vk.frameIndex]);
+            #endif
+
+                CPU_TIMESTAMP_ENDANDRESOLVE(resources.cpuStat);
             }
 
             void Cleanup()

@@ -161,7 +161,7 @@ namespace Graphics
             #endif
 
                 // Load and compile the shader
-                CHECK(Shaders::Compile(gfx.shaderCompiler, shader, true), "compile the RTXGI probe irradiance blending compute shader!\n", log);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader), "compile the RTXGI probe irradiance blending compute shader!\n", log);
             }
 
             // Probe Blending (distance)
@@ -191,7 +191,7 @@ namespace Graphics
             #endif
 
                 // Load and compile the shader
-                CHECK(Shaders::Compile(gfx.shaderCompiler, shader, true), "load and compile the RTXGI probe distance blending compute shader!\n", log);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader), "load and compile the RTXGI probe distance blending compute shader!\n", log);
             }
 
             // Probe Relocation
@@ -206,7 +206,7 @@ namespace Graphics
                 // Add common shader defines
                 AddCommonShaderDefines(shader, volumeDesc, spirv);
 
-                CHECK(Shaders::Compile(gfx.shaderCompiler, shader, true), "load and compile the RTXGI probe relocation compute shader!\n", log);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader), "load and compile the RTXGI probe relocation compute shader!\n", log);
 
                 // Reset shader
                 Shaders::ShaderProgram& shader2 = volumeShaders.emplace_back();
@@ -218,7 +218,7 @@ namespace Graphics
                 // Add common shader defines
                 AddCommonShaderDefines(shader2, volumeDesc, spirv);
 
-                CHECK(Shaders::Compile(gfx.shaderCompiler, shader2, true), "load and compile the RTXGI probe relocation reset compute shader!\n", log);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader2), "load and compile the RTXGI probe relocation reset compute shader!\n", log);
             }
 
             // Probe Classification
@@ -233,7 +233,7 @@ namespace Graphics
                 // Add common shader defines
                 AddCommonShaderDefines(shader, volumeDesc, spirv);
 
-                CHECK(Shaders::Compile(gfx.shaderCompiler, shader, true), "load and compile the RTXGI probe classification compute shader!\n", log);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader), "load and compile the RTXGI probe classification compute shader!\n", log);
 
                 // Reset shader
                 Shaders::ShaderProgram& shader2 = volumeShaders.emplace_back();
@@ -245,7 +245,7 @@ namespace Graphics
                 // Add common shader defines
                 AddCommonShaderDefines(shader2, volumeDesc, spirv);
 
-                CHECK(Shaders::Compile(gfx.shaderCompiler, shader2, true), "load and compile the RTXGI probe classification reset compute shader!\n", log);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader2), "load and compile the RTXGI probe classification reset compute shader!\n", log);
             }
 
             // Probe variability reduction
@@ -262,7 +262,7 @@ namespace Graphics
                 // Add shader specific defines
                 Shaders::AddDefine(shader, L"RTXGI_DDGI_PROBE_NUM_INTERIOR_TEXELS", numIrradianceInteriorTexels.c_str());
                 Shaders::AddDefine(shader, L"RTXGI_DDGI_WAVE_LANE_COUNT", waveLaneCount);
-                CHECK(Shaders::Compile(gfx.shaderCompiler, shader, true), "load and compile the RTXGI reduction compute shader!\n", log);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader), "load and compile the RTXGI reduction compute shader!\n", log);
             }
 
             // Extra reduction passes
@@ -279,7 +279,7 @@ namespace Graphics
                 // Add shader specific defines
                 Shaders::AddDefine(shader, L"RTXGI_DDGI_PROBE_NUM_INTERIOR_TEXELS", numIrradianceInteriorTexels.c_str());
                 Shaders::AddDefine(shader, L"RTXGI_DDGI_WAVE_LANE_COUNT", waveLaneCount);
-                CHECK(Shaders::Compile(gfx.shaderCompiler, shader, true), "load and compile the RTXGI extra reduction compute shader!\n", log);
+                CHECK(Shaders::Compile(gfx.shaderCompiler, shader), "load and compile the RTXGI extra reduction compute shader!\n", log);
             }
 
             log << "done.\n";
