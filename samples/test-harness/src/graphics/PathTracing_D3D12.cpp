@@ -66,7 +66,9 @@ namespace Graphics
                 resources.shaders.rgs.entryPoint = L"RayGen";
                 resources.shaders.rgs.exportName = L"PathTraceRGS";
                 Shaders::AddDefine(resources.shaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));
+#if GFX_NVAPI
                 Shaders::AddDefine(resources.shaders.rgs, L"GFX_NVAPI", std::to_wstring(1));
+#endif
                 CHECK(Shaders::Compile(d3d.shaderCompiler, resources.shaders.rgs), "compile path tracing ray generation shader!\n", log);
 
                 // Load and compile the miss shader
