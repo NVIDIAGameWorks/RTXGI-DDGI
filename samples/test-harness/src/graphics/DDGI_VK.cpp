@@ -899,6 +899,7 @@ namespace Graphics
                     resources.rtShaders.rgs.entryPoint = L"RayGen";
                     resources.rtShaders.rgs.exportName = L"DDGIProbeTraceRGS";
                     resources.rtShaders.rgs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2" };
+                    Shaders::AddDefine(resources.rtShaders.rgs, L"GFX_NVAPI", std::to_wstring(0)); // NV_API not used in Vulkan
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_TYPE", L"2");                                                 // use the application's push constants layout
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_STRUCT_NAME", L"GlobalConstants");                            // specify the struct name of the application's push constants
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_PUSH_CONSTS_VARIABLE_NAME", L"GlobalConst");                              // specify the variable name of the application's push constants

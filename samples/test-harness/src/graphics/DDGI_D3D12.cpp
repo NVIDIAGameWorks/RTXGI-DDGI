@@ -784,7 +784,7 @@ namespace Graphics
                     resources.rtShaders.rgs.filepath = root + L"shaders/ddgi/ProbeTraceRGS.hlsl";
                     resources.rtShaders.rgs.entryPoint = L"RayGen";
                     resources.rtShaders.rgs.exportName = L"DDGIProbeTraceRGS";
-                    Shaders::AddDefine(resources.rtShaders.rgs, L"GFX_NVAPI", std::to_wstring(1));
+                    Shaders::AddDefine(resources.rtShaders.rgs, L"GFX_NVAPI", std::to_wstring(GFX_NVAPI));
                     Shaders::AddDefine(resources.rtShaders.rgs, L"CONSTS_REGISTER", L"b0");   // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
                     Shaders::AddDefine(resources.rtShaders.rgs, L"CONSTS_SPACE", L"space1");  // for DDGIRootConstants, see Direct3D12.cpp::CreateGlobalRootSignature(...)
                     Shaders::AddDefine(resources.rtShaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE));

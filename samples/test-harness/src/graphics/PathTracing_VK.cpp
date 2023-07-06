@@ -69,7 +69,7 @@ namespace Graphics
                 resources.shaders.rgs.exportName = L"PathTraceRGS";
                 resources.shaders.rgs.arguments = { L"-spirv", L"-D __spirv__", L"-fspv-target-env=vulkan1.2"};\
                 Shaders::AddDefine(resources.shaders.rgs, L"RTXGI_BINDLESS_TYPE", std::to_wstring(RTXGI_BINDLESS_TYPE_RESOURCE_ARRAYS));
-                Shaders::AddDefine(resources.shaders.rgs, L"GFX_NVAPI", std::to_wstring(0));
+                Shaders::AddDefine(resources.shaders.rgs, L"GFX_NVAPI", std::to_wstring(0)); // NV_API not used in Vulkan
                 CHECK(Shaders::Compile(vk.shaderCompiler, resources.shaders.rgs), "compile path tracing ray generation shader!\n", log);
 
                 // Load and compile the miss shader
