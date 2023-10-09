@@ -180,6 +180,9 @@ void MousePositionHandler(GLFWwindow* window, double x, double y)
 
     if(inputPtr->mouseLeftBtnDown)
     {
+        // Early out, no cameras setup
+        if (scenePtr->cameras.size() == 0) return;
+
         // Compute relative change in mouse position, multiplying by the degrees of change per pixel
         Scenes::Camera& camera = scenePtr->cameras[scenePtr->activeCamera];
         float degreesPerPixelX = (camera.data.fov / (float)configPtr->app.width) * camera.data.aspect;
