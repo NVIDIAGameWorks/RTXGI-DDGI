@@ -208,7 +208,7 @@ void DDGIProbeRelocationCS(uint3 DispatchThreadID : SV_DispatchThreadID)
         if (dot(closestFrontfaceDirection, farthestFrontfaceDirection) <= 0.f)
         {
             // Ensures the probe never moves through the farthest frontface
-            farthestFrontfaceDistance *= min(farthestFrontfaceDistance, 1.f);
+            farthestFrontfaceDirection *= min(farthestFrontfaceDistance, 1.f);
             fullOffset = offset + farthestFrontfaceDirection;
         }
     }
