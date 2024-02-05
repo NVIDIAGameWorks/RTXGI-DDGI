@@ -247,9 +247,9 @@ function(SetupOptions ARG_TARGET_EXE)
 
     if(WIN32)
         # Setup the dxcompiler and dxil binary options
-        set(RTXGISAMPLES_DXC_BINARIES "Packman" CACHE STRING "The dxcompiler and dxil binaries to use")
+        set(RTXGISAMPLES_DXC_BINARIES "Downloaded Package" CACHE STRING "The dxcompiler and dxil binaries to use")
         set(RTXGISAMPLES_DXC_BINARIES "Win10 SDK" CACHE STRING "The dxcompiler and dxil binaries to use")
-        set_property(CACHE RTXGISAMPLES_DXC_BINARIES PROPERTY STRINGS "Packman" "Win10 SDK")
+        set_property(CACHE RTXGISAMPLES_DXC_BINARIES PROPERTY STRINGS "Downloaded Package" "Win10 SDK")
     endif()
 
     # Coordinate System
@@ -305,13 +305,15 @@ set(THIRDPARTY_INCLUDE_PATH "include/thirdparty")
 set(DIRECTX_INCLUDE_PATH "${THIRDPARTY_INCLUDE_PATH}/directx")
 set(DIRECTXMATH_INCLUDE_PATH "${THIRDPARTY_INCLUDE_PATH}/directxmath")
 set(DIRECTXTEX_INCLUDE_PATH "${THIRDPARTY_INCLUDE_PATH}/directxtex")
-set(DXC_INCLUDE_PATH "${THIRDPARTY_INCLUDE_PATH}/dxc")
-set(D3D_AGILITY_INCLUDE_PATH "${ROOT_DIR}/d3d/build/native/include")
 set(GLFW_INCLUDE_PATH "${ROOT_DIR}/thirdparty/glfw/include")
 set(IMGUI_INCLUDE_PATH "${ROOT_DIR}/thirdparty/imgui")
 set(IMGUI_BACKENDS_INCLUDE_PATH "${ROOT_DIR}/thirdparty/imgui/backends")
 set(TINYGLTF_INCLUDE_PATH "${ROOT_DIR}/thirdparty/tinygltf")
 set(NVAPI_INCLUDE_PATH "${ROOT_DIR}/thirdparty/nvapi")
+
+set(EXTERNAL_PATH "${ROOT_DIR}/external")
+set(DXC_INCLUDE_PATH "${EXTERNAL_PATH}/dxc/inc")
+set(D3D_AGILITY_INCLUDE_PATH "${EXTERNAL_PATH}/agilitysdk/build/native/include")
 
 # ---- WINDOWS / D3D12 --------------------------------------------------------------------------------------
 
@@ -541,20 +543,24 @@ endif() # WIN32 and MSVC
 
 # Set the dxc binaries location (Windows only)
 if(WIN32)
-    set(D3D12CORE_BINARY ${ROOT_DIR}/d3d/build/native/bin/x64/D3D12Core.dll)
-    set(D3D12CORE_SYMBOLS ${ROOT_DIR}/d3d/build/native/bin/x64/D3D12Core.pdb)
-    set(D3D12_SDKLAYERS_BINARY ${ROOT_DIR}/d3d/build/native/bin/x64/d3d12SDKLayers.dll)
-    set(D3D12_SDKLAYERS_SYMBOLS ${ROOT_DIR}/d3d/build/native/bin/x64/d3d12SDKLayers.pdb)
+    set(DXC_BIN_PATH "${EXTERNAL_PATH}/dxc/bin/x64")
+    set(D3D_AGILITY_BIN_PATH "${EXTERNAL_PATH}/agilitysdk/build/native/bin/x64")
 
-    if(${RTXGISAMPLES_DXC_BINARIES} MATCHES "Packman")
-        set(DXC_BINARY  ${ROOT_DIR}/dxc/bin/dxcompiler.dll)
-        set(DXIL_BINARY ${ROOT_DIR}/dxc/bin/dxil.dll)
+    set(D3D12CORE_BINARY ${D3D_AGILITY_BIN_PATH}/D3D12Core.dll)
+    set(D3D12CORE_SYMBOLS ${D3D_AGILITY_BIN_PATH}/D3D12Core.pdb)
+    set(D3D12_SDKLAYERS_BINARY ${D3D_AGILITY_BIN_PATH}/d3d12SDKLayers.dll)
+    set(D3D12_SDKLAYERS_SYMBOLS ${D3D_AGILITY_BIN_PATH}/d3d12SDKLayers.pdb)
+
+    if(${RTXGISAMPLES_DXC_BINARIES} MATCHES "Downloaded Package")
+        set(DXC_BINARY  ${DXC_BIN_PATH}/dxcompiler.dll)
+        set(DXIL_BINARY ${DXC_BIN_PATH}/dxil.dll)
     elseif(${RTXGISAMPLES_DXC_BINARIES} MATCHES "Win10 SDK")
         set(DXC_BINARY  ${RTXGI_API_D3D12_DXIL_PATH}/dxcompiler.dll)
         set(DXIL_BINARY ${RTXGI_API_D3D12_DXIL_PATH}/dxil.dll)
     endif()
 elseif(UNIX AND NOT APPLE)
-    set(DXC_BINARY ${ROOT_DIR}/dxc/lib/libdxcompiler.so)
+    set(DXC_BIN_PATH "${EXTERNAL_PATH}/dxc/bin")
+    set(DXC_BINARY ${EXTERNAL_PATH}/dxc/lib/libdxcompiler.so)
 endif()
 
 if(WIN32 AND RTXGI_API_D3D12_ENABLE)

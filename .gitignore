@@ -5,6 +5,7 @@ log.txt
 build/*
 dxc
 d3d
+external
 samples/test-harness/data/gltf/*
 !samples/test-harness/data/gltf/cornell
 samples/test-harness/data/gltf/cornell/*.cache

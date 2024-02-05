@@ -32,13 +32,13 @@ Although we aim for RTXGI to eventually provide a collection of global illuminat
 
 * [thirdparty](thirdparty) contains third-party software used by the sample application(s)
 
-* **d3d** contains a compatible recent version of the DirectX 12 Agility SDK to use when running on Windows (delivered by Packman)
-
-* **dxc** contains a compatible recent version of the DirectX Shader Compiler for your platform (delivered by Packman)
-
 * [ue4-plugin](ue4-plugin) contains the RTXGI Unreal Engine 4 plugin source code and documentation
 
 * [docs](docs) contains helpful guides and documentation
+
+* **external/agilitysdk** contains a compatible recent version of the DirectX 12 Agility SDK to use when running on Windows (delivered by CMake)
+
+* **external/dxc** contains a compatible recent version of the DirectX Shader Compiler for your platform (delivered by CMake)
 
 ## System Requirements
 
@@ -46,7 +46,7 @@ The RTXGI SDK and sample application(s) require the following hardware and softw
 
 ### Hardware
 * Any DXR capable GPU. NVIDIA DXR enabled GPUs are:
-    * RTX 4090, 4080, 4070 Ti, 4070, 4060 Ti, 4060
+    * RTX 4090, 4080 SUPER, 4080, 4070 Ti SUPER, 4070 Ti, 4070 SUPER, 4070, 4060 Ti, 4060
     * RTX 3090 Ti, 3090, 3080 Ti, 3080, 3070 Ti, 3070, 3060 Ti, 3060, 3050
     * Titan RTX
     * RTX 2080 Ti, 2080 SUPER, 2080, 2070 SUPER, 2070, 2060 SUPER, 2060

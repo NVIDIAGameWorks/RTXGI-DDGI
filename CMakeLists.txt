@@ -19,11 +19,39 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+# Helper to download and unzip a package from a URL
+# Uses a zero-length file to identify the version of the package
+function(CheckAndDownloadPackage NAME VERSION LOCAL_PATH URL)
+    # Do we already have the correct version?
+    if(NOT EXISTS ${LOCAL_PATH}/${VERSION}.ver)
+        # Was there a previous version that we need to delete?
+        if(EXISTS ${LOCAL_PATH})
+            message(STATUS "Deleting old " ${NAME})
+            file(REMOVE_RECURSE ${LOCAL_PATH})
+        endif()
+        message(STATUS "Obtaining " ${NAME} " " ${VERSION})
+        file(DOWNLOAD ${URL} ${LOCAL_PATH}.zip)
+        message(STATUS "Extracting " ${NAME})
+        file(ARCHIVE_EXTRACT INPUT ${LOCAL_PATH}.zip DESTINATION ${LOCAL_PATH})
+        file(REMOVE ${LOCAL_PATH}.zip)
+        # Create an empty file so we know which version we have
+        file(WRITE ${LOCAL_PATH}/${VERSION}.ver)
+    endif()
+endfunction()
+
 # Add Vulkan headers on ARM since there is no official ARM Vulkan SDK
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
     add_subdirectory(thirdparty/Vulkan-Headers)
     set(RTXGI_API_VULKAN_SDK "1")
     set(Vulkan_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/thirdparty/Vulkan-Headers/include/")
+endif()
+
+# Download D3D Agility SDK and DXC binaries
+if(WIN32)
+    CheckAndDownloadPackage("Agility SDK" "v1.606.3" ${CMAKE_CURRENT_SOURCE_DIR}/external/agilitysdk https://www.nuget.org/api/v2/package/Microsoft.Direct3D.D3D12/1.606.3)
+    CheckAndDownloadPackage("DXC" "v1.7.2308" ${CMAKE_CURRENT_SOURCE_DIR}/external/dxc https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.7.2308/dxc_2023_08_14.zip)
+elseif(UNIX AND NOT APPLE)
+    CheckAndDownloadPackage("DXC" "v1.7.2308" ${CMAKE_CURRENT_SOURCE_DIR}/external/dxc https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.7.2308/linux_dxc_2023_08_14.x86_64.tar.gz)
 endif()
 
 # SDK
