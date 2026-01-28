@@ -398,7 +398,7 @@ void DDGIExtraReductionCS(uint3 GroupID : SV_GroupID, uint3 GroupThreadID : SV_G
     {
         ThreadGroupAverage[waveIndex] = waveTotalValue / waveTotalWeight;
         ThreadGroupWeight[waveIndex] = waveTotalWeight / waveTotalPossibleWeight;
-        InterlockedMax(MaxSumEntry, waveIndex);
+        InterlockedMax(MaxAverageEntry, waveIndex);
     }
 
     GroupMemoryBarrierWithGroupSync();
