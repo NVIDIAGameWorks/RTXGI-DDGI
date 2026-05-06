@@ -977,7 +977,7 @@ void UDDGIVolumeComponent::UpdateRenderThreadData()
 				// Update the probe scroll offset count
 				ProbeScrollOffset.X += Translation.X;
 				ProbeScrollOffset.Y += Translation.Y;
-				ProbeScrollOffset.X += Translation.Z;
+				ProbeScrollOffset.Z += Translation.Z;
 			}
 
 			// Set the probe scroll offsets.
