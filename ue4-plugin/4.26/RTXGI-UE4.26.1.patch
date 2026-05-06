@@ -3742,7 +3742,7 @@ index 00000000000..2997e3c3ecd
 +                // Update the probe scroll offset count
 +                ProbeScrollOffset.X += Translation.X;
 +                ProbeScrollOffset.Y += Translation.Y;
-+                ProbeScrollOffset.X += Translation.Z;
++                ProbeScrollOffset.Z += Translation.Z;
 +            }
 +
 +            // Set the probe scroll offsets
